@@ -41,6 +41,24 @@ export const translations = {
     cancel: 'Cancel',
     create: 'Create',
     save: 'Save',
+    
+    // Call-related
+    voiceCall: 'Voice Call',
+    videoCall: 'Video Call',
+    calling: 'Calling...',
+    callEnded: 'Call Ended',
+    endCall: 'End Call',
+    mute: 'Mute',
+    unmute: 'Unmute',
+    speaker: 'Speaker',
+    screenShare: 'Screen Share',
+    participants: 'participants',
+    voiceMessage: 'Voice Message',
+    recording: 'Recording...',
+    recordingStopped: 'Recording stopped',
+    deleteRecording: 'Delete',
+    sendRecording: 'Send',
+    stopRecording: 'Stop',
   },
   zh: {
     // Navigation
@@ -82,6 +100,24 @@ export const translations = {
     cancel: '取消',
     create: '创建',
     save: '保存',
+    
+    // Call-related
+    voiceCall: '语音通话',
+    videoCall: '视频通话',
+    calling: '呼叫中...',
+    callEnded: '通话结束',
+    endCall: '结束通话',
+    mute: '静音',
+    unmute: '取消静音',
+    speaker: '扬声器',
+    screenShare: '共享屏幕',
+    participants: '位参与者',
+    voiceMessage: '语音消息',
+    recording: '录音中...',
+    recordingStopped: '录音已停止',
+    deleteRecording: '删除',
+    sendRecording: '发送',
+    stopRecording: '停止',
   }
 }
 

@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { MessageWithSender, User } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { File, ImageIcon, Video, Smile } from 'lucide-react'
+import { File, ImageIcon, Video, Smile, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface MessageListProps {
@@ -16,15 +16,43 @@ interface MessageListProps {
 export function MessageList({ messages, currentUser }: MessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const [showScrollButton, setShowScrollButton] = useState(false)
+  const [lastMessageCount, setLastMessageCount] = useState(messages.length)
 
   useEffect(() => {
     if (scrollAreaRef.current) {
       const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]')
       if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight
+        if (messages.length > lastMessageCount) {
+          scrollContainer.scrollTop = scrollContainer.scrollHeight
+          setShowScrollButton(false)
+        }
+        setLastMessageCount(messages.length)
       }
     }
-  }, [messages])
+  }, [messages, lastMessageCount])
+
+  useEffect(() => {
+    const scrollContainer = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]')
+    
+    const handleScroll = () => {
+      if (scrollContainer) {
+        const isNearBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 100
+        setShowScrollButton(!isNearBottom)
+      }
+    }
+
+    scrollContainer?.addEventListener('scroll', handleScroll)
+    return () => scrollContainer?.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  const scrollToBottom = () => {
+    const scrollContainer = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]')
+    if (scrollContainer) {
+      scrollContainer.scrollTop = scrollContainer.scrollHeight
+      setShowScrollButton(false)
+    }
+  }
 
   const formatTime = (date: string) => {
     return new Date(date).toLocaleTimeString('en-US', {
@@ -108,104 +136,116 @@ export function MessageList({ messages, currentUser }: MessageListProps) {
   }
 
   return (
-    <ScrollArea className="flex-1 p-6" ref={scrollAreaRef}>
-      <div className="space-y-4 max-w-4xl mx-auto" ref={scrollRef}>
-        {messages.map((message, index) => {
-          const isOwn = message.sender_id === currentUser.id
-          const grouped = shouldGroupWithPrevious(index)
-          const showDate = shouldShowDateSeparator(index)
+    <div className="flex-1 relative">
+      <ScrollArea className="h-full p-6" ref={scrollAreaRef}>
+        <div className="space-y-4 max-w-4xl mx-auto" ref={scrollRef}>
+          {messages.map((message, index) => {
+            const isOwn = message.sender_id === currentUser.id
+            const grouped = shouldGroupWithPrevious(index)
+            const showDate = shouldShowDateSeparator(index)
 
-          return (
-            <div key={message.id}>
-              {showDate && (
-                <div className="flex items-center gap-4 my-6">
-                  <div className="flex-1 border-t" />
-                  <span className="text-xs text-muted-foreground font-medium">
-                    {formatDate(message.created_at)}
-                  </span>
-                  <div className="flex-1 border-t" />
-                </div>
-              )}
-
-              <div className={cn('flex gap-3', isOwn && 'flex-row-reverse', grouped && 'mt-1')}>
-                {!grouped && !isOwn && (
-                  <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarImage src={message.sender.avatar_url || "/placeholder.svg"} />
-                    <AvatarFallback>
-                      {message.sender.full_name.split(' ').map(n => n[0]).join('')}
-                    </AvatarFallback>
-                  </Avatar>
+            return (
+              <div key={message.id}>
+                {showDate && (
+                  <div className="flex items-center gap-4 my-6">
+                    <div className="flex-1 border-t" />
+                    <span className="text-xs text-muted-foreground font-medium">
+                      {formatDate(message.created_at)}
+                    </span>
+                    <div className="flex-1 border-t" />
+                  </div>
                 )}
-                {grouped && !isOwn && <div className="w-8 shrink-0" />}
 
-                <div className={cn('flex flex-col', isOwn && 'items-end')}>
+                <div className={cn('flex gap-3', isOwn && 'flex-row-reverse', grouped && 'mt-1')}>
                   {!grouped && !isOwn && (
-                    <div className="flex items-baseline gap-2 mb-1">
-                      <span className="font-semibold text-sm">
-                        {message.sender.full_name}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatTime(message.created_at)}
-                      </span>
-                    </div>
+                    <Avatar className="h-8 w-8 shrink-0">
+                      <AvatarImage src={message.sender.avatar_url || "/placeholder.svg"} />
+                      <AvatarFallback>
+                        {message.sender.full_name.split(' ').map(n => n[0]).join('')}
+                      </AvatarFallback>
+                    </Avatar>
                   )}
+                  {grouped && !isOwn && <div className="w-8 shrink-0" />}
 
-                  <div
-                    className={cn(
-                      'rounded-2xl px-4 py-2 max-w-xl break-words',
-                      isOwn
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted',
-                      message.type !== 'text' && 'p-2'
-                    )}
-                  >
-                    {message.type === 'text' && (
-                      <p className="text-sm leading-relaxed">{message.content}</p>
-                    )}
-
-                    {message.type === 'image' && message.metadata?.file_url && (
-                      <div className="space-y-2">
-                        <img
-                          src={message.metadata.thumbnail_url || message.metadata.file_url || "/placeholder.svg"}
-                          alt={message.metadata.file_name || 'Image'}
-                          className="rounded-lg max-w-sm"
-                        />
-                        {message.content && (
-                          <p className="text-sm px-2">{message.content}</p>
-                        )}
+                  <div className={cn('flex flex-col', isOwn && 'items-end')}>
+                    {!grouped && !isOwn && (
+                      <div className="flex items-baseline gap-2 mb-1">
+                        <span className="font-semibold text-sm">
+                          {message.sender.full_name}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatTime(message.created_at)}
+                        </span>
                       </div>
                     )}
 
-                    {(message.type === 'file' || message.type === 'video') && (
-                      <div className="flex items-center gap-3 p-2">
-                        <div className="h-10 w-10 rounded bg-background/50 flex items-center justify-center">
-                          {getFileIcon(message.type)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {message.metadata?.file_name || 'File'}
-                          </p>
-                          {message.metadata?.file_size && (
-                            <p className="text-xs opacity-70">
-                              {(message.metadata.file_size / 1024 / 1024).toFixed(2)} MB
-                            </p>
+                    <div
+                      className={cn(
+                        'rounded-2xl px-4 py-2 max-w-xl break-words',
+                        isOwn
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted',
+                        message.type !== 'text' && 'p-2'
+                      )}
+                    >
+                      {message.type === 'text' && (
+                        <p className="text-sm leading-relaxed">{message.content}</p>
+                      )}
+
+                      {message.type === 'image' && message.metadata?.file_url && (
+                        <div className="space-y-2">
+                          <img
+                            src={message.metadata.thumbnail_url || message.metadata.file_url || "/placeholder.svg"}
+                            alt={message.metadata.file_name || 'Image'}
+                            className="rounded-lg max-w-sm"
+                          />
+                          {message.content && (
+                            <p className="text-sm px-2">{message.content}</p>
                           )}
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {message.is_edited && (
-                      <span className="text-xs opacity-70 ml-2">(edited)</span>
-                    )}
+                      {(message.type === 'file' || message.type === 'video') && (
+                        <div className="flex items-center gap-3 p-2">
+                          <div className="h-10 w-10 rounded bg-background/50 flex items-center justify-center">
+                            {getFileIcon(message.type)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {message.metadata?.file_name || 'File'}
+                            </p>
+                            {message.metadata?.file_size && (
+                              <p className="text-xs opacity-70">
+                                {(message.metadata.file_size / 1024 / 1024).toFixed(2)} MB
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {message.is_edited && (
+                        <span className="text-xs opacity-70 ml-2">(edited)</span>
+                      )}
+                    </div>
+
+                    {renderMessageReactions(message)}
                   </div>
-
-                  {renderMessageReactions(message)}
                 </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
-    </ScrollArea>
+            )
+          })}
+        </div>
+      </ScrollArea>
+
+      {showScrollButton && (
+        <Button
+          onClick={scrollToBottom}
+          size="icon"
+          className="absolute bottom-6 right-6 h-10 w-10 rounded-full shadow-lg z-10"
+        >
+          <ChevronDown className="h-5 w-5" />
+        </Button>
+      )}
+    </div>
   )
 }

@@ -11,6 +11,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useState } from 'react'
+import { VoiceCallDialog } from './voice-call-dialog'
+import { VideoCallDialog } from './video-call-dialog'
 
 interface ChatHeaderProps {
   conversation: ConversationWithDetails
@@ -18,6 +21,9 @@ interface ChatHeaderProps {
 }
 
 export function ChatHeader({ conversation, currentUser }: ChatHeaderProps) {
+  const [showVoiceCall, setShowVoiceCall] = useState(false)
+  const [showVideoCall, setShowVideoCall] = useState(false)
+
   const getConversationDisplay = () => {
     if (conversation.type === 'direct') {
       const otherUser = conversation.members.find(m => m.id !== currentUser.id)
@@ -26,6 +32,7 @@ export function ChatHeader({ conversation, currentUser }: ChatHeaderProps) {
         subtitle: otherUser?.title || otherUser?.status || '',
         avatar: otherUser?.avatar_url,
         status: otherUser?.status,
+        user: otherUser,
       }
     }
     return {
@@ -52,61 +59,92 @@ export function ChatHeader({ conversation, currentUser }: ChatHeaderProps) {
     }
   }
 
+  const isGroupCall = conversation.type === 'group' || conversation.type === 'channel'
+  const callRecipient = display.user || currentUser
+
   return (
-    <div className="border-b bg-background px-6 py-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {conversation.type === 'direct' ? (
-            <div className="relative">
-              <Avatar className="h-10 w-10">
-                <AvatarImage src={display.avatar || "/placeholder.svg"} />
-                <AvatarFallback>
-                  {display.name.split(' ').map(n => n[0]).join('')}
-                </AvatarFallback>
-              </Avatar>
-              {display.status && (
-                <span className={cn('absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background', getStatusColor(display.status))} />
-              )}
+    <>
+      <div className="border-b bg-background px-6 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {conversation.type === 'direct' ? (
+              <div className="relative">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src={display.avatar || "/placeholder.svg"} />
+                  <AvatarFallback>
+                    {display.name.split(' ').map(n => n[0]).join('')}
+                  </AvatarFallback>
+                </Avatar>
+                {display.status && (
+                  <span className={cn('absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background', getStatusColor(display.status))} />
+                )}
+              </div>
+            ) : (
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                {getConversationIcon()}
+              </div>
+            )}
+            <div>
+              <h2 className="font-semibold text-base">{display.name}</h2>
+              <p className="text-sm text-muted-foreground">{display.subtitle}</p>
             </div>
-          ) : (
-            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              {getConversationIcon()}
-            </div>
-          )}
-          <div>
-            <h2 className="font-semibold text-base">{display.name}</h2>
-            <p className="text-sm text-muted-foreground">{display.subtitle}</p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button 
+              size="icon" 
+              variant="ghost"
+              onClick={() => setShowVoiceCall(true)}
+            >
+              <Phone className="h-5 w-5" />
+            </Button>
+            <Button 
+              size="icon" 
+              variant="ghost"
+              onClick={() => setShowVideoCall(true)}
+            >
+              <Video className="h-5 w-5" />
+            </Button>
+            <Button size="icon" variant="ghost">
+              <Info className="h-5 w-5" />
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="icon" variant="ghost">
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem>Mute notifications</DropdownMenuItem>
+                <DropdownMenuItem>Pin conversation</DropdownMenuItem>
+                <DropdownMenuItem>View details</DropdownMenuItem>
+                <DropdownMenuItem className="text-destructive">
+                  Leave conversation
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <Button size="icon" variant="ghost">
-            <Phone className="h-5 w-5" />
-          </Button>
-          <Button size="icon" variant="ghost">
-            <Video className="h-5 w-5" />
-          </Button>
-          <Button size="icon" variant="ghost">
-            <Info className="h-5 w-5" />
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost">
-                <MoreVertical className="h-5 w-5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>Mute notifications</DropdownMenuItem>
-              <DropdownMenuItem>Pin conversation</DropdownMenuItem>
-              <DropdownMenuItem>View details</DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive">
-                Leave conversation
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
       </div>
-    </div>
+
+      <VoiceCallDialog
+        open={showVoiceCall}
+        onOpenChange={setShowVoiceCall}
+        recipient={callRecipient}
+        isGroup={isGroupCall}
+        groupName={conversation.name}
+        groupMembers={conversation.members}
+      />
+
+      <VideoCallDialog
+        open={showVideoCall}
+        onOpenChange={setShowVideoCall}
+        recipient={callRecipient}
+        isGroup={isGroupCall}
+        groupName={conversation.name}
+        groupMembers={conversation.members}
+      />
+    </>
   )
 }
 

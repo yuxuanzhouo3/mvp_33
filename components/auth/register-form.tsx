@@ -6,12 +6,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { mockAuth } from '@/lib/mock-auth'
-import { Loader2, Mail } from 'lucide-react'
+import { Loader2, Mail, ArrowLeft } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
-import { getTranslation } from '@/lib/i18n'
 
-interface LoginFormProps {
+interface RegisterFormProps {
   onSuccess: () => void
+  onBack: () => void
 }
 
 function WeChatIcon({ className }: { className?: string }) {
@@ -33,9 +33,11 @@ function GoogleIcon({ className }: { className?: string }) {
   )
 }
 
-export function LoginForm({ onSuccess }: LoginFormProps) {
+export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const { language } = useSettings()
@@ -43,38 +45,42 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   const t = (key: string) => {
     const translations: Record<string, Record<string, string>> = {
       en: {
-        signIn: 'Sign In',
-        signInWith: 'Sign in with',
+        register: 'Create Account',
+        registerWith: 'Sign up with',
         wechat: 'WeChat',
         google: 'Google',
+        name: 'Full Name',
         email: 'Email',
         password: 'Password',
+        confirmPassword: 'Confirm Password',
+        namePlaceholder: 'John Doe',
         emailPlaceholder: 'you@company.com',
-        enterCredentials: 'Enter your credentials to access your workspace',
-        quickDemo: 'Quick Demo Login',
-        signingIn: 'Signing in...',
-        invalidCredentials: 'Invalid email or password',
+        enterDetails: 'Create your account to get started',
+        registering: 'Creating account...',
+        passwordMismatch: 'Passwords do not match',
+        registrationFailed: 'Registration failed',
         or: 'Or continue with',
-        forgotPassword: 'Forgot password?',
-        noAccount: 'Don\'t have an account?',
-        createAccount: 'Create one',
+        backToLogin: 'Back to login',
+        alreadyHaveAccount: 'Already have an account?',
       },
       zh: {
-        signIn: '登录',
-        signInWith: '使用 {method} 登录',
+        register: '注册账号',
+        registerWith: '使用 {method} 注册',
         wechat: '微信',
         google: '谷歌',
+        name: '姓名',
         email: '邮箱',
         password: '密码',
+        confirmPassword: '确认密码',
+        namePlaceholder: '张三',
         emailPlaceholder: 'you@company.com',
-        enterCredentials: '输入您的凭据以访问工作区',
-        quickDemo: '快速演示登录',
-        signingIn: '登录中...',
-        invalidCredentials: '邮箱或密码无效',
+        enterDetails: '创建您的账号以开始使用',
+        registering: '注册中...',
+        passwordMismatch: '密码不匹配',
+        registrationFailed: '注册失败',
         or: '或继续使用',
-        forgotPassword: '忘记密码？',
-        noAccount: '没有账号？',
-        createAccount: '立即注册',
+        backToLogin: '返回登录',
+        alreadyHaveAccount: '已有账号？',
       }
     }
     return translations[language]?.[key] || translations.en[key]
@@ -83,43 +89,35 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    setIsLoading(true)
 
-    try {
-      await mockAuth.login(email, password)
-      onSuccess()
-    } catch (err) {
-      setError(t('invalidCredentials'))
-    } finally {
-      setIsLoading(false)
+    if (password !== confirmPassword) {
+      setError(t('passwordMismatch'))
+      return
     }
-  }
 
-  // Quick login for demo
-  const handleQuickLogin = async () => {
-    setEmail('alice@company.com')
-    setPassword('password')
     setIsLoading(true)
+
     try {
+      // Simulate registration - in real app, this would call registration API
+      await new Promise(resolve => setTimeout(resolve, 1500))
       await mockAuth.login('alice@company.com', 'password')
       onSuccess()
     } catch (err) {
-      setError('Login failed')
+      setError(t('registrationFailed'))
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleOAuthLogin = async (provider: 'wechat' | 'google') => {
+  const handleOAuthRegister = async (provider: 'wechat' | 'google') => {
     setIsLoading(true)
     setError('')
     try {
-      // Simulate OAuth login - in real app, this would redirect to OAuth provider
       await new Promise(resolve => setTimeout(resolve, 1000))
       await mockAuth.login('alice@company.com', 'password')
       onSuccess()
     } catch (err) {
-      setError(`${provider} login failed`)
+      setError(`${provider} registration failed`)
     } finally {
       setIsLoading(false)
     }
@@ -128,9 +126,19 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-semibold">{t('signIn')}</CardTitle>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={onBack}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <CardTitle className="text-2xl font-semibold">{t('register')}</CardTitle>
+        </div>
         <CardDescription>
-          {t('enterCredentials')}
+          {t('enterDetails')}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -138,7 +146,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
           <Button
             type="button"
             variant="outline"
-            onClick={() => handleOAuthLogin('wechat')}
+            onClick={() => handleOAuthRegister('wechat')}
             disabled={isLoading}
           >
             <WeChatIcon className="mr-2 h-5 w-5" />
@@ -147,7 +155,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
           <Button
             type="button"
             variant="outline"
-            onClick={() => handleOAuthLogin('google')}
+            onClick={() => handleOAuthRegister('google')}
             disabled={isLoading}
           >
             <GoogleIcon className="mr-2 h-5 w-5" />
@@ -167,6 +175,18 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">{t('name')}</Label>
+            <Input
+              id="name"
+              type="text"
+              placeholder={t('namePlaceholder')}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              disabled={isLoading}
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="email">{t('email')}</Label>
             <Input
@@ -188,6 +208,19 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
               onChange={(e) => setPassword(e.target.value)}
               required
               disabled={isLoading}
+              minLength={6}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">{t('confirmPassword')}</Label>
+            <Input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              disabled={isLoading}
+              minLength={6}
             />
           </div>
           {error && (
@@ -197,40 +230,24 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {t('signingIn')}
+                {t('registering')}
               </>
             ) : (
               <>
                 <Mail className="mr-2 h-4 w-4" />
-                {t('signIn')}
+                {t('register')}
               </>
             )}
           </Button>
-          <Button 
-            type="button" 
-            variant="outline" 
-            className="w-full" 
-            onClick={handleQuickLogin}
-            disabled={isLoading}
-          >
-            {t('quickDemo')}
-          </Button>
-          <div className="flex justify-between text-sm">
-            <Button 
-              type="button" 
-              variant="link" 
-              className="w-full"
-              onClick={() => alert(t('forgotPassword'))}
+          <div className="text-center text-sm">
+            <span className="text-muted-foreground">{t('alreadyHaveAccount')} </span>
+            <Button
+              type="button"
+              variant="link"
+              className="p-0 h-auto font-normal"
+              onClick={onBack}
             >
-              {t('forgotPassword')}
-            </Button>
-            <Button 
-              type="button" 
-              variant="link" 
-              className="w-full"
-              onClick={() => alert(t('createAccount'))}
-            >
-              {t('noAccount')} {t('createAccount')}
+              {t('backToLogin')}
             </Button>
           </div>
         </form>
