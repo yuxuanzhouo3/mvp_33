@@ -8,10 +8,17 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { ConversationWithDetails, User } from '@/lib/types'
-import { Hash, Lock, Users, Search, Plus, MessageSquare, ChevronUp, ChevronDown, ChevronRight, ChevronLeft } from 'lucide-react'
+import { Hash, Lock, Users, Search, Plus, MessageSquare, ChevronUp, ChevronDown, ChevronRight, ChevronLeft, Pin, PinOff, EyeOff, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 
 interface ConversationItemProps {
   conversation: ConversationWithDetails
@@ -21,6 +28,10 @@ interface ConversationItemProps {
   getConversationIcon: (type: string, isPrivate: boolean) => React.ReactNode
   formatTimestamp: (date: string) => string
   expanded?: boolean
+  onPinConversation?: (id: string) => void
+  onUnpinConversation?: (id: string) => void
+  onHideConversation?: (id: string) => void
+  onDeleteConversation?: (id: string) => void
 }
 
 function ConversationItem({
@@ -30,19 +41,26 @@ function ConversationItem({
   onSelect,
   getConversationIcon,
   formatTimestamp,
-  expanded = false
+  expanded = false,
+  onPinConversation,
+  onUnpinConversation,
+  onHideConversation,
+  onDeleteConversation
 }: ConversationItemProps) {
   const containerRef = useRef<HTMLButtonElement>(null)
 
   return (
-    <button
-      ref={containerRef}
-      onClick={onSelect}
-      className={cn(
-        'w-full flex items-start gap-3 rounded-lg p-3 text-left transition-colors hover:bg-accent',
-        isActive && 'bg-accent'
-      )}
-    >
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <button
+          ref={containerRef}
+          onClick={onSelect}
+          className={cn(
+            'w-full flex items-start gap-3 rounded-lg p-3 text-left transition-colors hover:bg-accent',
+            isActive && 'bg-accent',
+            conversation.is_hidden && 'opacity-50'
+          )}
+        >
       <div className="relative shrink-0">
         {conversation.type === 'direct' ? (
           <Avatar className="h-10 w-10">
@@ -68,12 +86,17 @@ function ConversationItem({
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2 mb-1">
-          <span
-            className="font-medium truncate min-w-0"
-            title={display.name} // 显示完整名称的提示
-          >
-            {display.name}
-          </span>
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            {conversation.is_pinned && (
+              <Pin className="h-3 w-3 text-muted-foreground shrink-0" />
+            )}
+            <span
+              className="font-medium truncate min-w-0"
+              title={display.name} // 显示完整名称的提示
+            >
+              {display.name}
+            </span>
+          </div>
           {conversation.last_message_at && (
             <span className="text-xs text-muted-foreground shrink-0">
               {formatTimestamp(conversation.last_message_at)}
@@ -91,7 +114,57 @@ function ConversationItem({
           {conversation.last_message?.content || display.subtitle}
         </p>
       </div>
-    </button>
+        </button>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        {conversation.is_pinned ? (
+          onUnpinConversation && (
+            <ContextMenuItem onClick={() => onUnpinConversation(conversation.id)}>
+              <PinOff className="h-4 w-4 mr-2" />
+              Unpin
+            </ContextMenuItem>
+          )
+        ) : (
+          onPinConversation && (
+            <ContextMenuItem onClick={() => onPinConversation(conversation.id)}>
+              <Pin className="h-4 w-4 mr-2" />
+              Pin
+            </ContextMenuItem>
+          )
+        )}
+        {conversation.is_hidden ? (
+          onHideConversation && (
+            <ContextMenuItem onClick={() => onHideConversation(conversation.id)}>
+              <EyeOff className="h-4 w-4 mr-2" />
+              Show
+            </ContextMenuItem>
+          )
+        ) : (
+          onHideConversation && (
+            <ContextMenuItem onClick={() => onHideConversation(conversation.id)}>
+              <EyeOff className="h-4 w-4 mr-2" />
+              Hide
+            </ContextMenuItem>
+          )
+        )}
+        {onDeleteConversation && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem 
+              onClick={() => {
+                if (confirm('Are you sure you want to delete this conversation?')) {
+                  onDeleteConversation(conversation.id)
+                }
+              }}
+              variant="destructive"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }
 
@@ -103,6 +176,10 @@ interface SidebarProps {
   onNewConversation: () => void
   expanded?: boolean
   onToggleExpand?: () => void
+  onPinConversation?: (id: string) => void
+  onUnpinConversation?: (id: string) => void
+  onHideConversation?: (id: string) => void
+  onDeleteConversation?: (id: string) => void
 }
 
 export function Sidebar({ 
@@ -112,7 +189,11 @@ export function Sidebar({
   onSelectConversation,
   onNewConversation,
   expanded = false,
-  onToggleExpand
+  onToggleExpand,
+  onPinConversation,
+  onUnpinConversation,
+  onHideConversation,
+  onDeleteConversation
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const router = useRouter()
@@ -243,14 +324,24 @@ export function Sidebar({
     }
   }
 
-  const filteredConversations = conversations.filter(conv => {
-    if (!searchQuery) return true
-    const query = searchQuery.toLowerCase()
-    return (
-      conv.name?.toLowerCase().includes(query) ||
-      conv.members.some(m => m.full_name.toLowerCase().includes(query))
-    )
-  })
+  const filteredConversations = conversations
+    .filter(conv => !conv.is_hidden) // Filter out hidden conversations
+    .sort((a, b) => {
+      // Sort: pinned first, then by last_message_at
+      if (a.is_pinned && !b.is_pinned) return -1
+      if (!a.is_pinned && b.is_pinned) return 1
+      const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0
+      const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
+      return bTime - aTime
+    })
+    .filter(conv => {
+      if (!searchQuery) return true
+      const query = searchQuery.toLowerCase()
+      return (
+        conv.name?.toLowerCase().includes(query) ||
+        conv.members.some(m => m.full_name.toLowerCase().includes(query))
+      )
+    })
 
   const getConversationDisplay = (conversation: ConversationWithDetails) => {
     if (conversation.type === 'direct') {
@@ -361,6 +452,10 @@ export function Sidebar({
                   getConversationIcon={getConversationIcon}
                   formatTimestamp={formatTimestamp}
                   expanded={expanded}
+                  onPinConversation={onPinConversation}
+                  onUnpinConversation={onUnpinConversation}
+                  onHideConversation={onHideConversation}
+                  onDeleteConversation={onDeleteConversation}
                 />
               )
             })}

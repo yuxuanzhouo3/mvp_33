@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -8,22 +8,167 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { User } from '@/lib/types'
-import { Search, UserPlus, Users, Star, Building2, MessageSquare, Phone, Video } from 'lucide-react'
+import { Search, UserPlus, Users, Star, Building2, MessageSquare, Phone, Video, ChevronUp, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
+import { AddContactDialog } from './add-contact-dialog'
+import { ContactRequestsPanel } from './contact-requests-panel'
+
+interface ManualContactData {
+  full_name: string
+  email: string
+  phone?: string
+  company?: string
+  notes?: string
+}
 
 interface ContactsPanelProps {
   users: User[]
   currentUser: User
   onStartChat: (userId: string) => void
+  onAddContact?: (userId: string, message?: string) => void
+  onAddManualContact?: (contactData: ManualContactData) => void
+  allUsers?: User[] // All available users for adding contacts
+  onContactAccepted?: () => void
 }
 
-export function ContactsPanel({ users, currentUser, onStartChat }: ContactsPanelProps) {
+export function ContactsPanel({ 
+  users, 
+  currentUser, 
+  onStartChat,
+  onAddContact,
+  onAddManualContact,
+  allUsers = []
+}: ContactsPanelProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [showAddContactDialog, setShowAddContactDialog] = useState(false)
+  const [showScrollDownButton, setShowScrollDownButton] = useState(false)
+  const [showScrollUpButton, setShowScrollUpButton] = useState(false)
+  const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const viewportRef = useRef<HTMLDivElement | null>(null)
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
+
+  // Get the scroll container
+  const getScrollContainer = (): HTMLDivElement | null => {
+    if (viewportRef.current) return viewportRef.current
+    
+    if (scrollAreaRef.current) {
+      const viewport = scrollAreaRef.current.querySelector('[data-slot="scroll-area-viewport"]') as HTMLDivElement ||
+                       scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLDivElement
+      
+      if (viewport) {
+        viewportRef.current = viewport
+        return viewport
+      }
+      
+      // Fallback: find any scrollable div child
+      const children = scrollAreaRef.current.querySelectorAll('div')
+      for (const child of children) {
+        const style = window.getComputedStyle(child)
+        if (style.overflowY === 'auto' || style.overflowY === 'scroll' || 
+            style.overflow === 'auto' || style.overflow === 'scroll') {
+          viewportRef.current = child as HTMLDivElement
+          return child as HTMLDivElement
+        }
+      }
+    }
+    return null
+  }
+
+  useEffect(() => {
+    let scrollContainer: HTMLDivElement | null = null
+    let resizeObserver: ResizeObserver | null = null
+    let retryTimer: NodeJS.Timeout | null = null
+    let checkTimer: NodeJS.Timeout | null = null
+    let handleScroll: (() => void) | null = null
+
+    const findAndSetupScroll = () => {
+      scrollContainer = getScrollContainer()
+      
+      if (!scrollContainer) {
+        retryTimer = setTimeout(findAndSetupScroll, 100)
+        return
+      }
+
+      handleScroll = () => {
+        if (!scrollContainer) return
+        
+        const scrollTop = scrollContainer.scrollTop
+        const scrollHeight = scrollContainer.scrollHeight
+        const clientHeight = scrollContainer.clientHeight
+        
+        const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
+        const isNearTop = scrollTop < 100
+        const isScrollable = scrollHeight > clientHeight
+        
+        setShowScrollDownButton(!isNearBottom && isScrollable)
+        setShowScrollUpButton(!isNearTop && isScrollable)
+      }
+
+      scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
+      checkTimer = setTimeout(handleScroll, 200)
+      
+      resizeObserver = new ResizeObserver(() => {
+        if (handleScroll) {
+          setTimeout(handleScroll, 100)
+        }
+      })
+      resizeObserver.observe(scrollContainer)
+    }
+
+    const timer = setTimeout(findAndSetupScroll, 100)
+    
+    return () => {
+      clearTimeout(timer)
+      if (retryTimer) clearTimeout(retryTimer)
+      if (checkTimer) clearTimeout(checkTimer)
+      if (scrollContainer && handleScroll) {
+        scrollContainer.removeEventListener('scroll', handleScroll)
+      }
+      if (resizeObserver) {
+        resizeObserver.disconnect()
+      }
+    }
+  }, [users, searchQuery])
+
+  const scrollToBottom = () => {
+    const scrollContainer = getScrollContainer()
+    if (scrollContainer) {
+      scrollContainer.scrollTo({
+        top: scrollContainer.scrollHeight,
+        behavior: 'smooth'
+      })
+      setShowScrollDownButton(false)
+      setShowScrollUpButton(true)
+    }
+  }
+
+  const scrollToTop = () => {
+    const scrollContainer = getScrollContainer()
+    if (scrollContainer) {
+      scrollContainer.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      })
+      setShowScrollUpButton(false)
+      setShowScrollDownButton(true)
+    }
+  }
+
+  const scrollAreaCallbackRef = (node: HTMLDivElement | null) => {
+    if (node) {
+      scrollAreaRef.current = node
+      setTimeout(() => {
+        const viewport = node.querySelector('[data-slot="scroll-area-viewport"]') as HTMLDivElement
+        if (viewport) {
+          viewportRef.current = viewport
+        }
+      }, 50)
+    }
+  }
 
   const filteredUsers = users
     .filter(u => u.id !== currentUser.id)
@@ -66,9 +211,16 @@ export function ContactsPanel({ users, currentUser, onStartChat }: ContactsPanel
         <div className="border-b p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">{t('contacts')}</h2>
-            <Button size="icon" variant="ghost">
-              <UserPlus className="h-5 w-5" />
-            </Button>
+            {(onAddContact || onAddManualContact) && (
+              <Button 
+                size="icon" 
+                variant="ghost"
+                onClick={() => setShowAddContactDialog(true)}
+                title="Add Contact"
+              >
+                <UserPlus className="h-5 w-5" />
+              </Button>
+            )}
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -91,56 +243,94 @@ export function ContactsPanel({ users, currentUser, onStartChat }: ContactsPanel
               <Star className="h-4 w-4 mr-2" />
               {t('favorites')}
             </TabsTrigger>
+            <TabsTrigger value="requests" className="flex-1">
+              <UserPlus className="h-4 w-4 mr-2" />
+              Requests
+            </TabsTrigger>
           </TabsList>
 
-          <ScrollArea className="flex-1">
-            <TabsContent value="all" className="m-0">
-              {Object.entries(usersByDepartment).map(([department, deptUsers]) => (
-                <div key={department} className="p-2">
-                  <div className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-muted-foreground">
-                    <Building2 className="h-4 w-4" />
-                    {department}
-                    <Badge variant="secondary" className="ml-auto">
-                      {deptUsers.length}
-                    </Badge>
+          <div className="flex-1 relative overflow-hidden min-h-0">
+            <ScrollArea className="h-full" ref={scrollAreaCallbackRef}>
+              <TabsContent value="requests" className="m-0">
+                <ContactRequestsPanel
+                  currentUser={currentUser}
+                  onAccept={() => {
+                    if (onContactAccepted) onContactAccepted()
+                  }}
+                  onMessage={onStartChat}
+                />
+              </TabsContent>
+              <TabsContent value="all" className="m-0">
+                {Object.entries(usersByDepartment).map(([department, deptUsers]) => (
+                  <div key={department} className="p-2">
+                    <div className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-muted-foreground">
+                      <Building2 className="h-4 w-4" />
+                      {department}
+                      <Badge variant="secondary" className="ml-auto">
+                        {deptUsers.length}
+                      </Badge>
+                    </div>
+                    {deptUsers.map((user) => (
+                      <button
+                        key={user.id}
+                        onClick={() => setSelectedUser(user)}
+                        className={cn(
+                          'w-full flex items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-accent',
+                          selectedUser?.id === user.id && 'bg-accent'
+                        )}
+                      >
+                        <div className="relative">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={user.avatar_url || "/placeholder.svg"} />
+                            <AvatarFallback>
+                              {user.full_name.split(' ').map(n => n[0]).join('')}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className={cn('absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background', getStatusColor(user.status))} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{user.full_name}</div>
+                          <p className="text-sm text-muted-foreground truncate">
+                            {user.title}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
                   </div>
-                  {deptUsers.map((user) => (
-                    <button
-                      key={user.id}
-                      onClick={() => setSelectedUser(user)}
-                      className={cn(
-                        'w-full flex items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-accent',
-                        selectedUser?.id === user.id && 'bg-accent'
-                      )}
-                    >
-                      <div className="relative">
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage src={user.avatar_url || "/placeholder.svg"} />
-                          <AvatarFallback>
-                            {user.full_name.split(' ').map(n => n[0]).join('')}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className={cn('absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background', getStatusColor(user.status))} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">{user.full_name}</div>
-                        <p className="text-sm text-muted-foreground truncate">
-                          {user.title}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </TabsContent>
+                ))}
+              </TabsContent>
 
-            <TabsContent value="favorites" className="m-0 p-4">
-              <div className="text-center text-muted-foreground py-8">
-                <Star className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                <p>{t('noFavoriteContacts')}</p>
-              </div>
-            </TabsContent>
-          </ScrollArea>
+              <TabsContent value="favorites" className="m-0 p-4">
+                <div className="text-center text-muted-foreground py-8">
+                  <Star className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                  <p>{t('noFavoriteContacts')}</p>
+                </div>
+              </TabsContent>
+            </ScrollArea>
+
+            {showScrollUpButton && (
+              <Button
+                onClick={scrollToTop}
+                size="icon"
+                variant="default"
+                className="absolute top-2 right-2 h-8 w-8 rounded-full shadow-lg z-20 bg-background border hover:bg-accent"
+                aria-label="Scroll to top"
+              >
+                <ChevronUp className="h-4 w-4" />
+              </Button>
+            )}
+            {showScrollDownButton && (
+              <Button
+                onClick={scrollToBottom}
+                size="icon"
+                variant="default"
+                className="absolute bottom-2 right-2 h-8 w-8 rounded-full shadow-lg z-20 bg-background border hover:bg-accent"
+                aria-label="Scroll to bottom"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </Tabs>
       </div>
 
@@ -248,6 +438,17 @@ export function ContactsPanel({ users, currentUser, onStartChat }: ContactsPanel
           </div>
         )}
       </div>
+
+      {(onAddContact || onAddManualContact) && (
+        <AddContactDialog
+          open={showAddContactDialog}
+          onOpenChange={setShowAddContactDialog}
+          allUsers={allUsers.length > 0 ? allUsers : users}
+          currentUser={currentUser}
+          onAddContact={onAddContact || (() => {})}
+          onAddManualContact={onAddManualContact}
+        />
+      )}
     </div>
   )
 }

@@ -6,14 +6,25 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { ConversationWithDetails } from '@/lib/types'
-import { Search, Plus, Hash, Lock, Users, Settings } from 'lucide-react'
+import { Search, Plus, Hash, Lock, Users, Settings, Pin, PinOff, EyeOff, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 
 interface ChannelsPanelProps {
   conversations: ConversationWithDetails[]
   onSelectChannel: (id: string) => void
   onCreateChannel: () => void
   selectedChannelId?: string
+  onPinChannel?: (id: string) => void
+  onUnpinChannel?: (id: string) => void
+  onHideChannel?: (id: string) => void
+  onDeleteChannel?: (id: string) => void
 }
 
 export function ChannelsPanel({
@@ -21,12 +32,29 @@ export function ChannelsPanel({
   onSelectChannel,
   onCreateChannel,
   selectedChannelId,
+  onPinChannel,
+  onUnpinChannel,
+  onHideChannel,
+  onDeleteChannel,
 }: ChannelsPanelProps) {
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Separate channels and groups
-  const channels = conversations.filter(c => c.type === 'channel')
-  const groups = conversations.filter(c => c.type === 'group')
+  // Separate channels and groups, filter out hidden ones, and sort by pinned
+  const visibleConversations = conversations.filter(c => !c.is_hidden)
+  const channels = visibleConversations
+    .filter(c => c.type === 'channel')
+    .sort((a, b) => {
+      if (a.is_pinned && !b.is_pinned) return -1
+      if (!a.is_pinned && b.is_pinned) return 1
+      return 0
+    })
+  const groups = visibleConversations
+    .filter(c => c.type === 'group')
+    .sort((a, b) => {
+      if (a.is_pinned && !b.is_pinned) return -1
+      if (!a.is_pinned && b.is_pinned) return 1
+      return 0
+    })
 
   const filterConversations = (convs: ConversationWithDetails[]) => {
     if (!searchQuery) return convs
@@ -48,21 +76,75 @@ export function ChannelsPanel({
     const isSelected = selectedChannelId === conversation.id
 
     return (
-      <button
-        onClick={() => onSelectChannel(conversation.id)}
-        className={cn(
-          'w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors hover:bg-accent',
-          isSelected && 'bg-accent font-medium'
-        )}
-      >
-        {getChannelIcon(conversation.is_private)}
-        <span className="flex-1 truncate text-left">{conversation.name}</span>
-        {conversation.unread_count > 0 && (
-          <Badge variant="destructive" className="h-5 px-1.5 text-xs">
-            {conversation.unread_count}
-          </Badge>
-        )}
-      </button>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <button
+            onClick={() => onSelectChannel(conversation.id)}
+            className={cn(
+              'w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors hover:bg-accent',
+              isSelected && 'bg-accent font-medium',
+              conversation.is_hidden && 'opacity-50'
+            )}
+          >
+            {getChannelIcon(conversation.is_private)}
+            <span className="flex-1 truncate text-left">{conversation.name}</span>
+            {conversation.is_pinned && <Pin className="h-3 w-3 text-muted-foreground" />}
+            {conversation.unread_count > 0 && (
+              <Badge variant="destructive" className="h-5 px-1.5 text-xs">
+                {conversation.unread_count}
+              </Badge>
+            )}
+          </button>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          {conversation.is_pinned ? (
+            onUnpinChannel && (
+              <ContextMenuItem onClick={() => onUnpinChannel(conversation.id)}>
+                <PinOff className="h-4 w-4 mr-2" />
+                Unpin
+              </ContextMenuItem>
+            )
+          ) : (
+            onPinChannel && (
+              <ContextMenuItem onClick={() => onPinChannel(conversation.id)}>
+                <Pin className="h-4 w-4 mr-2" />
+                Pin
+              </ContextMenuItem>
+            )
+          )}
+          {conversation.is_hidden ? (
+            onHideChannel && (
+              <ContextMenuItem onClick={() => onHideChannel(conversation.id)}>
+                <EyeOff className="h-4 w-4 mr-2" />
+                Show
+              </ContextMenuItem>
+            )
+          ) : (
+            onHideChannel && (
+              <ContextMenuItem onClick={() => onHideChannel(conversation.id)}>
+                <EyeOff className="h-4 w-4 mr-2" />
+                Hide
+              </ContextMenuItem>
+            )
+          )}
+          {onDeleteChannel && (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem 
+                onClick={() => {
+                  if (confirm('Are you sure you want to delete this channel?')) {
+                    onDeleteChannel(conversation.id)
+                  }
+                }}
+                variant="destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </ContextMenuItem>
+            </>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
     )
   }
 
@@ -70,21 +152,75 @@ export function ChannelsPanel({
     const isSelected = selectedChannelId === conversation.id
 
     return (
-      <button
-        onClick={() => onSelectChannel(conversation.id)}
-        className={cn(
-          'w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors hover:bg-accent',
-          isSelected && 'bg-accent font-medium'
-        )}
-      >
-        <Users className="h-4 w-4" />
-        <span className="flex-1 truncate text-left">{conversation.name}</span>
-        {conversation.unread_count > 0 && (
-          <Badge variant="destructive" className="h-5 px-1.5 text-xs">
-            {conversation.unread_count}
-          </Badge>
-        )}
-      </button>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <button
+            onClick={() => onSelectChannel(conversation.id)}
+            className={cn(
+              'w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors hover:bg-accent',
+              isSelected && 'bg-accent font-medium',
+              conversation.is_hidden && 'opacity-50'
+            )}
+          >
+            <Users className="h-4 w-4" />
+            <span className="flex-1 truncate text-left">{conversation.name}</span>
+            {conversation.is_pinned && <Pin className="h-3 w-3 text-muted-foreground" />}
+            {conversation.unread_count > 0 && (
+              <Badge variant="destructive" className="h-5 px-1.5 text-xs">
+                {conversation.unread_count}
+              </Badge>
+            )}
+          </button>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          {conversation.is_pinned ? (
+            onUnpinChannel && (
+              <ContextMenuItem onClick={() => onUnpinChannel(conversation.id)}>
+                <PinOff className="h-4 w-4 mr-2" />
+                Unpin
+              </ContextMenuItem>
+            )
+          ) : (
+            onPinChannel && (
+              <ContextMenuItem onClick={() => onPinChannel(conversation.id)}>
+                <Pin className="h-4 w-4 mr-2" />
+                Pin
+              </ContextMenuItem>
+            )
+          )}
+          {conversation.is_hidden ? (
+            onHideChannel && (
+              <ContextMenuItem onClick={() => onHideChannel(conversation.id)}>
+                <EyeOff className="h-4 w-4 mr-2" />
+                Show
+              </ContextMenuItem>
+            )
+          ) : (
+            onHideChannel && (
+              <ContextMenuItem onClick={() => onHideChannel(conversation.id)}>
+                <EyeOff className="h-4 w-4 mr-2" />
+                Hide
+              </ContextMenuItem>
+            )
+          )}
+          {onDeleteChannel && (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem 
+                onClick={() => {
+                  if (confirm('Are you sure you want to delete this group?')) {
+                    onDeleteChannel(conversation.id)
+                  }
+                }}
+                variant="destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </ContextMenuItem>
+            </>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
     )
   }
 

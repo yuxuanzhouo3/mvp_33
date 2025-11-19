@@ -76,6 +76,7 @@ export interface Message {
   reactions: MessageReaction[]
   is_edited: boolean
   is_deleted: boolean
+  is_pinned?: boolean
   created_at: string
   updated_at: string
 }
@@ -138,6 +139,8 @@ export interface ConversationWithDetails extends Conversation {
   members: User[]
   unread_count: number
   last_message?: Message
+  is_pinned?: boolean
+  is_hidden?: boolean
 }
 
 export interface MessageWithSender extends Message {

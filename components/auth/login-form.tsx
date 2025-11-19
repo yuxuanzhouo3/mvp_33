@@ -107,7 +107,11 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister }: LoginForm
           localStorage.setItem('chat_app_current_user', JSON.stringify(data.user))
           localStorage.setItem('chat_app_token', data.token)
         }
-        onSuccess()
+        // Refresh the page to ensure Supabase session cookies are synced
+        // This ensures the session is properly established for API calls
+        setTimeout(() => {
+          window.location.reload()
+        }, 100)
       } else {
         throw new Error(t('invalidCredentials'))
       }

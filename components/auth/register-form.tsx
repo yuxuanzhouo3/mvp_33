@@ -116,9 +116,26 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
         // Store user and token
         if (typeof window !== 'undefined') {
           localStorage.setItem('chat_app_current_user', JSON.stringify(data.user))
-          localStorage.setItem('chat_app_token', data.token)
+          if (data.token) {
+            localStorage.setItem('chat_app_token', data.token)
+          }
         }
-        onSuccess()
+        
+        // If email confirmation is required, show message
+        if (data.requiresEmailConfirmation) {
+          alert('Please check your email to confirm your account before using the app.')
+        }
+        
+        // Refresh the page to ensure Supabase session cookies are synced
+        // This ensures the session is properly established for API calls
+        if (!data.requiresEmailConfirmation) {
+          // Small delay to ensure cookies are set
+          setTimeout(() => {
+            window.location.reload()
+          }, 100)
+        } else {
+          onSuccess()
+        }
       } else {
         throw new Error(t('registrationFailed'))
       }

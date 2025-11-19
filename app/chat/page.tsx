@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { mockAuth } from '@/lib/mock-auth'
-import { getUserConversations, mockUsers } from '@/lib/mock-data'
+import { getUserConversations, mockUsers, createConversation, pinConversation, unpinConversation, hideConversation, deleteConversation } from '@/lib/mock-data'
 import { mockMessageService } from '@/lib/mock-messages'
 import { Sidebar } from '@/components/chat/sidebar'
 import { WorkspaceHeader } from '@/components/chat/workspace-header'
@@ -133,11 +133,102 @@ export default function ChatPage() {
   }, [currentUser])
 
   const handleCreateDirect = useCallback((userId: string) => {
-    console.log('[v0] Create direct conversation with:', userId)
-  }, [])
+    if (!currentUser || !currentWorkspace) return
+
+    // Check if direct conversation already exists
+    const existingDirect = conversations.find(
+      c => c.type === 'direct' && 
+      c.members.some(m => m.id === userId) && 
+      c.members.some(m => m.id === currentUser.id) &&
+      c.members.length === 2
+    )
+
+    if (existingDirect) {
+      // If exists, just select it
+      setSelectedConversationId(existingDirect.id)
+      return
+    }
+
+    const newDirect = createConversation(
+      currentWorkspace.id,
+      'direct',
+      currentUser.id,
+      {
+        memberIds: [currentUser.id, userId],
+      }
+    )
+
+    // Add to conversations list and select it
+    setConversations(prev => [...prev, newDirect])
+    setSelectedConversationId(newDirect.id)
+    
+    // Initialize empty messages for the new conversation
+    mockMessageService.getMessages(newDirect.id)
+  }, [currentUser, currentWorkspace, conversations])
 
   const handleCreateGroup = useCallback((userIds: string[], name: string) => {
-    console.log('[v0] Create group conversation:', name, userIds)
+    if (!currentUser || !currentWorkspace) return
+
+    const newGroup = createConversation(
+      currentWorkspace.id,
+      'group',
+      currentUser.id,
+      {
+        name,
+        memberIds: [currentUser.id, ...userIds], // Include creator
+      }
+    )
+
+    // Add to conversations list and select it
+    setConversations(prev => [...prev, newGroup])
+    setSelectedConversationId(newGroup.id)
+    
+    // Initialize empty messages for the new group
+    mockMessageService.getMessages(newGroup.id)
+  }, [currentUser, currentWorkspace])
+
+  const handlePinConversation = useCallback((id: string) => {
+    const updated = pinConversation(id)
+    if (updated) {
+      setConversations(prev => prev.map(c => c.id === id ? updated : c))
+    }
+  }, [])
+
+  const handleUnpinConversation = useCallback((id: string) => {
+    const updated = unpinConversation(id)
+    if (updated) {
+      setConversations(prev => prev.map(c => c.id === id ? updated : c))
+    }
+  }, [])
+
+  const handleHideConversation = useCallback((id: string) => {
+    const updated = hideConversation(id)
+    if (updated) {
+      setConversations(prev => prev.map(c => c.id === id ? updated : c))
+    }
+  }, [])
+
+  const handleDeleteConversation = useCallback((id: string) => {
+    if (deleteConversation(id)) {
+      setConversations(prev => prev.filter(c => c.id !== id))
+      if (selectedConversationId === id) {
+        setSelectedConversationId(undefined)
+      }
+    }
+  }, [selectedConversationId])
+
+  const handlePinMessage = useCallback((messageId: string) => {
+    const updated = mockMessageService.pinMessage(messageId)
+    if (updated) {
+      setMessages(prev => prev.map(msg => msg.id === messageId ? updated : msg))
+    }
+  }, [])
+
+  const handleUnpinMessage = useCallback((messageId: string) => {
+    const updated = mockMessageService.unpinMessage(messageId)
+    if (updated) {
+      setMessages(prev => prev.map(msg => msg.id === messageId ? updated : msg))
+    }
   }, [])
 
   if (!currentUser || !currentWorkspace) {
@@ -163,6 +254,10 @@ export default function ChatPage() {
             onNewConversation={handleNewConversation}
             expanded={sidebarExpanded}
             onToggleExpand={() => setSidebarExpanded(!sidebarExpanded)}
+            onPinConversation={handlePinConversation}
+            onUnpinConversation={handleUnpinConversation}
+            onHideConversation={handleHideConversation}
+            onDeleteConversation={handleDeleteConversation}
           />
         </div>
 
@@ -180,6 +275,8 @@ export default function ChatPage() {
                 onDeleteMessage={handleDeleteMessage}
                 onAddReaction={handleAddReaction}
                 onRemoveReaction={handleRemoveReaction}
+                onPinMessage={handlePinMessage}
+                onUnpinMessage={handleUnpinMessage}
               />
               <MessageInput onSendMessage={handleSendMessage} />
             </>

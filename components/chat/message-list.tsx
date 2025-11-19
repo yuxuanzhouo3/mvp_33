@@ -5,7 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { MessageWithSender, User } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { File, ImageIcon, Video, Smile, ChevronDown, ChevronUp, MoreVertical, Edit2, Trash2 } from 'lucide-react'
+import { File, ImageIcon, Video, Smile, ChevronDown, ChevronUp, MoreVertical, Edit2, Trash2, Pin, PinOff, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
@@ -15,6 +15,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 import {
   Dialog,
   DialogContent,
@@ -30,6 +37,8 @@ interface MessageListProps {
   onDeleteMessage?: (messageId: string) => void
   onAddReaction?: (messageId: string, emoji: string) => void
   onRemoveReaction?: (messageId: string, emoji: string) => void
+  onPinMessage?: (messageId: string) => void
+  onUnpinMessage?: (messageId: string) => void
 }
 
 export function MessageList({ 
@@ -38,7 +47,9 @@ export function MessageList({
   onEditMessage,
   onDeleteMessage,
   onAddReaction,
-  onRemoveReaction
+  onRemoveReaction,
+  onPinMessage,
+  onUnpinMessage
 }: MessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
@@ -386,15 +397,17 @@ export function MessageList({
                     )}
 
                     <div className="flex items-end gap-2">
-                      <div
-                        className={cn(
-                          'rounded-2xl px-4 py-2 max-w-xl break-words relative group',
-                          isOwn
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted',
-                          message.type !== 'text' && 'p-2'
-                        )}
-                      >
+                      <ContextMenu>
+                        <ContextMenuTrigger asChild>
+                          <div
+                            className={cn(
+                              'rounded-2xl px-4 py-2 max-w-xl break-words relative group',
+                              isOwn
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted',
+                              message.type !== 'text' && 'p-2'
+                            )}
+                          >
                       {message.type === 'text' && (
                         <p className={cn(
                           "text-sm leading-relaxed",
@@ -438,7 +451,50 @@ export function MessageList({
                         {message.is_edited && !message.is_deleted && (
                           <span className="text-xs opacity-70 ml-2">{t('edited')}</span>
                         )}
-                      </div>
+                        {message.is_pinned && (
+                          <span className="text-xs opacity-70 ml-2 flex items-center gap-1">
+                            <Pin className="h-3 w-3" />
+                            Pinned
+                          </span>
+                        )}
+                          </div>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent>
+                          {message.is_pinned ? (
+                            onUnpinMessage && (
+                              <ContextMenuItem onClick={() => onUnpinMessage(message.id)}>
+                                <PinOff className="h-4 w-4 mr-2" />
+                                Unpin Message
+                              </ContextMenuItem>
+                            )
+                          ) : (
+                            onPinMessage && (
+                              <ContextMenuItem onClick={() => onPinMessage(message.id)}>
+                                <Pin className="h-4 w-4 mr-2" />
+                                Pin Message
+                              </ContextMenuItem>
+                            )
+                          )}
+                          {isOwn && message.type === 'text' && onEditMessage && (
+                            <ContextMenuItem onClick={() => handleEdit(message)}>
+                              <Edit2 className="h-4 w-4 mr-2" />
+                              Edit
+                            </ContextMenuItem>
+                          )}
+                          {isOwn && onDeleteMessage && (
+                            <>
+                              <ContextMenuSeparator />
+                              <ContextMenuItem 
+                                onClick={() => handleDelete(message.id)}
+                                variant="destructive"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </ContextMenuItem>
+                            </>
+                          )}
+                        </ContextMenuContent>
+                      </ContextMenu>
                       
                       {hoveredMessageId === message.id && !message.is_deleted && (
                         <DropdownMenu>

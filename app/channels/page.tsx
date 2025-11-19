@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { mockAuth } from '@/lib/mock-auth'
-import { getUserConversations, mockUsers } from '@/lib/mock-data'
+import { getUserConversations, mockUsers, createConversation, pinConversation, unpinConversation, hideConversation, deleteConversation } from '@/lib/mock-data'
 import { mockMessageService } from '@/lib/mock-messages'
 import { WorkspaceHeader } from '@/components/chat/workspace-header'
 import { ChannelsPanel } from '@/components/channels/channels-panel'
@@ -138,7 +138,70 @@ export default function ChannelsPage() {
   }, [currentUser])
 
   const handleCreateChannel = useCallback((data: { name: string; description: string; isPrivate: boolean }) => {
-    console.log('[v0] Create channel:', data)
+    if (!currentUser || !currentWorkspace) return
+
+    const newChannel = createConversation(
+      currentWorkspace.id,
+      'channel',
+      currentUser.id,
+      {
+        name: data.name,
+        description: data.description,
+        isPrivate: data.isPrivate,
+        memberIds: [currentUser.id], // Creator is automatically a member
+      }
+    )
+
+    // Add to conversations list and select it
+    setConversations(prev => [...prev, newChannel])
+    setSelectedChannelId(newChannel.id)
+    
+    // Initialize empty messages for the new channel
+    mockMessageService.getMessages(newChannel.id)
+  }, [currentUser, currentWorkspace])
+
+  const handlePinChannel = useCallback((id: string) => {
+    const updated = pinConversation(id)
+    if (updated) {
+      setConversations(prev => prev.map(c => c.id === id ? updated : c))
+    }
+  }, [])
+
+  const handleUnpinChannel = useCallback((id: string) => {
+    const updated = unpinConversation(id)
+    if (updated) {
+      setConversations(prev => prev.map(c => c.id === id ? updated : c))
+    }
+  }, [])
+
+  const handleHideChannel = useCallback((id: string) => {
+    const updated = hideConversation(id)
+    if (updated) {
+      setConversations(prev => prev.map(c => c.id === id ? updated : c))
+    }
+  }, [])
+
+  const handleDeleteChannel = useCallback((id: string) => {
+    if (deleteConversation(id)) {
+      setConversations(prev => prev.filter(c => c.id !== id))
+      if (selectedChannelId === id) {
+        setSelectedChannelId(undefined)
+      }
+    }
+  }, [selectedChannelId])
+
+  const handlePinMessage = useCallback((messageId: string) => {
+    const updated = mockMessageService.pinMessage(messageId)
+    if (updated) {
+      setMessages(prev => prev.map(msg => msg.id === messageId ? updated : msg))
+    }
+  }, [])
+
+  const handleUnpinMessage = useCallback((messageId: string) => {
+    const updated = mockMessageService.unpinMessage(messageId)
+    if (updated) {
+      setMessages(prev => prev.map(msg => msg.id === messageId ? updated : msg))
+    }
   }, [])
 
   if (!currentUser || !currentWorkspace) {
@@ -157,6 +220,10 @@ export default function ChannelsPage() {
           onSelectChannel={setSelectedChannelId}
           onCreateChannel={() => setShowCreateChannel(true)}
           selectedChannelId={selectedChannelId}
+          onPinChannel={handlePinChannel}
+          onUnpinChannel={handleUnpinChannel}
+          onHideChannel={handleHideChannel}
+          onDeleteChannel={handleDeleteChannel}
         />
 
         <div className="flex-1 flex flex-col">
@@ -173,6 +240,8 @@ export default function ChannelsPage() {
                 onDeleteMessage={handleDeleteMessage}
                 onAddReaction={handleAddReaction}
                 onRemoveReaction={handleRemoveReaction}
+                onPinMessage={handlePinMessage}
+                onUnpinMessage={handleUnpinMessage}
               />
               <MessageInput onSendMessage={handleSendMessage} />
             </>

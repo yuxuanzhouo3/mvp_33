@@ -6,26 +6,26 @@ import { getUserById } from './mock-data'
 const messageStore = new Map<string, MessageWithSender[]>()
 let messageIdCounter = 0
 
-// Initialize with demo messages
+// Initialize with demo messages - conversations between 5 demo users
 const initMessages = (conversationId: string): MessageWithSender[] => {
   const demoMessages: MessageWithSender[] = []
+  const alice = getUserById('00000000-0000-0000-0000-000000000001')!
+  const bob = getUserById('00000000-0000-0000-0000-000000000002')!
+  const carol = getUserById('00000000-0000-0000-0000-000000000003')!
+  const david = getUserById('00000000-0000-0000-0000-000000000004')!
+  const emma = getUserById('00000000-0000-0000-0000-000000000005')!
   
   if (conversationId === '30000000-0000-0000-0000-000000000001') {
-    // General channel messages
-    const alice = getUserById('00000000-0000-0000-0000-000000000001')!
-    const david = getUserById('00000000-0000-0000-0000-000000000004')!
-    const bob = getUserById('00000000-0000-0000-0000-000000000002')!
-    const emma = getUserById('00000000-0000-0000-0000-000000000005')!
-
+    // General channel - all 5 users chatting
     demoMessages.push(
       {
         id: 'msg-gen-1',
         conversation_id: conversationId,
         sender_id: david.id,
         sender: david,
-        content: 'Welcome everyone to TechCorp! Looking forward to working with you all.',
+        content: 'Welcome everyone to TechCorp! Looking forward to working with you all. 👋',
         type: 'text',
-        reactions: [{ emoji: '👋', user_ids: ['u1', 'u2'], count: 2 }],
+        reactions: [{ emoji: '👋', user_ids: [alice.id, bob.id], count: 2 }],
         is_edited: false,
         is_deleted: false,
         created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
@@ -36,7 +36,7 @@ const initMessages = (conversationId: string): MessageWithSender[] => {
         conversation_id: conversationId,
         sender_id: alice.id,
         sender: alice,
-        content: 'Thanks David! Excited to be here!',
+        content: 'Thanks David! Excited to be here! 🚀',
         type: 'text',
         reactions: [],
         is_edited: false,
@@ -51,7 +51,7 @@ const initMessages = (conversationId: string): MessageWithSender[] => {
         sender: bob,
         content: 'Team standup at 10am today - please join!',
         type: 'text',
-        reactions: [{ emoji: '✅', user_ids: ['u1', 'u2', 'u3'], count: 3 }],
+        reactions: [{ emoji: '✅', user_ids: [alice.id, david.id, emma.id], count: 3 }],
         is_edited: false,
         is_deleted: false,
         created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
@@ -62,20 +62,60 @@ const initMessages = (conversationId: string): MessageWithSender[] => {
         conversation_id: conversationId,
         sender_id: emma.id,
         sender: emma,
-        content: "Don't forget about the product launch next week!",
+        content: "Don't forget about the product launch next week! 📢",
         type: 'text',
         reactions: [],
         is_edited: false,
         is_deleted: false,
-        created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-        updated_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+        created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'msg-gen-5',
+        conversation_id: conversationId,
+        sender_id: carol.id,
+        sender: carol,
+        content: 'The new design mockups are ready for review! 🎨',
+        type: 'text',
+        reactions: [{ emoji: '👍', user_ids: [bob.id, emma.id], count: 2 }],
+        is_edited: false,
+        is_deleted: false,
+        created_at: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+      }
+    )
+  } else if (conversationId === '30000000-0000-0000-0000-000000000002') {
+    // Engineering channel - Alice and David
+    demoMessages.push(
+      {
+        id: 'msg-eng-1',
+        conversation_id: conversationId,
+        sender_id: david.id,
+        sender: david,
+        content: 'Good morning team! Let\'s review the sprint goals.',
+        type: 'text',
+        reactions: [],
+        is_edited: false,
+        is_deleted: false,
+        created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'msg-eng-2',
+        conversation_id: conversationId,
+        sender_id: alice.id,
+        sender: alice,
+        content: 'Code review for PR #234 please',
+        type: 'text',
+        reactions: [],
+        is_edited: false,
+        is_deleted: false,
+        created_at: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
       }
     )
   } else if (conversationId === '30000000-0000-0000-0000-000000000003') {
     // Direct message between Alice and Bob
-    const alice = getUserById('00000000-0000-0000-0000-000000000001')!
-    const bob = getUserById('00000000-0000-0000-0000-000000000002')!
-
     demoMessages.push(
       {
         id: 'msg-dm-1',
@@ -95,7 +135,7 @@ const initMessages = (conversationId: string): MessageWithSender[] => {
         conversation_id: conversationId,
         sender_id: bob.id,
         sender: bob,
-        content: 'I have some time after lunch.',
+        content: 'Sure! I have some time after lunch.',
         type: 'text',
         reactions: [],
         is_edited: false,
@@ -113,21 +153,111 @@ const initMessages = (conversationId: string): MessageWithSender[] => {
         reactions: [],
         is_edited: false,
         is_deleted: false,
-        created_at: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
-        updated_at: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
-      },
+        created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+      }
+    )
+  } else if (conversationId === '30000000-0000-0000-0000-000000000004') {
+    // Product Planning group - Bob, Carol, Emma
+    demoMessages.push(
       {
-        id: 'msg-dm-4',
+        id: 'msg-prod-1',
         conversation_id: conversationId,
         sender_id: bob.id,
         sender: bob,
-        content: 'I have some time after lunch',
+        content: 'Let\'s discuss the Q1 roadmap',
+        type: 'text',
+        reactions: [],
+        is_edited: false,
+        is_deleted: false,
+        created_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'msg-prod-2',
+        conversation_id: conversationId,
+        sender_id: emma.id,
+        sender: emma,
+        content: 'Updated the roadmap document - please review',
+        type: 'text',
+        reactions: [],
+        is_edited: false,
+        is_deleted: false,
+        created_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'msg-prod-3',
+        conversation_id: conversationId,
+        sender_id: carol.id,
+        sender: carol,
+        content: 'I\'ll review the design requirements and provide feedback.',
         type: 'text',
         reactions: [],
         is_edited: false,
         is_deleted: false,
         created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
         updated_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      }
+    )
+  } else if (conversationId === '30000000-0000-0000-0000-000000000005') {
+    // Direct message between Alice and Carol
+    demoMessages.push(
+      {
+        id: 'msg-dm-ac-1',
+        conversation_id: conversationId,
+        sender_id: alice.id,
+        sender: alice,
+        content: 'Hi Carol! The design looks great. Can we make the buttons a bit larger?',
+        type: 'text',
+        reactions: [],
+        is_edited: false,
+        is_deleted: false,
+        created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'msg-dm-ac-2',
+        conversation_id: conversationId,
+        sender_id: carol.id,
+        sender: carol,
+        content: 'Thanks for the feedback on the design! I\'ll update that right away.',
+        type: 'text',
+        reactions: [],
+        is_edited: false,
+        is_deleted: false,
+        created_at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+      }
+    )
+  } else if (conversationId === '30000000-0000-0000-0000-000000000006') {
+    // Direct message between Alice and Emma
+    demoMessages.push(
+      {
+        id: 'msg-dm-ae-1',
+        conversation_id: conversationId,
+        sender_id: alice.id,
+        sender: alice,
+        content: 'Hi Emma! How\'s the marketing campaign going?',
+        type: 'text',
+        reactions: [],
+        is_edited: false,
+        is_deleted: false,
+        created_at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'msg-dm-ae-2',
+        conversation_id: conversationId,
+        sender_id: emma.id,
+        sender: emma,
+        content: 'The marketing campaign is going well! We\'re seeing great engagement.',
+        type: 'text',
+        reactions: [],
+        is_edited: false,
+        is_deleted: false,
+        created_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
       }
     )
   }
@@ -252,6 +382,24 @@ export const mockMessageService = {
       }
     }
 
+    message.updated_at = new Date().toISOString()
+    return message
+  },
+
+  pinMessage: (messageId: string): MessageWithSender | null => {
+    const message = mockMessageService.getMessageById(messageId)
+    if (!message) return null
+
+    message.is_pinned = true
+    message.updated_at = new Date().toISOString()
+    return message
+  },
+
+  unpinMessage: (messageId: string): MessageWithSender | null => {
+    const message = mockMessageService.getMessageById(messageId)
+    if (!message) return null
+
+    message.is_pinned = false
     message.updated_at = new Date().toISOString()
     return message
   },

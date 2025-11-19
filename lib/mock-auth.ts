@@ -39,23 +39,25 @@ export const mockAuth = {
     }
   },
 
-  // Mock login
+  // Mock login - supports all 5 demo users
   login: async (email: string, password: string): Promise<User> => {
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 500))
     
-    // Mock user data
-    const user: User = {
-      id: '00000000-0000-0000-0000-000000000001',
-      email,
-      username: email.split('@')[0],
-      full_name: 'Alice Zhang',
-      avatar_url: '/placeholder.svg?height=40&width=40',
-      department: 'Engineering',
-      title: 'Senior Software Engineer',
-      status: 'online',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+    // Import mock users to find matching user
+    const { mockUsers } = await import('./mock-data')
+    
+    // Find user by email, or default to first user
+    let user = mockUsers.find(u => u.email === email) || mockUsers[0]
+    
+    // If user not found, create a new user entry
+    if (!mockUsers.find(u => u.email === email)) {
+      user = {
+        ...mockUsers[0],
+        email,
+        username: email.split('@')[0],
+        full_name: email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1),
+      }
     }
     
     mockAuth.setCurrentUser(user)
