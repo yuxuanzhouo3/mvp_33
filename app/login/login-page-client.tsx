@@ -31,12 +31,17 @@ export default function LoginPageClient({ initialStep = 'login' }: LoginPageClie
     if (!initialStepSetRef.current) {
       const clientSearchParams = new URLSearchParams(window.location.search)
       const oauth = clientSearchParams.get('oauth')
+      const emailConfirmed = clientSearchParams.get('email_confirmed')
       
       // If OAuth callback, set to workspace immediately
       if (oauth === 'success') {
         setStep('workspace')
         initialStepSetRef.current = true
         // Don't return here, continue to process OAuth below
+      } else if (emailConfirmed === '1') {
+        // 用户刚从 Supabase 邮件确认回来，确保停留在登录页，而不是自动跳转到 workspace / chat
+        setStep('login')
+        initialStepSetRef.current = true
       } else {
         // Check if user is already logged in but no workspace
         const user = mockAuth.getCurrentUser()

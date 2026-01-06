@@ -5,9 +5,15 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { mockAuth } from '@/lib/mock-auth'
 import { Loader2, Mail, ArrowLeft } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 
 interface RegisterFormProps {
   onSuccess: () => void
@@ -40,6 +46,7 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showEmailConfirmDialog, setShowEmailConfirmDialog] = useState(false)
   const { language } = useSettings()
 
   const t = (key: string) => {
@@ -62,6 +69,8 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
         or: 'Or continue with',
         backToLogin: 'Back to login',
         alreadyHaveAccount: 'Already have an account?',
+        checkEmailTitle: 'Check your email',
+        checkEmailDescription: 'We have sent a confirmation link to your inbox. Please confirm your email, then come back here to log in.',
       },
       zh: {
         register: '注册账号',
@@ -81,6 +90,8 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
         or: '或继续使用',
         backToLogin: '返回登录',
         alreadyHaveAccount: '已有账号？',
+        checkEmailTitle: '请检查邮箱',
+        checkEmailDescription: '我们已经向您的邮箱发送了一封确认邮件。请先点击邮件中的链接完成验证，然后再回来登录。',
       }
     }
     return translations[language]?.[key] || translations.en[key]
@@ -129,18 +140,10 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
       }
 
       if (data.success && data.user) {
-        // Store user and token
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('chat_app_current_user', JSON.stringify(data.user))
-          if (data.token) {
-            localStorage.setItem('chat_app_token', data.token)
-          }
-        }
-        
-        // If email confirmation is required, show message
+        // 如果需要邮箱确认，不直接当作“已登录”，只弹出提示
         if (data.requiresEmailConfirmation) {
-          alert('Please check your email to confirm your account before using the app.')
-          onSuccess()
+          setShowEmailConfirmDialog(true)
+          // 不调用 onSuccess，保持在注册/登录流程，防止用户在未确认邮箱时误以为已登录
         } else {
           // Registration successful - directly call onSuccess to go to workspace selection
           // No need to reload page, session cookies are already set by Supabase
@@ -173,128 +176,153 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader className="space-y-1">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={onBack}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <CardTitle className="text-2xl font-semibold">{t('register')}</CardTitle>
-        </div>
-        <CardDescription>
-          {t('enterDetails')}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* OAuth Register Button - Google only */}
-        <div className="grid grid-cols-1 gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => handleOAuthRegister('google')}
-            disabled={isLoading}
-            className="w-full"
-          >
-            <GoogleIcon className="mr-2 h-5 w-5" />
-            {t('google')}
-          </Button>
-        </div>
-
-        {/* Divider */}
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
+    <>
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={onBack}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <CardTitle className="text-2xl font-semibold">{t('register')}</CardTitle>
           </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-2 text-muted-foreground">
-              {t('or')}
-            </span>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">{t('name')}</Label>
-            <Input
-              id="name"
-              type="text"
-              placeholder={t('namePlaceholder')}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">{t('email')}</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder={t('emailPlaceholder')}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">{t('password')}</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={isLoading}
-              minLength={6}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword">{t('confirmPassword')}</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              disabled={isLoading}
-              minLength={6}
-            />
-          </div>
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {t('registering')}
-              </>
-            ) : (
-              <>
-                <Mail className="mr-2 h-4 w-4" />
-                {t('register')}
-              </>
-            )}
-          </Button>
-          <div className="text-center text-sm">
-            <span className="text-muted-foreground">{t('alreadyHaveAccount')} </span>
+          <CardDescription>
+            {t('enterDetails')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* OAuth Register Button - Google only */}
+          <div className="grid grid-cols-1 gap-3">
             <Button
               type="button"
-              variant="link"
-              className="p-0 h-auto font-normal"
-              onClick={onBack}
+              variant="outline"
+              onClick={() => handleOAuthRegister('google')}
+              disabled={isLoading}
+              className="w-full"
+            >
+              <GoogleIcon className="mr-2 h-5 w-5" />
+              {t('google')}
+            </Button>
+          </div>
+
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                {t('or')}
+              </span>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">{t('name')}</Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder={t('namePlaceholder')}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                disabled={isLoading}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">{t('email')}</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder={t('emailPlaceholder')}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={isLoading}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">{t('password')}</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={isLoading}
+                minLength={6}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">{t('confirmPassword')}</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                disabled={isLoading}
+                minLength={6}
+              />
+            </div>
+            {error && (
+              <p className="text-sm text-destructive">{error}</p>
+            )}
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t('registering')}
+                </>
+              ) : (
+                <>
+                  <Mail className="mr-2 h-4 w-4" />
+                  {t('register')}
+                </>
+              )}
+            </Button>
+            <div className="text-center text-sm">
+              <span className="text-muted-foreground">{t('alreadyHaveAccount')} </span>
+              <Button
+                type="button"
+                variant="link"
+                className="p-0 h-auto font-normal"
+                onClick={onBack}
+              >
+                {t('backToLogin')}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* 居中的“请检查邮箱”弹窗 */}
+      <Dialog open={showEmailConfirmDialog} onOpenChange={setShowEmailConfirmDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('checkEmailTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('checkEmailDescription')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowEmailConfirmDialog(false)
+                onBack() // 回到登录页
+              }}
             >
               {t('backToLogin')}
             </Button>
           </div>
-        </form>
-      </CardContent>
-    </Card>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

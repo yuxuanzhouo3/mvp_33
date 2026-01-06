@@ -56,11 +56,17 @@ export async function POST(request: NextRequest) {
     // Use original email for Supabase Auth (no region aliasing)
     const supabaseAuthEmail = email
 
+    // Build email confirmation redirect URL (user clicks link in email)
+    const origin = request.nextUrl.origin
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || origin
+    const emailRedirectTo = `${appUrl}/login?email_confirmed=1`
+
     // Create user in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: supabaseAuthEmail,
       password,
       options: {
+        emailRedirectTo,
         data: {
           full_name: name,
           username: email.split('@')[0],
