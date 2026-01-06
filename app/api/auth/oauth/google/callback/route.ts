@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-const FRONTEND_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001'
-
 /**
  * Handle Google OAuth callback from Supabase
  * GET /api/auth/oauth/google/callback
  */
 export async function GET(request: NextRequest) {
   try {
+    // Use request origin instead of hardcoded localhost
+    const origin = request.nextUrl.origin
+    
     // Check if Supabase is configured
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      return NextResponse.redirect(`${FRONTEND_URL}/login?error=supabase_not_configured`)
+      return NextResponse.redirect(`${origin}/login?error=supabase_not_configured`)
     }
 
     const supabase = await createClient()
@@ -21,11 +22,11 @@ export async function GET(request: NextRequest) {
     const error = searchParams.get('error')
 
     if (error) {
-      return NextResponse.redirect(`${FRONTEND_URL}/login?error=oauth_cancelled`)
+      return NextResponse.redirect(`${origin}/login?error=oauth_cancelled`)
     }
 
     if (!code) {
-      return NextResponse.redirect(`${FRONTEND_URL}/login?error=oauth_failed`)
+      return NextResponse.redirect(`${origin}/login?error=oauth_failed`)
     }
 
     // Exchange code for session (optimized: parallel operations where possible)
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     if (exchangeError || !data.session || !data.user) {
       console.error('Supabase session exchange error:', exchangeError)
-      return NextResponse.redirect(`${FRONTEND_URL}/login?error=session_exchange_failed`)
+      return NextResponse.redirect(`${origin}/login?error=session_exchange_failed`)
     }
 
     const { user, session } = data
@@ -117,7 +118,7 @@ export async function GET(request: NextRequest) {
     const token = session.access_token
 
     // Redirect to frontend with user data (optimized: direct redirect, no extra processing)
-    const redirectUrl = new URL(`${FRONTEND_URL}/login`)
+    const redirectUrl = new URL(`${origin}/login`)
     redirectUrl.searchParams.set('oauth', 'success')
     redirectUrl.searchParams.set('provider', 'google')
     redirectUrl.searchParams.set('token', token)
@@ -126,6 +127,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(redirectUrl.toString())
   } catch (error) {
     console.error('Google OAuth callback error:', error)
-    return NextResponse.redirect(`${FRONTEND_URL}/login?error=oauth_callback_failed`)
+    const origin = request.nextUrl.origin
+    return NextResponse.redirect(`${origin}/login?error=oauth_callback_failed`)
   }
 }
