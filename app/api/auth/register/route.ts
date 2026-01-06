@@ -59,7 +59,9 @@ export async function POST(request: NextRequest) {
     // Build email confirmation redirect URL (user clicks link in email)
     const origin = request.nextUrl.origin
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || origin
-    const emailRedirectTo = `${appUrl}/login?email_confirmed=1`
+    // After the user clicks "Confirm your email" in Supabase email,
+    // redirect them to a simple static confirmation page.
+    const emailRedirectTo = `${appUrl}/email-confirmed`
 
     // Create user in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({

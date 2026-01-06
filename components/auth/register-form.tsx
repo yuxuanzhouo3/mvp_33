@@ -47,6 +47,7 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [showEmailConfirmDialog, setShowEmailConfirmDialog] = useState(false)
+  const [hasSignedUpOnce, setHasSignedUpOnce] = useState(false)
   const { language } = useSettings()
 
   const t = (key: string) => {
@@ -71,6 +72,8 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
         alreadyHaveAccount: 'Already have an account?',
         checkEmailTitle: 'Check your email',
         checkEmailDescription: 'We have sent a confirmation link to your inbox. Please confirm your email, then come back here to log in.',
+        emailNotConfirmedYet: 'Please confirm your email first, then click the button again.',
+        loginFailed: 'Login failed',
       },
       zh: {
         register: '注册账号',
@@ -92,6 +95,8 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
         alreadyHaveAccount: '已有账号？',
         checkEmailTitle: '请检查邮箱',
         checkEmailDescription: '我们已经向您的邮箱发送了一封确认邮件。请先点击邮件中的链接完成验证，然后再回来登录。',
+        emailNotConfirmedYet: '请先在邮箱中完成验证，然后再点击按钮继续。',
+        loginFailed: '登录失败',
       }
     }
     return translations[language]?.[key] || translations.en[key]
@@ -109,6 +114,45 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
     setIsLoading(true)
 
     try {
+      // 第二次点击：用户已经完成邮箱确认，这里直接尝试登录
+      if (hasSignedUpOnce) {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email,
+            password,
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          const errorMsg: string = data?.error || t('loginFailed')
+          // 如果是邮箱未确认，提示用户先确认
+          if (
+            data?.code === 'EMAIL_NOT_CONFIRMED' ||
+            errorMsg.toLowerCase().includes('confirm')
+          ) {
+            setError(t('emailNotConfirmedYet'))
+            throw new Error(errorMsg)
+          }
+
+          throw new Error(errorMsg)
+        }
+
+        if (data.success && data.user) {
+          // 登录成功，直接进入 workspace 流程
+          onSuccess()
+          return
+        }
+
+        throw new Error(t('loginFailed'))
+      }
+
+      // 第一次点击：走注册流程，发送确认邮件
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
@@ -140,10 +184,11 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
       }
 
       if (data.success && data.user) {
-        // 如果需要邮箱确认，不直接当作“已登录”，只弹出提示
+        // 如果需要邮箱确认：不当作已登录，只弹出提示，并记录“已经注册过一次”
         if (data.requiresEmailConfirmation) {
+          setHasSignedUpOnce(true)
           setShowEmailConfirmDialog(true)
-          // 不调用 onSuccess，保持在注册/登录流程，防止用户在未确认邮箱时误以为已登录
+          // 不调用 onSuccess，保持在注册页，等待用户完成邮箱确认后再点一次按钮
         } else {
           // Registration successful - directly call onSuccess to go to workspace selection
           // No need to reload page, session cookies are already set by Supabase
@@ -314,8 +359,8 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
             <Button
               variant="outline"
               onClick={() => {
+                // 只关闭弹窗，不离开当前注册页，保持用户输入
                 setShowEmailConfirmDialog(false)
-                onBack() // 回到登录页
               }}
             >
               {t('backToLogin')}
