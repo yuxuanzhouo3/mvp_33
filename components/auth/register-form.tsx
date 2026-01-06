@@ -144,6 +144,11 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
         }
 
         if (data.success && data.user) {
+          // 和 LoginForm 保持一致：保存用户和 token 到 localStorage
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem('chat_app_current_user', JSON.stringify(data.user))
+            window.localStorage.setItem('chat_app_token', data.token)
+          }
           // 登录成功，直接进入 workspace 流程
           onSuccess()
           return
