@@ -141,15 +141,10 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
       }
 
       if (data.success && data.user) {
-        // 如果需要邮箱确认：不当作已登录，只弹出提示
-        if (data.requiresEmailConfirmation) {
-          setShowEmailConfirmDialog(true)
-          // 不调用 onSuccess，保持在注册/登录流程，用户去邮箱确认后再到登录页登录
-        } else {
-          // Registration successful - directly call onSuccess to go to workspace selection
-          // No need to reload page, session cookies are already set by Supabase
-          onSuccess()
-        }
+        // 始终走“邮箱确认”流程：不论 Supabase 是否立即创建 session，
+        // 都不自动当作已登录，不直接进入 workspace，而是提示去邮箱确认。
+        setShowEmailConfirmDialog(true)
+        // 不调用 onSuccess，保持在注册/登录流程，用户去邮箱确认后再到登录页登录
       } else {
         throw new Error('Registration failed')
       }
