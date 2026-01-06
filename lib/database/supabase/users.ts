@@ -56,14 +56,20 @@ export async function createUser(
     provider?: string
     provider_id?: string
   },
-  userId?: string // Optional: if provided, use this ID instead of getting from session
+  userId?: string, // Optional: if provided, use this ID instead of getting from session
+  useAdminClient: boolean = false // Optional: use admin client to bypass RLS (for login/registration flows)
 ): Promise<User> {
-  const supabase = await createClient()
+  // Use admin client if requested (for login/registration when user might not have session yet)
+  const supabase = useAdminClient ? createAdminClient() : await createClient()
   
   let authUserId = userId
   
   // If userId not provided, try to get from auth session
   if (!authUserId) {
+    if (useAdminClient) {
+      // Can't get user from admin client, userId must be provided
+      throw new Error('userId must be provided when using admin client')
+    }
     const { data: { user: authUser } } = await supabase.auth.getUser()
     if (authUser) {
       authUserId = authUser.id
@@ -83,6 +89,8 @@ export async function createUser(
       department: userData.department || null,
       title: userData.title || null,
       status: 'online',
+      region: 'global', // Default to global region
+      country: null,
     })
     .select()
     .single()
@@ -90,7 +98,7 @@ export async function createUser(
   if (error) {
     // If user already exists (created by trigger), fetch it
     if (error.code === '23505') { // Unique violation
-      const existingUser = await getUserByEmail(userData.email)
+      const existingUser = await getUserByEmail(userData.email, useAdminClient)
       if (existingUser) return existingUser
     }
     throw error

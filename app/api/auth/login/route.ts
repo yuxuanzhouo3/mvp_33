@@ -245,6 +245,7 @@ export async function POST(request: NextRequest) {
         // User doesn't exist, try to create it
         console.log('[LOGIN] User not found by auth ID, attempting to create user record')
         try {
+          // Use admin client to bypass RLS (user is authenticated but might not have users table record yet)
           finalUser = await createSupabaseUser(
             {
               email: authData.user.email || email,
@@ -252,7 +253,8 @@ export async function POST(request: NextRequest) {
               full_name: authData.user.user_metadata?.full_name || email.split('@')[0],
               avatar_url: authData.user.user_metadata?.avatar_url || null,
             },
-            authData.user.id
+            authData.user.id,
+            true // useAdminClient = true to bypass RLS
           )
           registeredRegion = 'global'
           console.log('[LOGIN] ✅ Created user in Supabase users table:', {

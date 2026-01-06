@@ -98,6 +98,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Don't auto-create workspace - let user choose/create workspace after OAuth login
+    // Workspace selection happens in the frontend after login
+
     // Transform to our user format for frontend
     const userData = {
       id: dbUser?.id || user.id,

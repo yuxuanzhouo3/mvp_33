@@ -158,15 +158,16 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
     }
   }
 
-  // OAuth register handler - redirects to OAuth provider
-  const handleOAuthRegister = async (provider: 'wechat' | 'google') => {
+  // OAuth handler - same as login page (OAuth automatically creates account if not exists)
+  const handleOAuth = async (provider: 'wechat' | 'google') => {
     setIsLoading(true)
     setError('')
     try {
-      // Redirect to OAuth provider with register action
-      window.location.href = `/api/auth/oauth/${provider}?action=register`
+      // Use same logic as login page - OAuth handles both login and registration
+      window.location.href = `/api/auth/oauth/${provider}?action=login`
+      // Note: setIsLoading(false) won't execute due to redirect, which is fine
     } catch (err) {
-      setError(`${provider} registration failed`)
+      setError(`${provider === 'wechat' ? t('wechat') : t('google')} ${t('register')} failed`)
       setIsLoading(false)
     }
   }
@@ -191,12 +192,12 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* OAuth Register Button - Google only */}
+          {/* OAuth Button - Google only (same as login page) */}
           <div className="grid grid-cols-1 gap-3">
             <Button
               type="button"
               variant="outline"
-              onClick={() => handleOAuthRegister('google')}
+              onClick={() => handleOAuth('google')}
               disabled={isLoading}
               className="w-full"
             >

@@ -211,35 +211,8 @@ export async function POST(request: NextRequest) {
       token = session?.access_token || ''
     }
 
-    // Ensure workspace is created for new user in Supabase
-    if (session) {
-      const { data: workspaceMembers } = await supabase
-        .from('workspace_members')
-        .select('workspace_id')
-        .eq('user_id', user.id)
-        .limit(1)
-
-      if (!workspaceMembers || workspaceMembers.length === 0) {
-        const domain = `workspace-${user.id.substring(0, 8)}-${Date.now()}`
-        const { data: newWorkspace, error: workspaceError } = await supabase
-          .from('workspaces')
-          .insert({
-            name: 'My Workspace',
-            domain,
-            owner_id: user.id,
-          })
-          .select()
-          .single()
-
-        if (!workspaceError && newWorkspace) {
-          await supabase.from('workspace_members').insert({
-            workspace_id: newWorkspace.id,
-            user_id: user.id,
-            role: 'owner',
-          })
-        }
-      }
-    }
+    // Don't auto-create workspace - let user choose/create workspace after registration
+    // Workspace selection happens in the frontend after login
 
     // Explicitly get session to ensure cookies are set
     // This is important for @supabase/ssr to properly set cookies
