@@ -1,0 +1,344 @@
+'use client'
+
+import { Button } from '@/components/ui/button'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { ConversationWithDetails, User } from '@/lib/types'
+import { Hash, Lock, Users, Phone, Video, Info, MoreVertical } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { VoiceCallDialog } from './voice-call-dialog'
+import { VideoCallDialog } from './video-call-dialog'
+import { useSettings } from '@/lib/settings-context'
+import { getTranslation } from '@/lib/i18n'
+import { useIsMobile } from '@/hooks/use-mobile'
+import { cn } from '@/lib/utils'
+import { useSubscription } from '@/hooks/use-subscription'
+import { LimitAlert } from '@/components/subscription/limit-alert'
+import { useRouter } from 'next/navigation'
+
+interface ChatHeaderProps {
+  conversation: ConversationWithDetails
+  currentUser: User
+  onToggleSidebar?: () => void
+}
+
+export function ChatHeader({ conversation, currentUser, onToggleSidebar }: ChatHeaderProps) {
+  const [showVoiceCall, setShowVoiceCall] = useState(false)
+  const [showVideoCall, setShowVideoCall] = useState(false)
+  const [showVideoLimitAlert, setShowVideoLimitAlert] = useState(false)
+  const [incomingCallMessageId, setIncomingCallMessageId] = useState<string | undefined>()
+  const [incomingCallType, setIncomingCallType] = useState<'voice' | 'video' | undefined>()
+  // 当从消息列表点“Answer”时，自动接听，不再弹出第二个接听界面
+  const [autoAnswerVoice, setAutoAnswerVoice] = useState(false)
+  const [autoAnswerVideo, setAutoAnswerVideo] = useState(false)
+  const { language } = useSettings()
+  const { limits } = useSubscription()
+  const router = useRouter()
+  const isMobile = useIsMobile()
+  const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
+  
+  // 监听来自消息列表的接听/拒绝通话事件
+  useEffect(() => {
+    const handleAnswerCall = async (event: CustomEvent) => {
+      const { messageId, conversationId } = event.detail
+      
+      // 验证 conversationId 是否匹配
+      if (conversationId !== conversation.id) {
+        return
+      }
+      
+      // 获取消息详情以确定通话类型
+      try {
+        const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}`)
+        const msgData = await msgResponse.json()
+        if (msgData.success) {
+          const callMessage = msgData.messages.find((m: any) => m.id === messageId)
+          if (callMessage?.metadata?.call_type) {
+            const callType = callMessage.metadata.call_type
+            setIncomingCallMessageId(messageId)
+            
+            if (callType === 'video') {
+              // 检查权限限制
+              if (!limits.canUseVideoCall) {
+                setShowVideoLimitAlert(true)
+                return
+              }
+              setIncomingCallType('video')
+              setAutoAnswerVideo(true) // 从消息列表接听：自动接听视频
+              setShowVideoCall(true)
+            } else {
+              setIncomingCallType('voice')
+              setAutoAnswerVoice(true) // 从消息列表接听：自动接听语音
+              setShowVoiceCall(true)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to get call message:', error)
+      }
+    }
+    
+    const handleRejectCall = async (event: CustomEvent) => {
+      const { messageId } = event.detail
+      
+      // 更新消息状态为拒绝
+      try {
+        const msgResponse = await fetch(`/api/messages?conversationId=${conversation.id}`)
+        const msgData = await msgResponse.json()
+        if (msgData.success) {
+          const callMessage = msgData.messages.find((m: any) => m.id === messageId)
+          if (callMessage) {
+            const updatedMetadata = {
+              ...callMessage.metadata,
+              call_status: 'missed',
+              rejected_at: new Date().toISOString(),
+            }
+            
+            await fetch(`/api/messages/${messageId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                metadata: updatedMetadata,
+              }),
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Failed to reject call:', error)
+      }
+    }
+    
+    window.addEventListener('answerCall', handleAnswerCall as EventListener)
+    window.addEventListener('rejectCall', handleRejectCall as EventListener)
+    
+    return () => {
+      window.removeEventListener('answerCall', handleAnswerCall as EventListener)
+      window.removeEventListener('rejectCall', handleRejectCall as EventListener)
+    }
+  }, [conversation.id, limits.canUseVideoCall])
+
+  const getConversationDisplay = () => {
+    if (conversation.type === 'direct') {
+      // 如果是和自己聊天（两个成员都是自己），就把“对方”也当成 currentUser
+      let otherUser = conversation.members.find(m => m.id !== currentUser.id)
+      if (!otherUser) {
+        otherUser = currentUser
+      }
+      // Prioritize title (job position) over status
+      const subtitle = otherUser?.title 
+        ? otherUser.title 
+        : (otherUser?.status ? t(otherUser.status as 'online' | 'offline' | 'away' | 'busy') : '')
+      // Removed console.log to reduce noise in console
+      // Uncomment for debugging if needed:
+      // console.log('👤 Chat header display:', {
+      //   name: otherUser?.full_name,
+      //   title: otherUser?.title,
+      //   status: otherUser?.status,
+      //   subtitle: subtitle
+      // })
+      return {
+        name: otherUser?.full_name || otherUser?.username || otherUser?.email || 'User',
+        subtitle: subtitle,
+        avatar: otherUser?.avatar_url,
+        status: otherUser?.status,
+        user: otherUser,
+      }
+    }
+    return {
+      name: conversation.name || 'Unnamed',
+      subtitle: `${conversation.members.length} ${t('members')}`,
+      avatar: conversation.avatar_url,
+    }
+  }
+
+  const getConversationIcon = () => {
+    if (conversation.type === 'direct') return null
+    if (conversation.type === 'group') return <Users className="h-5 w-5" />
+    return conversation.is_private ? <Lock className="h-5 w-5" /> : <Hash className="h-5 w-5" />
+  }
+
+  const getStatusColor = (status?: string) => {
+    switch (status) {
+      case 'online': return 'bg-green-500'
+      case 'away': return 'bg-yellow-500'
+      case 'busy': return 'bg-red-500'
+      default: return 'bg-gray-400'
+    }
+  }
+
+  const display = getConversationDisplay()
+
+  const isGroupCall = conversation.type === 'group' || conversation.type === 'channel'
+  // 确保 callRecipient 始终是对话中的另一个用户（不是当前用户）
+  // 对于直接对话，必须是另一个成员；对于群组，使用 display.user 或第一个其他成员
+  let callRecipient: User
+  if (conversation.type === 'direct') {
+    const otherUser = conversation.members.find(m => m.id !== currentUser.id)
+    if (otherUser) {
+      callRecipient = otherUser
+    } else {
+      // 如果找不到另一个用户，使用 display.user（可能是 currentUser，但不应该发生）
+      console.warn('[ChatHeader] No other user found in direct conversation, using display.user')
+      callRecipient = display.user || currentUser
+    }
+  } else {
+    // 对于群组，使用 display.user 或第一个成员
+    callRecipient = display.user || conversation.members.find(m => m.id !== currentUser.id) || currentUser
+  }
+
+  const handleAvatarClick = useCallback(() => {
+    if (conversation.type !== 'direct' || !display.user?.id) return
+    // 无论是对方还是自己，统一跳到 contacts 页面，并高亮这个人
+    router.push(`/contacts?userId=${display.user.id}`)
+  }, [conversation.type, display.user?.id, router])
+
+  return (
+    <>
+      <div className={cn("border-b bg-background", isMobile ? "px-3 py-2" : "px-6 py-3")}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {conversation.type === 'direct' ? (
+              <div className="relative">
+                <button
+                  onClick={handleAvatarClick}
+                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                  title="View contact details"
+                >
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={display.avatar || undefined} />
+                    <AvatarFallback name={display.name}>
+                      {display.name
+                        .split(' ')
+                        .map((n) => n[0])
+                        .join('')
+                        .toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
+                {display.status && (
+                  <span className={cn('absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background', getStatusColor(display.status))} />
+                )}
+              </div>
+            ) : (
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                {getConversationIcon()}
+              </div>
+            )}
+            <div>
+              <h2 className="font-semibold text-base">{display.name}</h2>
+              {!isMobile && <p className="text-sm text-muted-foreground">{display.subtitle}</p>}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button 
+              size="icon" 
+              variant="ghost"
+              onClick={() => setShowVoiceCall(true)}
+              className={cn(isMobile && "h-8 w-8")}
+            >
+              <Phone className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
+            </Button>
+            <Button 
+              size="icon" 
+              variant="ghost"
+              onClick={() => {
+                if (!limits.canUseVideoCall) {
+                  setShowVideoLimitAlert(true)
+                } else {
+                  setShowVideoCall(true)
+                }
+              }}
+              className={cn(isMobile && "h-8 w-8")}
+            >
+              <Video className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
+            </Button>
+            {!isMobile && (
+              <Button size="icon" variant="ghost">
+                <Info className="h-5 w-5" />
+              </Button>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="icon" variant="ghost">
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem>{t('muteNotifications')}</DropdownMenuItem>
+                <DropdownMenuItem>{t('pinConversation')}</DropdownMenuItem>
+                <DropdownMenuItem>{t('viewDetails')}</DropdownMenuItem>
+                <DropdownMenuItem className="text-destructive">
+                  {t('leaveConversation')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </div>
+
+      <VoiceCallDialog
+        open={showVoiceCall}
+        onOpenChange={(open) => {
+          setShowVoiceCall(open)
+          if (!open) {
+            setIncomingCallMessageId(undefined)
+            setIncomingCallType(undefined)
+            setAutoAnswerVoice(false)
+          }
+        }}
+        recipient={callRecipient}
+        currentUser={currentUser}
+        conversationId={conversation.id}
+        callMessageId={incomingCallType === 'voice' ? incomingCallMessageId : undefined}
+        isIncoming={!!incomingCallMessageId && incomingCallType === 'voice'}
+        autoAnswer={autoAnswerVoice}
+        isGroup={isGroupCall}
+        groupName={conversation.name}
+        groupMembers={conversation.members}
+      />
+
+      {showVideoLimitAlert && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4">
+          <LimitAlert
+            type="video"
+            limits={limits}
+            onDismiss={() => setShowVideoLimitAlert(false)}
+            onUpgrade={() => {
+              setShowVideoLimitAlert(false)
+              router.push('/payment')
+            }}
+          />
+        </div>
+      )}
+      
+      <VideoCallDialog
+        open={showVideoCall}
+        onOpenChange={(open) => {
+          setShowVideoCall(open)
+          if (!open) {
+            setIncomingCallMessageId(undefined)
+            setIncomingCallType(undefined)
+            setAutoAnswerVideo(false)
+          }
+        }}
+        recipient={callRecipient}
+        currentUser={currentUser}
+        conversationId={conversation.id}
+        callMessageId={incomingCallType === 'video' ? incomingCallMessageId : undefined}
+        isIncoming={!!incomingCallMessageId && incomingCallType === 'video'}
+        autoAnswer={autoAnswerVideo}
+        isGroup={isGroupCall}
+        groupName={conversation.name}
+        groupMembers={conversation.members}
+      />
+    </>
+  )
+}
+
