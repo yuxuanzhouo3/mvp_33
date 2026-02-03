@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { DEFAULT_LANGUAGE } from '@/config'
 
 type Language = 'en' | 'zh'
 type Theme = 'light' | 'dark' | 'monokai' | 'solarized-dark' | 'light-purple' | 'light-yellow'
@@ -16,7 +17,7 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined)
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<Language>('en')
+  const [language, setLanguageState] = useState<Language>(DEFAULT_LANGUAGE as Language)
   const [theme, setThemeState] = useState<Theme>('light')
 
   // Apply theme based on user choice

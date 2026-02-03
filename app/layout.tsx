@@ -4,6 +4,7 @@ import "./globals.css";
 import { SettingsProvider } from '@/lib/settings-context';
 import { RegionProvider } from '@/lib/region-context';
 import { ToastProvider, ToastViewport } from '@/components/ui/toast';
+import { DEFAULT_LANGUAGE } from '@/config';
 
 const inter = Inter({
   subsets: ["latin"],
@@ -23,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang={DEFAULT_LANGUAGE}>
       <body
         className={`${inter.variable} font-sans antialiased`}
       >
