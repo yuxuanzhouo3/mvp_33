@@ -40,3 +40,6 @@ pnpm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Git worktrees
+.worktrees/
+
