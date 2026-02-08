@@ -42,7 +42,8 @@ export function CreateGroupDialog({
   }
 
   const handleCreate = async () => {
-    if (selectedUsers.length < 2) return
+    // TEMP: Allow creating group with 0 or more members (creator will be added automatically)
+    // if (selectedUsers.length < 2) return
 
     setIsCreating(true)
     try {
@@ -129,7 +130,7 @@ export function CreateGroupDialog({
           </Button>
           <Button
             onClick={handleCreate}
-            disabled={selectedUsers.length < 2 || isCreating}
+            disabled={isCreating}
           >
             {isCreating ? '创建中...' : '创建'}
           </Button>

@@ -13,12 +13,13 @@ export async function POST(request: NextRequest) {
 
     const { userIds, workspaceId } = await request.json()
 
-    if (!userIds || userIds.length < 2) {
-      return NextResponse.json(
-        { error: 'At least 2 members required' },
-        { status: 400 }
-      )
-    }
+    // TEMP: Allow creating group with 0 or more members (creator will be added automatically)
+    // if (!userIds || userIds.length < 2) {
+    //   return NextResponse.json(
+    //     { error: 'At least 2 members required' },
+    //     { status: 400 }
+    //   )
+    // }
 
     const result = await createGroup(user.id, userIds, workspaceId)
 
