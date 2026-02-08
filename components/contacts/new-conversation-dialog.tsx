@@ -82,7 +82,7 @@ export function NewConversationDialog({
 
   const canCreate =
     (tab === 'direct' && selectedUsers.length === 1) ||
-    (tab === 'group' && selectedUsers.length >= 2 && groupName.trim())
+    (tab === 'group' && selectedUsers.length >= 0 && groupName.trim())
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
