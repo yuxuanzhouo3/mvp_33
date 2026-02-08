@@ -19,6 +19,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
+import { CreateGroupDialog } from './create-group-dialog'
 
 interface ConversationItemProps {
   conversation: ConversationWithDetails
@@ -233,11 +234,13 @@ interface SidebarProps {
   onUnpinConversation?: (id: string) => void
   onHideConversation?: (id: string) => void
   onDeleteConversation?: (id: string) => void
+  contacts?: User[]
+  workspaceId?: string
 }
 
-export function Sidebar({ 
-  conversations, 
-  currentConversationId, 
+export function Sidebar({
+  conversations,
+  currentConversationId,
   currentUser,
   isLoadingConversations = false,
   isRefreshingConversations = false,
@@ -251,9 +254,12 @@ export function Sidebar({
   onPinConversation,
   onUnpinConversation,
   onHideConversation,
-  onDeleteConversation
+  onDeleteConversation,
+  contacts = [],
+  workspaceId = ''
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('')
+  const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false)
   const router = useRouter()
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
@@ -511,10 +517,10 @@ export function Sidebar({
       <div className="border-b p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">{t('messages')}</h2>
-          <Button 
-            size="icon" 
+          <Button
+            size="icon"
             variant="ghost"
-            onClick={onNewConversation}
+            onClick={() => setShowCreateGroupDialog(true)}
           >
             <Plus className="h-5 w-5" />
           </Button>
@@ -625,6 +631,13 @@ export function Sidebar({
         )}
       </div>
       </div>
+
+      <CreateGroupDialog
+        open={showCreateGroupDialog}
+        onOpenChange={setShowCreateGroupDialog}
+        contacts={contacts}
+        workspaceId={workspaceId}
+      />
     </div>
   )
 }
