@@ -100,13 +100,71 @@ URL: https://kradpewmiizgughuxveg.supabase.co
 地区: AWS ap-south-1 (印度)
 核心数据表（12 张表）：
 
+users - 用户表
+
+字段：id (UUID), email, username, full_name, avatar_url, phone, department, title, status, region, subscription_type, subscription_expires_at
+状态：online, offline, away, busy
+地区：cn (中国), global (国际)
+
+workspaces - 工作空间表
+字段：id, name, logo_url, domain, owner_id, settings (JSONB)
+支持多租户架构
+workspace_members - 工作空间成员表
+
+字段：id, workspace_id, user_id, role
+角色：owner, admin, member, guest
+conversations - 会话表
+
+字段：id, workspace_id, type, name, description, avatar_url, created_by, is_private, last_message_at
+类型：direct (私聊), group (群聊), channel (频道)
+conversation_members - 会话成员表
+字段：id, conversation_id, user_id, role, last_read_at, notification_setting
+通知设置：all, mentions, none
+messages - 消息表
+字段：id, conversation_id, sender_id, content, type, metadata (JSONB), reply_to, reactions (JSONB), is_edited, is_deleted, is_recalled
+消息类型：text, image, file, video, audio, code, system
+支持消息回复、表情反应、编辑、删除、撤回
+contacts - 联系人表
+字段：id, user_id, contact_user_id, nickname, tags, is_favorite, is_blocked
+contact_requests - 好友请求表
+字段：id, from_user_id, to_user_id, status, message
+hidden_messages - 隐藏消息表
+
+字段：id, user_id, message_id
+用于用户级别的消息隐藏
+orders - 订单表
+
+字段：id, user_id, amount, currency, status, payment_method, subscription_type
+departments - 部门表
+
+字段：id, name, parent_id, workspace_id
+user_profiles - 用户扩展信息表
+
+字段：id, user_id, preferences (JSONB)
 
 CloudBase 数据库（NoSQL - 国内版）
 
 环境信息：
-环境 ID: 
+环境 ID: cloud1-3giwb8x723267ff3
 地区：中国
+数据集合（3 个集合）：
 
+ai_bot_chat_history_5hobd2b
+
+文档数：56
+大小：503KB
+用途：AI 机器人聊天历史记录
+orbitchat_access_logs
+
+文档数：36
+大小：17KB
+用途：访问日志记录
+orbitchat_user_feedback
+
+文档数：5
+大小：2.4KB
+用途：用户反馈收集
+数据库路由策略：
 
 根据环境变量 NEXT_PUBLIC_DEFAULT_LANGUAGE 自动选择数据库
 zh → CloudBase (国内版)
