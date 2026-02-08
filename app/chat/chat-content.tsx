@@ -7754,6 +7754,9 @@ function ChatPageContent() {
 
             onDeleteConversation={handleDeleteConversation}
 
+            contacts={availableUsers}
+            workspaceId={currentWorkspace?.id || ''}
+
           />
 
         </div>
