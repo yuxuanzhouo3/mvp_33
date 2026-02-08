@@ -1,12 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { mockWorkspaces } from '@/lib/mock-data'
 import { mockAuth } from '@/lib/mock-auth'
 import { Workspace } from '@/lib/types'
-import { Building2, ChevronRight } from 'lucide-react'
+import { Building2, ChevronRight, Loader2 } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
 
@@ -15,9 +14,29 @@ interface WorkspaceSelectorProps {
 }
 
 export function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) {
-  const [workspaces] = useState(mockWorkspaces)
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
+
+  useEffect(() => {
+    async function loadWorkspaces() {
+      try {
+        const response = await fetch('/api/workspaces')
+        const data = await response.json()
+
+        if (data.success && data.workspaces) {
+          setWorkspaces(data.workspaces)
+        }
+      } catch (error) {
+        console.error('Failed to load workspaces:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadWorkspaces()
+  }, [])
 
   const handleSelect = (workspace: Workspace) => {
     mockAuth.setCurrentWorkspace(workspace)
@@ -33,37 +52,48 @@ export function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3">
-          {workspaces.map((workspace) => (
-            <Button
-              key={workspace.id}
-              variant="outline"
-              className="w-full justify-between h-auto p-4"
-              onClick={() => handleSelect(workspace)}
-            >
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                  {workspace.logo_url ? (
-                    <img 
-                      src={workspace.logo_url || "/placeholder.svg"} 
-                      alt={workspace.name}
-                      className="h-8 w-8 rounded"
-                    />
-                  ) : (
-                    <Building2 className="h-6 w-6 text-primary" />
-                  )}
-                </div>
-                <div className="text-left">
-                  <div className="font-semibold">{workspace.name}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {workspace.domain}.chat
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : workspaces.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <p>暂无工作区</p>
+            <p className="text-sm mt-2">请联系管理员创建工作区</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {workspaces.map((workspace) => (
+              <Button
+                key={workspace.id}
+                variant="outline"
+                className="w-full justify-between h-auto p-4"
+                onClick={() => handleSelect(workspace)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                    {workspace.logo_url ? (
+                      <img
+                        src={workspace.logo_url || "/placeholder.svg"}
+                        alt={workspace.name}
+                        className="h-8 w-8 rounded"
+                      />
+                    ) : (
+                      <Building2 className="h-6 w-6 text-primary" />
+                    )}
+                  </div>
+                  <div className="text-left">
+                    <div className="font-semibold">{workspace.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {workspace.domain}.chat
+                    </div>
                   </div>
                 </div>
-              </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
-            </Button>
-          ))}
-        </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </Button>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )
