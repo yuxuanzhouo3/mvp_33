@@ -134,7 +134,7 @@ export async function getUserConversations(
       .select(`
         conversation_id,
         user_id,
-        users (
+        users!conversation_members_user_id_fkey (
           id,
           email,
           full_name,

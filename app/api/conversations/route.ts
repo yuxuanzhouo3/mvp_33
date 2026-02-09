@@ -27,6 +27,17 @@ export async function GET(request: NextRequest) {
     const dbClient = await getDatabaseClientForUser(request)
     const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
 
+    // DEBUG: Log database routing information
+    console.log('🔍 [API /api/conversations GET] Database routing:', {
+      dbClientType: dbClient.type,
+      userRegion: userRegion,
+      conversationId: conversationId,
+      workspaceId: workspaceId,
+      FORCE_GLOBAL_DATABASE: process.env.FORCE_GLOBAL_DATABASE,
+      NEXT_PUBLIC_FORCE_GLOBAL: process.env.NEXT_PUBLIC_FORCE_GLOBAL,
+      NEXT_PUBLIC_DEFAULT_LANGUAGE: process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE
+    })
+
     // If conversationId is provided, get single conversation
     // OPTIMIZED: Query directly instead of fetching all conversations first
       if (conversationId && workspaceId && dbClient.type === 'supabase' && userRegion === 'global') {
@@ -92,7 +103,7 @@ export async function GET(request: NextRequest) {
         .select(`
           user_id,
           role,
-          users (
+          users!conversation_members_user_id_fkey (
             id,
             email,
             full_name,
@@ -573,7 +584,7 @@ export async function POST(request: NextRequest) {
             const { data: convWithMembers, error: membersError } = await supabase
               .from('conversation_members')
               .select(`
-                users (
+                users!conversation_members_user_id_fkey (
                   id,
                   email,
                   full_name,
@@ -742,7 +753,7 @@ export async function POST(request: NextRequest) {
         .from('conversation_members')
         .select(`
           user_id,
-          users (
+          users!conversation_members_user_id_fkey (
             id,
             email,
             full_name,
@@ -810,7 +821,7 @@ export async function POST(request: NextRequest) {
       .from('conversation_members')
       .select(`
         user_id,
-        users (
+        users!conversation_members_user_id_fkey (
           id,
           email,
           full_name,
