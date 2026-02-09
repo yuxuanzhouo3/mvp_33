@@ -60,19 +60,17 @@ export async function createGroup(
 
   console.log('[createGroup] 群聊创建成功', { conversationId: conversation.id })
 
-  // 批量插入成员
+  // 批量插入成员 - 使用 SECURITY DEFINER 函数绕过 RLS
   const members = [
-    { conversation_id: conversation.id, user_id: creatorId, role: 'owner', join_status: 'joined' },
-    ...userIds.map(uid => ({
-      conversation_id: conversation.id,
-      user_id: uid,
-      role: 'member',
-      join_status: 'joined'
-    }))
+    { user_id: creatorId, role: 'owner' },
+    ...userIds.map(uid => ({ user_id: uid, role: 'member' }))
   ]
 
-  console.log('[createGroup] 插入成员', { membersCount: members.length })
-  const { error: membersError } = await supabase.from('conversation_members').insert(members)
+  console.log('[createGroup] 调用 insert_conversation_members 函数', { membersCount: members.length })
+  const { error: membersError } = await supabase.rpc('insert_conversation_members', {
+    p_conversation_id: conversation.id,
+    p_members: members
+  })
 
   if (membersError) {
     console.error('[createGroup] 插入成员失败', {
