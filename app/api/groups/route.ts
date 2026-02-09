@@ -31,24 +31,37 @@ export async function POST(request: NextRequest) {
     //   )
     // }
 
-    console.log('[API /api/groups POST] 调用 createGroup 函数')
+    console.error('[API /api/groups POST] 调用 createGroup 函数', {
+      params: JSON.stringify({ userId: user.id, userIds, workspaceId })
+    })
     const result = await createGroup(user.id, userIds, workspaceId)
 
+    console.error('[API /api/groups POST] createGroup 返回', {
+      hasResult: !!result,
+      result: JSON.stringify(result),
+      resultType: typeof result
+    })
+
     if (!result) {
-      console.error('[API /api/groups POST] createGroup 返回 null')
+      console.error('[API /api/groups POST] createGroup 返回 null - 群聊创建失败')
       return NextResponse.json(
         { error: 'Failed to create group' },
         { status: 500 }
       )
     }
 
-    console.log('[API /api/groups POST] 群聊创建成功', { groupId: result.groupId })
+    console.error('[API /api/groups POST] 群聊创建成功', { groupId: result.groupId })
     return NextResponse.json({
       success: true,
       groupId: result.groupId
     })
   } catch (error) {
-    console.error('[API /api/groups POST] 异常错误:', error)
+    console.error('[API /api/groups POST] 异常错误:', {
+      error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+      errorType: typeof error
+    })
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

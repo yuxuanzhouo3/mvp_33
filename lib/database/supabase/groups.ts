@@ -30,18 +30,27 @@ export async function createGroup(
   console.log('[createGroup] 群名称', { groupName, usersCount: users?.length })
 
   // 创建群聊
-  console.log('[createGroup] 插入 conversations 表')
+  const insertData = {
+    workspace_id: workspaceId,
+    type: 'group',
+    name: groupName,
+    created_by: creatorId,
+    is_private: false
+  }
+  console.error('[createGroup] 即将插入 conversations 表', { insertData: JSON.stringify(insertData) })
+
   const { data: conversation, error } = await supabase
     .from('conversations')
-    .insert({
-      workspace_id: workspaceId,
-      type: 'group',
-      name: groupName,
-      created_by: creatorId,
-      is_private: false
-    })
+    .insert(insertData)
     .select('id')
     .single()
+
+  console.error('[createGroup] conversations 插入响应', {
+    hasData: !!conversation,
+    data: JSON.stringify(conversation),
+    hasError: !!error,
+    error: error ? JSON.stringify(error) : null
+  })
 
   if (error) {
     console.error('[createGroup] 创建群聊失败 - conversations 插入错误', {
@@ -58,7 +67,11 @@ export async function createGroup(
     return null
   }
 
-  console.log('[createGroup] 群聊创建成功', { conversationId: conversation.id })
+  console.error('[createGroup] 群聊创建成功', {
+    conversationId: conversation.id,
+    conversationIdType: typeof conversation.id,
+    conversationKeys: Object.keys(conversation)
+  })
 
   // 批量插入成员 - 使用 SECURITY DEFINER 函数绕过 RLS
   const members = [
@@ -66,10 +79,25 @@ export async function createGroup(
     ...userIds.map(uid => ({ user_id: uid, role: 'member' }))
   ]
 
-  console.log('[createGroup] 调用 insert_conversation_members 函数', { membersCount: members.length })
-  const { error: membersError } = await supabase.rpc('insert_conversation_members', {
+  console.error('[createGroup] 调用 insert_conversation_members 函数', {
+    membersCount: members.length,
+    members: JSON.stringify(members),
+    conversationId: conversation.id
+  })
+
+  const rpcParams = {
     p_conversation_id: conversation.id,
     p_members: members
+  }
+  console.error('[createGroup] RPC 参数', { rpcParams: JSON.stringify(rpcParams) })
+
+  const { data: rpcData, error: membersError } = await supabase.rpc('insert_conversation_members', rpcParams)
+
+  console.error('[createGroup] RPC 响应', {
+    hasData: !!rpcData,
+    data: JSON.stringify(rpcData),
+    hasError: !!membersError,
+    error: membersError ? JSON.stringify(membersError) : null
   })
 
   if (membersError) {
@@ -77,12 +105,13 @@ export async function createGroup(
       error: membersError,
       errorMessage: membersError.message,
       errorDetails: membersError.details,
-      errorHint: membersError.hint
+      errorHint: membersError.hint,
+      errorCode: membersError.code
     })
     return null
   }
 
-  console.log('[createGroup] 成员插入成功')
+  console.error('[createGroup] 成员插入成功')
   return { groupId: conversation.id }
 }
 
