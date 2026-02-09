@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -29,9 +29,26 @@ export function CreateGroupDialog({
   const [searchQuery, setSearchQuery] = useState('')
   const [isCreating, setIsCreating] = useState(false)
 
-  const filteredContacts = contacts.filter(c =>
-    c.full_name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredContacts = contacts.filter(c => {
+    if (!searchQuery) return true
+    const query = searchQuery.toLowerCase()
+    return (
+      c.full_name?.toLowerCase().includes(query) ||
+      c.username?.toLowerCase().includes(query) ||
+      c.email?.toLowerCase().includes(query)
+    )
+  })
+
+  // Debug logging for search
+  useEffect(() => {
+    if (searchQuery) {
+      console.log('[CreateGroupDialog] Search results:', {
+        query: searchQuery,
+        totalContacts: contacts.length,
+        filteredCount: filteredContacts.length
+      })
+    }
+  }, [searchQuery, contacts, filteredContacts.length])
 
   const toggleUser = (user: User) => {
     setSelectedUsers(prev =>
