@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { User } from '@/lib/types'
-import { Search, ArrowRight } from 'lucide-react'
+import { Search, ArrowRight, Loader2 } from 'lucide-react'
 
 interface CreateGroupDialogProps {
   open: boolean
@@ -28,23 +28,43 @@ export function CreateGroupDialog({
   const [selectedUsers, setSelectedUsers] = useState<User[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+  const [availableContacts, setAvailableContacts] = useState<User[]>([])
+  const [isLoadingContacts, setIsLoadingContacts] = useState(false)
 
-  // Debug: Log contacts when dialog opens
+  // Load contacts from API when dialog opens
   useEffect(() => {
     if (open) {
-      console.log('[CreateGroupDialog] Dialog opened with contacts:', {
-        count: contacts.length,
-        contacts: contacts.map(c => ({
-          id: c.id,
-          username: c.username,
-          email: c.email,
-          full_name: c.full_name
-        }))
-      })
+      loadContacts()
     }
-  }, [open, contacts])
+  }, [open])
 
-  const filteredContacts = contacts.filter(c => {
+  const loadContacts = async () => {
+    setIsLoadingContacts(true)
+    try {
+      const response = await fetch('/api/contacts')
+      const data = await response.json()
+
+      if (data.success && data.contacts) {
+        const contactUsers = (data.contacts || []).map((c: any) => c.user).filter(Boolean)
+        setAvailableContacts(contactUsers)
+        console.log('[CreateGroupDialog] Loaded contacts:', {
+          count: contactUsers.length,
+          contacts: contactUsers.map((c: User) => ({
+            id: c.id,
+            username: c.username,
+            email: c.email,
+            full_name: c.full_name
+          }))
+        })
+      }
+    } catch (error) {
+      console.error('[CreateGroupDialog] Failed to load contacts:', error)
+    } finally {
+      setIsLoadingContacts(false)
+    }
+  }
+
+  const filteredContacts = availableContacts.filter(c => {
     if (!searchQuery) return true
     const query = searchQuery.toLowerCase()
     return (
@@ -53,17 +73,6 @@ export function CreateGroupDialog({
       c.email?.toLowerCase().includes(query)
     )
   })
-
-  // Debug logging for search
-  useEffect(() => {
-    if (searchQuery) {
-      console.log('[CreateGroupDialog] Search results:', {
-        query: searchQuery,
-        totalContacts: contacts.length,
-        filteredCount: filteredContacts.length
-      })
-    }
-  }, [searchQuery, contacts, filteredContacts.length])
 
   const toggleUser = (user: User) => {
     setSelectedUsers(prev =>
@@ -121,23 +130,34 @@ export function CreateGroupDialog({
 
         <ScrollArea className="flex-1">
           <div className="space-y-2">
-            {filteredContacts.map(contact => (
-              <div
-                key={contact.id}
-                className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent cursor-pointer"
-                onClick={() => toggleUser(contact)}
-              >
-                <Checkbox
-                  checked={selectedUsers.some(u => u.id === contact.id)}
-                  onCheckedChange={() => toggleUser(contact)}
-                />
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src={contact.avatar_url} />
-                  <AvatarFallback>{contact.full_name[0]}</AvatarFallback>
-                </Avatar>
-                <span>{contact.full_name}</span>
+            {isLoadingContacts ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                加载联系人中...
               </div>
-            ))}
+            ) : filteredContacts.length === 0 ? (
+              <div className="text-center py-8 text-sm text-muted-foreground">
+                {searchQuery ? '没有找到匹配的联系人' : '暂无联系人'}
+              </div>
+            ) : (
+              filteredContacts.map(contact => (
+                <div
+                  key={contact.id}
+                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent cursor-pointer"
+                  onClick={() => toggleUser(contact)}
+                >
+                  <Checkbox
+                    checked={selectedUsers.some(u => u.id === contact.id)}
+                    onCheckedChange={() => toggleUser(contact)}
+                  />
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={contact.avatar_url} />
+                    <AvatarFallback>{contact.full_name[0]}</AvatarFallback>
+                  </Avatar>
+                  <span>{contact.full_name}</span>
+                </div>
+              ))
+            )}
           </div>
         </ScrollArea>
 
