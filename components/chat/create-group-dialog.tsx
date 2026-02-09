@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { User } from '@/lib/types'
-import { Search } from 'lucide-react'
+import { Search, ArrowRight } from 'lucide-react'
 
 interface CreateGroupDialogProps {
   open: boolean
@@ -28,6 +28,21 @@ export function CreateGroupDialog({
   const [selectedUsers, setSelectedUsers] = useState<User[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+
+  // Debug: Log contacts when dialog opens
+  useEffect(() => {
+    if (open) {
+      console.log('[CreateGroupDialog] Dialog opened with contacts:', {
+        count: contacts.length,
+        contacts: contacts.map(c => ({
+          id: c.id,
+          username: c.username,
+          email: c.email,
+          full_name: c.full_name
+        }))
+      })
+    }
+  }, [open, contacts])
 
   const filteredContacts = contacts.filter(c => {
     if (!searchQuery) return true
@@ -99,8 +114,9 @@ export function CreateGroupDialog({
             placeholder="搜索联系人"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className="pl-9 pr-9"
           />
+          <ArrowRight className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         </div>
 
         <ScrollArea className="flex-1">
