@@ -6,17 +6,31 @@ export async function createGroup(
   userIds: string[],
   workspaceId: string
 ): Promise<{ groupId: string } | null> {
+  console.log('[createGroup] 开始创建群聊', {
+    creatorId,
+    userIds,
+    userIdsCount: userIds.length,
+    workspaceId
+  })
+
   const supabase = await createClient()
 
   // 生成群名称（取前3个成员名称）
-  const { data: users } = await supabase
+  console.log('[createGroup] 查询用户名称')
+  const { data: users, error: usersError } = await supabase
     .from('users')
     .select('full_name')
     .in('id', userIds.slice(0, 3))
 
+  if (usersError) {
+    console.error('[createGroup] 查询用户名称失败', usersError)
+  }
+
   const groupName = users?.map(u => u.full_name).join('、') || 'New Group'
+  console.log('[createGroup] 群名称', { groupName, usersCount: users?.length })
 
   // 创建群聊
+  console.log('[createGroup] 插入 conversations 表')
   const { data: conversation, error } = await supabase
     .from('conversations')
     .insert({
@@ -29,7 +43,22 @@ export async function createGroup(
     .select('id')
     .single()
 
-  if (error || !conversation) return null
+  if (error) {
+    console.error('[createGroup] 创建群聊失败 - conversations 插入错误', {
+      error,
+      errorMessage: error.message,
+      errorDetails: error.details,
+      errorHint: error.hint
+    })
+    return null
+  }
+
+  if (!conversation) {
+    console.error('[createGroup] 创建群聊失败 - conversation 为空')
+    return null
+  }
+
+  console.log('[createGroup] 群聊创建成功', { conversationId: conversation.id })
 
   // 批量插入成员
   const members = [
@@ -42,8 +71,20 @@ export async function createGroup(
     }))
   ]
 
-  await supabase.from('conversation_members').insert(members)
+  console.log('[createGroup] 插入成员', { membersCount: members.length })
+  const { error: membersError } = await supabase.from('conversation_members').insert(members)
 
+  if (membersError) {
+    console.error('[createGroup] 插入成员失败', {
+      error: membersError,
+      errorMessage: membersError.message,
+      errorDetails: membersError.details,
+      errorHint: membersError.hint
+    })
+    return null
+  }
+
+  console.log('[createGroup] 成员插入成功')
   return { groupId: conversation.id }
 }
 

@@ -86,6 +86,12 @@ export function CreateGroupDialog({
     // TEMP: Allow creating group with 0 or more members (creator will be added automatically)
     // if (selectedUsers.length < 2) return
 
+    console.log('[CreateGroupDialog] 开始创建群聊', {
+      selectedUserIds: selectedUsers.map(u => u.id),
+      selectedUserCount: selectedUsers.length,
+      workspaceId
+    })
+
     setIsCreating(true)
     try {
       const response = await fetch('/api/groups', {
@@ -97,16 +103,29 @@ export function CreateGroupDialog({
         })
       })
 
+      console.log('[CreateGroupDialog] API 响应状态', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      })
+
       const data = await response.json()
+      console.log('[CreateGroupDialog] API 响应数据', data)
 
       if (data.success) {
+        console.log('[CreateGroupDialog] 群聊创建成功', { groupId: data.groupId })
         onOpenChange(false)
         router.push(`/chat?conversation=${data.groupId}`)
+      } else {
+        console.error('[CreateGroupDialog] 创建失败 - API 返回 success=false', data)
+        alert(`创建群聊失败: ${data.error || '未知错误'}`)
       }
     } catch (error) {
-      console.error('Failed to create group:', error)
+      console.error('[CreateGroupDialog] 创建失败 - 异常', error)
+      alert(`创建群聊失败: ${error instanceof Error ? error.message : '网络错误'}`)
     } finally {
       setIsCreating(false)
+      console.log('[CreateGroupDialog] 创建流程结束')
     }
   }
 
