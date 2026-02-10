@@ -26,9 +26,10 @@ interface ChatHeaderProps {
   conversation: ConversationWithDetails
   currentUser: User
   onToggleSidebar?: () => void
+  onToggleGroupInfo?: () => void
 }
 
-export function ChatHeader({ conversation, currentUser, onToggleSidebar }: ChatHeaderProps) {
+export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggleGroupInfo }: ChatHeaderProps) {
   const [showVoiceCall, setShowVoiceCall] = useState(false)
   const [showVideoCall, setShowVideoCall] = useState(false)
   const [showVideoLimitAlert, setShowVideoLimitAlert] = useState(false)
@@ -188,8 +189,25 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar }: ChatH
       callRecipient = display.user || currentUser
     }
   } else {
-    // 对于群组，使用 display.user 或第一个成员
-    callRecipient = display.user || conversation.members.find(m => m.id !== currentUser.id) || currentUser
+    // 对于群组，使用第一个不是当前用户的成员
+    // 如果找不到，创建一个占位符用户（避免使用 currentUser）
+    const otherMember = conversation.members.find(m => m.id !== currentUser.id)
+    if (otherMember) {
+      callRecipient = otherMember
+    } else {
+      // 创建占位符用户，避免 recipient === currentUser 的错误
+      callRecipient = {
+        id: 'placeholder-user',
+        email: 'placeholder@example.com',
+        full_name: 'Group Member',
+        username: 'group_member',
+        avatar_url: null,
+        status: 'offline',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+      console.warn('[ChatHeader] No other members found in group, using placeholder recipient')
+    }
   }
 
   const handleAvatarClick = useCallback(() => {
@@ -259,8 +277,12 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar }: ChatH
             >
               <Video className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
             </Button>
-            {!isMobile && (
-              <Button size="icon" variant="ghost">
+            {!isMobile && conversation.type === 'group' && (
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={onToggleGroupInfo}
+              >
                 <Info className="h-5 w-5" />
               </Button>
             )}

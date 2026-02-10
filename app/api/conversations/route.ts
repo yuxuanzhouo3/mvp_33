@@ -123,8 +123,11 @@ export async function GET(request: NextRequest) {
         )
       }
       
-      // Map members data
-      const members = convWithMembers?.map((m: any) => m.users).filter(Boolean) || []
+      // Map members data with role information
+      const members = convWithMembers?.map((m: any) => ({
+        ...m.users,
+        role: m.role
+      })).filter(Boolean) || []
       
       // OPTIMIZED: Skip last message to speed up response
       // Frontend can load it if needed
@@ -609,7 +612,10 @@ export async function POST(request: NextRequest) {
               .limit(1)
               .maybeSingle()
             
-            const members = convWithMembers?.map((m: any) => m.users).filter(Boolean) || []
+            const members = convWithMembers?.map((m: any) => ({
+              ...m.users,
+              role: m.role
+            })).filter(Boolean) || []
             
             // Get sender info for last message
             let lastMessageWithSender = undefined

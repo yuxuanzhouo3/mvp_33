@@ -134,6 +134,7 @@ export async function getUserConversations(
       .select(`
         conversation_id,
         user_id,
+        role,
         users!conversation_members_user_id_fkey (
           id,
           email,
@@ -196,7 +197,10 @@ export async function getUserConversations(
     
     const members = membersData
       ?.filter((m: any) => m.conversation_id === conv.id)
-      .map((m: any) => m.users)
+      .map((m: any) => ({
+        ...m.users,
+        role: m.role
+      }))
       .filter(Boolean) || []
     
     // Ensure we have at least the current user as a member

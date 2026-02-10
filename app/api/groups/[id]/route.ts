@@ -4,7 +4,7 @@ import { getGroupInfo, updateGroupSettings, deleteGroup } from '@/lib/database/s
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient()
@@ -14,7 +14,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const group = await getGroupInfo(params.id)
+    const { id } = await params
+    const group = await getGroupInfo(id)
 
     if (!group) {
       return NextResponse.json({ error: 'Group not found' }, { status: 404 })
@@ -28,7 +29,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient()
@@ -38,22 +39,31 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { id } = await params
     const updates = await request.json()
-    const success = await updateGroupSettings(params.id, updates)
+    console.log('[PUT /api/groups/[id]] 更新群设置', { groupId: id, updates, userId: user.id })
+
+    const success = await updateGroupSettings(id, updates)
 
     if (!success) {
-      return NextResponse.json({ error: 'Failed to update' }, { status: 500 })
+      console.error('[PUT /api/groups/[id]] 更新失败')
+      return NextResponse.json({ error: 'Failed to update group settings' }, { status: 500 })
     }
 
+    console.log('[PUT /api/groups/[id]] 更新成功')
     return NextResponse.json({ success: true })
   } catch (error) {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('[PUT /api/groups/[id]] 错误:', error)
+    return NextResponse.json({
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : String(error)
+    }, { status: 500 })
   }
 }
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient()
@@ -63,7 +73,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const success = await deleteGroup(params.id)
+    const { id } = await params
+    const success = await deleteGroup(id)
 
     if (!success) {
       return NextResponse.json({ error: 'Failed to delete' }, { status: 500 })

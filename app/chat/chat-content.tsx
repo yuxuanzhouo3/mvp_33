@@ -14,6 +14,8 @@ import { ChatHeader } from '@/components/chat/chat-header'
 
 import { MessageList } from '@/components/chat/message-list'
 
+import { GroupInfoPanel } from '@/components/chat/group-info-panel'
+
 import { MessageInput } from '@/components/chat/message-input'
 
 import { NewConversationDialog } from '@/components/contacts/new-conversation-dialog'
@@ -66,6 +68,7 @@ function ChatPageContent() {
 
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true) // Mobile sidebar state
+  const [groupInfoOpen, setGroupInfoOpen] = useState(false) // Group info panel state
   const isMobile = useIsMobile()
 
   const [showLimitAlert, setShowLimitAlert] = useState<string | null>(null)
@@ -7761,16 +7764,19 @@ function ChatPageContent() {
 
         </div>
 
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex">
+
+          <div className="flex-1 flex flex-col">
 
           {showChatInterface && displayConversation ? (
 
             <>
 
-              <ChatHeader 
-                conversation={displayConversation} 
+              <ChatHeader
+                conversation={displayConversation}
                 currentUser={currentUser}
                 onToggleSidebar={isMobile ? () => setSidebarOpen(!sidebarOpen) : undefined}
+                onToggleGroupInfo={() => setGroupInfoOpen(!groupInfoOpen)}
               />
 
               <MessageList 
@@ -7857,6 +7863,19 @@ function ChatPageContent() {
 
             </div>
 
+          )}
+
+          </div>
+
+          {/* Group Info Panel */}
+          {displayConversation && displayConversation.type === 'group' && (
+            <GroupInfoPanel
+              conversation={displayConversation}
+              currentUser={currentUser}
+              isOpen={groupInfoOpen}
+              onClose={() => setGroupInfoOpen(false)}
+              onUpdate={loadConversations}
+            />
           )}
 
         </div>

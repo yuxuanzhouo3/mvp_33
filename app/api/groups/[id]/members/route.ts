@@ -4,7 +4,7 @@ import { getGroupMembers, addGroupMembers } from '@/lib/database/supabase/group-
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient()
@@ -14,7 +14,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const members = await getGroupMembers(params.id)
+    const { id } = await params
+    const members = await getGroupMembers(id)
 
     return NextResponse.json({ success: true, members })
   } catch (error) {
@@ -24,7 +25,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient()
@@ -34,9 +35,10 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { id } = await params
     const { userIds } = await request.json()
 
-    const success = await addGroupMembers(params.id, userIds, user.id)
+    const success = await addGroupMembers(id, userIds, user.id)
 
     if (!success) {
       return NextResponse.json({ error: 'Failed to add members' }, { status: 500 })

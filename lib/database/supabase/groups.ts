@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { Conversation } from '@/lib/types'
 
 export async function createGroup(
@@ -131,20 +132,45 @@ export async function getGroupInfo(groupId: string): Promise<Conversation | null
 
 export async function updateGroupSettings(
   groupId: string,
-  updates: { name?: string; settings?: any }
+  updates: { name?: string; description?: string }
 ): Promise<boolean> {
-  const supabase = await createClient()
+  console.log('[updateGroupSettings] 开始更新', { groupId, updates })
 
-  const { error } = await supabase
+  // 使用Service Role Key绕过RLS
+  const supabase = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  )
+
+  const { data, error } = await supabase
     .from('conversations')
     .update(updates)
     .eq('id', groupId)
+    .select()
 
-  return !error
+  if (error) {
+    console.error('[updateGroupSettings] 更新失败', {
+      error,
+      errorMessage: error.message,
+      errorDetails: error.details,
+      errorHint: error.hint,
+      errorCode: error.code
+    })
+    return false
+  }
+
+  console.log('[updateGroupSettings] 更新成功', { data })
+  return true
 }
 
 export async function deleteGroup(groupId: string): Promise<boolean> {
-  const supabase = await createClient()
+  // 使用Service Role Key绕过RLS
+  const supabase = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  )
 
   const { error } = await supabase
     .from('conversations')

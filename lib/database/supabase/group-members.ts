@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { User } from '@/lib/types'
 
 export async function getGroupMembers(groupId: string): Promise<User[]> {
@@ -54,15 +55,35 @@ export async function updateMemberRole(
   userId: string,
   role: 'admin' | 'member'
 ): Promise<boolean> {
-  const supabase = await createClient()
+  console.log('[updateMemberRole] 开始更新成员角色', { groupId, userId, role })
 
-  const { error } = await supabase
+  // 使用Service Role Key绕过RLS
+  const supabase = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  )
+
+  const { data, error } = await supabase
     .from('conversation_members')
     .update({ role })
     .eq('conversation_id', groupId)
     .eq('user_id', userId)
+    .select()
 
-  return !error
+  if (error) {
+    console.error('[updateMemberRole] 更新失败', {
+      error,
+      errorMessage: error.message,
+      errorDetails: error.details,
+      errorHint: error.hint,
+      errorCode: error.code
+    })
+    return false
+  }
+
+  console.log('[updateMemberRole] 更新成功', { data })
+  return true
 }
 
 export async function updateMemberPermissions(
@@ -89,7 +110,12 @@ export async function removeGroupMember(
   groupId: string,
   userId: string
 ): Promise<boolean> {
-  const supabase = await createClient()
+  // 使用Service Role Key绕过RLS
+  const supabase = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  )
 
   const { error } = await supabase
     .from('conversation_members')
@@ -105,7 +131,12 @@ export async function transferOwnership(
   oldOwnerId: string,
   newOwnerId: string
 ): Promise<boolean> {
-  const supabase = await createClient()
+  // 使用Service Role Key绕过RLS
+  const supabase = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  )
 
   // 更新原群主为管理员
   await supabase

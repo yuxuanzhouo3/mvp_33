@@ -1,0 +1,71 @@
+# Page snapshot
+
+```yaml
+- generic:
+  - generic [active]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - navigation [ref=e6]:
+            - button "previous" [disabled] [ref=e7]:
+              - img "previous" [ref=e8]
+            - generic [ref=e10]:
+              - generic [ref=e11]: 1/
+              - text: "1"
+            - button "next" [disabled] [ref=e12]:
+              - img "next" [ref=e13]
+          - img
+        - generic [ref=e15]:
+          - generic [ref=e16]:
+            - img [ref=e17]
+            - generic "Latest available version is detected (16.1.6)." [ref=e19]: Next.js 16.1.6
+            - generic [ref=e20]: Turbopack
+          - img
+      - dialog "Build Error" [ref=e22]:
+        - generic [ref=e25]:
+          - generic [ref=e26]:
+            - generic [ref=e27]:
+              - generic [ref=e29]: Build Error
+              - generic [ref=e30]:
+                - button "Copy Error Info" [ref=e31] [cursor=pointer]:
+                  - img [ref=e32]
+                - button "No related documentation found" [disabled] [ref=e34]:
+                  - img [ref=e35]
+                - button "Attach Node.js inspector" [ref=e37] [cursor=pointer]:
+                  - img [ref=e38]
+            - generic [ref=e47]: Parsing ecmascript source code failed
+          - generic [ref=e49]:
+            - generic [ref=e51]:
+              - img [ref=e53]
+              - generic [ref=e56]: ./app/chat/chat-content.tsx (7917:1)
+              - button "Open in editor" [ref=e57] [cursor=pointer]:
+                - img [ref=e59]
+            - generic [ref=e62]:
+              - generic [ref=e63]: Parsing ecmascript source code failed
+              - generic [ref=e64]: 7915 |
+              - generic [ref=e65]: )
+              - generic [ref=e66]: 7916 |
+              - text: ">"
+              - generic [ref=e67]: 7917 |
+              - generic [ref=e68]: "}"
+              - generic [ref=e69]: "|"
+              - text: ^
+              - generic [ref=e70]: 7918 |
+              - generic [ref=e71]: 7919 |
+              - text: export default ChatPageContent
+              - generic [ref=e72]: 7920 |
+              - generic [ref=e73]: "Unexpected token. Did you mean `"
+              - text: "{'}"
+              - generic [ref=e74]: "'}` or `&rbrace;`? Import trace: Server Component: ./app/chat/chat-content.tsx ./app/chat/chat-wrapper.tsx ./app/chat/page.tsx"
+        - generic [ref=e75]: "1"
+        - generic [ref=e76]: "2"
+    - generic [ref=e81] [cursor=pointer]:
+      - button "Open Next.js Dev Tools" [ref=e82]:
+        - img [ref=e83]
+      - button "Open issues overlay" [ref=e87]:
+        - generic [ref=e88]:
+          - generic [ref=e89]: "0"
+          - generic [ref=e90]: "1"
+        - generic [ref=e91]: Issue
+  - alert [ref=e92]
+```
