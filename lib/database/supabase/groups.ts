@@ -132,7 +132,7 @@ export async function getGroupInfo(groupId: string): Promise<Conversation | null
 
 export async function updateGroupSettings(
   groupId: string,
-  updates: { name?: string; description?: string }
+  updates: { name?: string; description?: string; avatar_url?: string }
 ): Promise<boolean> {
   console.log('[updateGroupSettings] 开始更新', { groupId, updates })
 

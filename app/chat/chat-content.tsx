@@ -5495,6 +5495,7 @@ function ChatPageContent() {
   }, [])
 
   const handleRecallMessage = useCallback(async (messageId: string) => {
+    console.log('[RECALL] 开始撤回消息:', messageId)
 
     try {
 
@@ -5509,26 +5510,35 @@ function ChatPageContent() {
       })
 
       const data = await response.json()
+      console.log('[RECALL] API 响应:', data)
 
       if (data.success && data.message) {
 
         // Update recalled message in list, preserving sender info from original message
-        setMessages(prev => prev.map(msg => {
-          if (msg.id === messageId) {
-            // Preserve original sender info to avoid showing incomplete data
-            // CRITICAL: Ensure is_recalled is true and reactions are empty to prevent showing reaction UI
-            // CRITICAL: Preserve sender_id to maintain correct message position (left/right)
-            // Always prioritize original message's sender_id to ensure correct positioning
-            return {
-              ...data.message,
-              sender_id: msg.sender_id ?? data.message.sender_id ?? (currentUser?.id || ''), // Preserve original sender_id, fallback to currentUser.id
-              is_recalled: true, // Force is_recalled to true
-              reactions: [], // Force reactions to empty array
-              sender: msg.sender || data.message.sender, // Keep original sender if available
+        setMessages(prev => {
+          console.log('[RECALL] 更新前的消息列表长度:', prev.length)
+          const updated = prev.map(msg => {
+            if (msg.id === messageId) {
+              console.log('[RECALL] 找到要撤回的消息:', messageId)
+              // Preserve original sender info to avoid showing incomplete data
+              // CRITICAL: Ensure is_recalled is true and reactions are empty to prevent showing reaction UI
+              // CRITICAL: Preserve sender_id to maintain correct message position (left/right)
+              // Always prioritize original message's sender_id to ensure correct positioning
+              const updatedMsg = {
+                ...data.message,
+                sender_id: msg.sender_id ?? data.message.sender_id ?? (currentUser?.id || ''), // Preserve original sender_id, fallback to currentUser.id
+                is_recalled: true, // Force is_recalled to true
+                reactions: [], // Force reactions to empty array
+                sender: msg.sender || data.message.sender, // Keep original sender if available
+              }
+              console.log('[RECALL] 更新后的消息:', { id: updatedMsg.id, is_recalled: updatedMsg.is_recalled, content: updatedMsg.content })
+              return updatedMsg
             }
-          }
-          return msg
-        }))
+            return msg
+          })
+          console.log('[RECALL] 更新后的消息列表长度:', updated.length)
+          return updated
+        })
 
         // 撤回后，本地把当前会话的未读数清零，避免侧边栏还显示红色提醒
         if (selectedConversationId) {
@@ -7874,7 +7884,11 @@ function ChatPageContent() {
               currentUser={currentUser}
               isOpen={groupInfoOpen}
               onClose={() => setGroupInfoOpen(false)}
-              onUpdate={loadConversations}
+              onUpdate={() => {
+                if (currentUser && currentWorkspace) {
+                  loadConversations(currentUser.id, currentWorkspace.id, true)
+                }
+              }}
             />
           )}
 

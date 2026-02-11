@@ -6,11 +6,14 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { ConversationWithDetails, User } from '@/lib/types'
-import { Users, Settings, UserPlus, LogOut, X, MoreVertical, Shield, Crown } from 'lucide-react'
+import { Users, Settings, UserPlus, LogOut, X, MoreVertical, Shield, Crown, Megaphone, FileIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GroupSettingsDialog } from './group-settings-dialog'
 import { AddMembersDialog } from './add-members-dialog'
 import { MemberActionsMenu } from './member-actions-menu'
+import { GroupMembersSection } from './group-members-section'
+import { GroupAnnouncementsDialog } from './group-announcements-dialog'
+import { GroupFilesDialog } from './group-files-dialog'
 
 interface GroupInfoPanelProps {
   conversation: ConversationWithDetails
@@ -29,6 +32,8 @@ export function GroupInfoPanel({
 }: GroupInfoPanelProps) {
   const [showSettings, setShowSettings] = useState(false)
   const [showAddMembers, setShowAddMembers] = useState(false)
+  const [showAnnouncements, setShowAnnouncements] = useState(false)
+  const [showFiles, setShowFiles] = useState(false)
   const [selectedMember, setSelectedMember] = useState<User | null>(null)
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null)
 
@@ -106,9 +111,12 @@ export function GroupInfoPanel({
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <Users className="h-6 w-6 text-primary" />
-                </div>
+                <Avatar className="h-12 w-12 rounded-lg shrink-0">
+                  <AvatarImage src={conversation.avatar_url || undefined} />
+                  <AvatarFallback className="rounded-lg bg-primary/10">
+                    <Users className="h-6 w-6 text-primary" />
+                  </AvatarFallback>
+                </Avatar>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-base truncate">{conversation.name}</h3>
                   <p className="text-sm text-muted-foreground">{conversation.members.length} 位成员</p>
@@ -126,26 +134,50 @@ export function GroupInfoPanel({
             <ScrollArea className="flex-1">
               <div className="p-4 space-y-4">
                 {/* Quick Actions */}
-                {isAdmin && (
-                  <div className="space-y-1">
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start hover:bg-accent transition-colors duration-200"
-                      onClick={() => setShowAddMembers(true)}
-                    >
-                      <UserPlus className="mr-2 h-4 w-4" />
-                      添加成员
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start hover:bg-accent transition-colors duration-200"
-                      onClick={() => setShowSettings(true)}
-                    >
-                      <Settings className="mr-2 h-4 w-4" />
-                      群聊设置
-                    </Button>
-                  </div>
-                )}
+                <div className="space-y-1">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start hover:bg-accent transition-colors duration-200"
+                    onClick={() => setShowAnnouncements(true)}
+                  >
+                    <Megaphone className="mr-2 h-4 w-4" />
+                    群公告
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start hover:bg-accent transition-colors duration-200"
+                    onClick={() => setShowFiles(true)}
+                  >
+                    <FileIcon className="mr-2 h-4 w-4" />
+                    群文件
+                  </Button>
+                  {isAdmin && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start hover:bg-accent transition-colors duration-200"
+                        onClick={() => setShowAddMembers(true)}
+                      >
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        添加成员
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start hover:bg-accent transition-colors duration-200"
+                        onClick={() => setShowSettings(true)}
+                      >
+                        <Settings className="mr-2 h-4 w-4" />
+                        群聊设置
+                      </Button>
+                    </>
+                  )}
+                </div>
+
+                <GroupMembersSection
+                  conversationId={conversation.id}
+                  isAdmin={isAdmin}
+                  onAddMembers={() => setShowAddMembers(true)}
+                />
 
                 <Separator />
 
@@ -241,6 +273,21 @@ export function GroupInfoPanel({
         conversationId={conversation.id}
         existingMemberIds={conversation.members.map(m => m.id)}
         onUpdate={onUpdate}
+      />
+
+      <GroupAnnouncementsDialog
+        open={showAnnouncements}
+        onOpenChange={setShowAnnouncements}
+        conversationId={conversation.id}
+        isAdmin={isAdmin}
+      />
+
+      <GroupFilesDialog
+        open={showFiles}
+        onOpenChange={setShowFiles}
+        conversationId={conversation.id}
+        currentUserId={currentUser.id}
+        isAdmin={isAdmin}
       />
 
       {selectedMember && menuPosition && (

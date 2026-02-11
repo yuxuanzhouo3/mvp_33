@@ -709,13 +709,7 @@ export function MessageList({
 
     if (!message || message.is_recalled || message.is_deleted) return false
 
-    const messageTime = new Date(message.created_at).getTime()
-
-    const now = Date.now()
-
-    const timeDiff = (now - messageTime) / 1000 // seconds
-
-    return timeDiff <= 120 // 2 minutes
+    return true // 无时间限制
 
   }
 

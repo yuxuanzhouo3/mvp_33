@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ConversationWithDetails } from '@/lib/types'
-import { Loader2, Trash2 } from 'lucide-react'
+import { Loader2, Trash2, Upload, Users } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 interface GroupSettingsDialogProps {
@@ -26,10 +27,53 @@ export function GroupSettingsDialog({
   onUpdate
 }: GroupSettingsDialogProps) {
   const router = useRouter()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState(conversation.name || '')
   const [description, setDescription] = useState(conversation.description || '')
+  const [avatarUrl, setAvatarUrl] = useState(conversation.avatar_url || '')
   const [isUpdating, setIsUpdating] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      alert('请选择图片文件')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('图片大小不能超过5MB')
+      return
+    }
+
+    setIsUploadingAvatar(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch(`/api/groups/${conversation.id}/upload-avatar`, {
+        method: 'POST',
+        body: formData
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setAvatarUrl(data.avatar_url)
+        onUpdate?.()
+      } else {
+        const data = await response.json()
+        alert(`上传失败: ${data.error || '未知错误'}`)
+      }
+    } catch (error) {
+      console.error('上传头像失败:', error)
+      alert('上传失败，请重试')
+    } finally {
+      setIsUploadingAvatar(false)
+    }
+  }
 
   const handleUpdate = async () => {
     if (!name.trim()) {
@@ -101,6 +145,47 @@ export function GroupSettingsDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label>群头像</Label>
+            <div className="flex items-center gap-4">
+              <Avatar className="h-20 w-20">
+                <AvatarImage src={avatarUrl || undefined} />
+                <AvatarFallback>
+                  <Users className="h-10 w-10" />
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarUpload}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingAvatar}
+                >
+                  {isUploadingAvatar ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      上传中...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      上传头像
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-1">支持JPG、PNG格式，最大5MB</p>
+              </div>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="group-name">群名称</Label>
             <Input

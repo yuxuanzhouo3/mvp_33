@@ -235,15 +235,8 @@ export async function recallMessage(
     return null
   }
 
-  // Check if message was sent within the last 2 minutes (120 seconds)
-  const messageTime = new Date(message.created_at).getTime()
-  const now = Date.now()
-  const timeDiff = (now - messageTime) / 1000 // seconds
-
-  if (timeDiff > 120) {
-    // Message is too old to recall
-    return null
-  }
+  // 无时间限制，任何时候都可以撤回
+  // No time limit - messages can be recalled at any time
 
   // Update message to recalled status
   const { data: updatedMessage, error: updateError } = await supabase

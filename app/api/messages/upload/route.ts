@@ -15,25 +15,36 @@ export const maxDuration = 300
  */
 export async function POST(request: NextRequest) {
   try {
+    console.log('[FILE UPLOAD] 开始处理文件上传请求')
+
     const supabase = await createClient()
-    
+
     // Get current user
     const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser()
     if (authError || !currentUser) {
+      console.error('[FILE UPLOAD] 用户认证失败:', authError)
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       )
     }
 
+    console.log('[FILE UPLOAD] 用户认证成功:', { userId: currentUser.id })
+
     const dbClient = await getDatabaseClientForUser(request)
     const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
+
+    console.log('[FILE UPLOAD] 数据库客户端信息:', {
+      type: dbClient.type,
+      region: userRegion
+    })
 
     const formData = await request.formData()
     const file = formData.get('file') as File
     const conversationId = formData.get('conversationId') as string
 
     if (!file) {
+      console.error('[FILE UPLOAD] 未提供文件')
       return NextResponse.json(
         { error: 'No file provided' },
         { status: 400 }
@@ -41,22 +52,38 @@ export async function POST(request: NextRequest) {
     }
 
     if (!conversationId) {
+      console.error('[FILE UPLOAD] 未提供 conversationId')
       return NextResponse.json(
         { error: 'conversationId is required' },
         { status: 400 }
       )
     }
 
+    console.log('[FILE UPLOAD] 文件信息:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      conversationId
+    })
+
     // Check subscription status to determine file size limit
     let subscriptionType: 'free' | 'monthly' | 'yearly' | null = 'free'
     let expiresAt: string | null = null
     let isPro = false
+
+    console.log('[FILE UPLOAD] 开始检查订阅状态')
 
     if (dbClient.type === 'cloudbase') {
       // CN region: read from CloudBase users collection
       try {
         const { getUserById } = await import('@/lib/database/cloudbase/users')
         const user = await getUserById(currentUser.id)
+        console.log('[FILE UPLOAD] CloudBase 用户信息:', {
+          userId: currentUser.id,
+          hasUser: !!user,
+          subscriptionType: (user as any)?.subscription_type,
+          expiresAt: (user as any)?.subscription_expires_at
+        })
         if (user && (user as any).subscription_type) {
           const t = (user as any).subscription_type
           if (t === 'monthly' || t === 'yearly') {
@@ -72,8 +99,9 @@ export async function POST(request: NextRequest) {
         }
         // Check if subscription is active
         isPro = subscriptionType !== 'free' && (!expiresAt || new Date(expiresAt) > new Date())
+        console.log('[FILE UPLOAD] CloudBase 订阅检查结果:', { subscriptionType, expiresAt, isPro })
       } catch (err) {
-        console.error('[UPLOAD] CloudBase subscription check error:', err)
+        console.error('[FILE UPLOAD] CloudBase 订阅检查错误:', err)
       }
     } else {
       // Global region: read from Supabase users table
@@ -83,6 +111,14 @@ export async function POST(request: NextRequest) {
           .select('subscription_type, subscription_expires_at')
           .eq('id', currentUser.id)
           .maybeSingle()
+
+        console.log('[FILE UPLOAD] Supabase 用户信息:', {
+          userId: currentUser.id,
+          hasData: !!data,
+          error: error?.message,
+          subscriptionType: data?.subscription_type,
+          expiresAt: data?.subscription_expires_at
+        })
 
         if (!error && data) {
           if (data.subscription_type === 'monthly' || data.subscription_type === 'yearly') {
@@ -97,8 +133,9 @@ export async function POST(request: NextRequest) {
           // Check if subscription is active
           isPro = subscriptionType !== 'free' && (!expiresAt || new Date(expiresAt) > new Date())
         }
+        console.log('[FILE UPLOAD] Supabase 订阅检查结果:', { subscriptionType, expiresAt, isPro })
       } catch (err) {
-        console.error('[UPLOAD] Supabase subscription check error:', err)
+        console.error('[FILE UPLOAD] Supabase 订阅检查错误:', err)
       }
     }
 
@@ -106,12 +143,26 @@ export async function POST(request: NextRequest) {
     const maxSize = isPro ? 500 * 1024 * 1024 : 10 * 1024 * 1024 // 500MB for pro, 10MB for free
     const maxSizeMB = isPro ? 500 : 10
 
+    console.log('[FILE UPLOAD] 文件大小限制:', {
+      maxSize,
+      maxSizeMB,
+      fileSize: file.size,
+      isPro,
+      willExceed: file.size > maxSize
+    })
+
     if (file.size > maxSize) {
+      console.error('[FILE UPLOAD] 文件大小超出限制:', {
+        fileSize: file.size,
+        maxSize,
+        maxSizeMB,
+        isPro
+      })
       return NextResponse.json(
-        { 
+        {
           error: `File size must be less than ${maxSizeMB}MB`,
-          details: isPro 
-            ? 'You have reached the file size limit for your subscription plan.' 
+          details: isPro
+            ? 'You have reached the file size limit for your subscription plan.'
             : 'Upgrade to Pro to upload files up to 500MB.'
         },
         { status: 400 }
@@ -120,8 +171,11 @@ export async function POST(request: NextRequest) {
 
     // CN region: 严格使用 CloudBase Storage
     if (dbClient.type === 'cloudbase' && userRegion === 'cn') {
+      console.log('[FILE UPLOAD] 使用 CloudBase 存储')
+
       const app = getCloudBaseApp()
       if (!app) {
+        console.error('[FILE UPLOAD] CloudBase 未配置')
         return NextResponse.json(
           { error: 'CloudBase is not configured. Please check CLOUDBASE_ENV_ID / SECRET_ID / SECRET_KEY.' },
           { status: 500 }
@@ -135,15 +189,35 @@ export async function POST(request: NextRequest) {
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}-${baseName}`
       const cloudPath = `messages/${conversationId}/${fileName}`
 
+      console.log('[FILE UPLOAD] CloudBase 文件路径信息:', {
+        safeName,
+        fileExt,
+        baseName,
+        fileName,
+        cloudPath
+      })
+
       // Convert File to Buffer for CloudBase SDK
       const arrayBuffer = await file.arrayBuffer()
       const fileBuffer = Buffer.from(arrayBuffer)
 
+      console.log('[FILE UPLOAD] 文件转换为 Buffer:', {
+        bufferSize: fileBuffer.length,
+        arrayBufferSize: arrayBuffer.byteLength
+      })
+
       try {
+        console.log('[FILE UPLOAD] 开始上传到 CloudBase:', { cloudPath })
         // @cloudbase/node-sdk v3: 直接使用 app.uploadFile，而不是 app.storage().uploadFile
         const uploadResult = await (app as any).uploadFile({
           cloudPath,
           fileContent: fileBuffer,
+        })
+
+        console.log('[FILE UPLOAD] CloudBase 上传结果:', {
+          uploadResult: JSON.stringify(uploadResult).substring(0, 500),
+          hasFileID: !!(uploadResult as any)?.fileID,
+          fileID: (uploadResult as any)?.fileID
         })
 
         // 确保 fileId 始终是 cloud:// 格式
@@ -151,16 +225,21 @@ export async function POST(request: NextRequest) {
         if (!fileId || !fileId.startsWith('cloud://')) {
           // 如果 SDK 没有返回 fileID，或者返回的不是 cloud:// 格式，我们自己构造
           const envId = process.env.CLOUDBASE_ENV_ID
+          console.log('[FILE UPLOAD] 构造 fileId:', {
+            hasEnvId: !!envId,
+            envId: envId ? `${envId.substring(0, 10)}...` : 'undefined',
+            cloudPath
+          })
           if (envId) {
             fileId = `cloud://${envId}/${cloudPath}`
           } else {
             // 如果没有 envId，fallback 到 cloudPath（但这不是标准格式）
             fileId = cloudPath
-            console.warn('[CLOUDBASE MESSAGE FILE UPLOAD] CLOUDBASE_ENV_ID not set, using cloudPath as fileId:', cloudPath)
+            console.warn('[FILE UPLOAD] ⚠️ CLOUDBASE_ENV_ID 未设置，使用 cloudPath 作为 fileId:', cloudPath)
           }
         }
-        
-        console.log('[CLOUDBASE MESSAGE FILE UPLOAD] Upload result:', {
+
+        console.log('[FILE UPLOAD] 最终 fileId:', {
           uploadResultFileID: (uploadResult as any)?.fileID,
           constructedFileId: fileId,
           cloudPath,
@@ -170,10 +249,12 @@ export async function POST(request: NextRequest) {
         // 这样可以避免临时链接过期的问题，每次访问都会动态生成新的临时链接
         const publicUrl = `/api/files/cn-download?fileId=${encodeURIComponent(fileId)}`
 
-        console.log('[CLOUDBASE MESSAGE FILE UPLOAD] Success:', {
+        console.log('[FILE UPLOAD] ✅ CloudBase 上传成功:', {
           cloudPath,
           publicUrl,
           fileId,
+          fileName: safeName,
+          fileSize: file.size
         })
 
         return NextResponse.json({
@@ -187,10 +268,11 @@ export async function POST(request: NextRequest) {
           file_path: cloudPath,
         })
       } catch (e: any) {
-        console.error('[CLOUDBASE MESSAGE FILE UPLOAD] Error:', {
+        console.error('[FILE UPLOAD] ❌ CloudBase 上传失败:', {
           message: e?.message,
           code: e?.code || e?.errCode,
           stack: e?.stack,
+          errorObject: JSON.stringify(e).substring(0, 500)
         })
         return NextResponse.json(
           {
@@ -205,6 +287,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Global region：走 Supabase Storage（你这边已经验证 OK 的逻辑）
+    console.log('[FILE UPLOAD] 使用 Supabase 存储')
+
     // Verify user is a member of the conversation (Supabase / global only)
     const { data: member } = await supabase
       .from('conversation_members')
@@ -213,7 +297,14 @@ export async function POST(request: NextRequest) {
       .eq('user_id', currentUser.id)
       .single()
 
+    console.log('[FILE UPLOAD] 会话成员验证:', {
+      conversationId,
+      userId: currentUser.id,
+      isMember: !!member
+    })
+
     if (!member) {
+      console.error('[FILE UPLOAD] 用户不是会话成员')
       return NextResponse.json(
         { error: 'Not a member of this conversation' },
         { status: 403 }
@@ -226,7 +317,15 @@ export async function POST(request: NextRequest) {
     // Store in conversation-specific folder: messages/{conversationId}/{filename}
     const filePath = `${conversationId}/${fileName}`
 
+    console.log('[FILE UPLOAD] Supabase 文件路径:', {
+      fileExt,
+      fileName,
+      filePath
+    })
+
     // Upload to Supabase Storage
+    console.log('[FILE UPLOAD] 开始上传到 Supabase:', { filePath })
+
     const { error: uploadError } = await supabase.storage
       .from('messages')
       .upload(filePath, file, {
@@ -235,13 +334,24 @@ export async function POST(request: NextRequest) {
       })
 
     if (uploadError) {
-      console.error('[MESSAGE FILE UPLOAD] Error:', uploadError)
+      console.error('[FILE UPLOAD] ❌ Supabase 上传失败:', {
+        error: uploadError,
+        message: uploadError.message,
+        statusCode: (uploadError as any).statusCode
+      })
 
       // Check if bucket exists
       const { data: buckets } = await supabase.storage.listBuckets()
       const messagesBucket = buckets?.find((b) => b.id === 'messages')
 
+      console.log('[FILE UPLOAD] 存储桶检查:', {
+        hasBuckets: !!buckets,
+        bucketsCount: buckets?.length,
+        hasMessagesBucket: !!messagesBucket
+      })
+
       if (!messagesBucket) {
+        console.error('[FILE UPLOAD] messages 存储桶不存在')
         return NextResponse.json(
           {
             error: 'Storage bucket not found',
@@ -266,6 +376,13 @@ export async function POST(request: NextRequest) {
 
     const fileUrl = urlData.publicUrl
 
+    console.log('[FILE UPLOAD] ✅ Supabase 上传成功:', {
+      filePath,
+      fileUrl,
+      fileName: file.name,
+      fileSize: file.size
+    })
+
     return NextResponse.json({
       success: true,
       file_url: fileUrl,
@@ -275,7 +392,11 @@ export async function POST(request: NextRequest) {
       file_path: filePath,
     })
   } catch (error: any) {
-    console.error('Upload message file error:', error)
+    console.error('[FILE UPLOAD] ❌ 未捕获的错误:', {
+      error,
+      message: error?.message,
+      stack: error?.stack
+    })
     return NextResponse.json(
       { error: 'Failed to upload file', details: error.message },
       { status: 500 }

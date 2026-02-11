@@ -127,8 +127,8 @@ export async function PUT(
     const isCallMessage = message.type === 'system' && message.metadata?.call_type
     const isUpdatingCallStatus = metadata && (metadata.call_status === 'answered' || metadata.call_status === 'missed' || metadata.call_status === 'cancelled' || metadata.call_status === 'ended')
     const isSender = message.sender_id === user.id
-    
-    console.log('[API] Updating message authorization check:', {
+
+    console.log('[API] 权限检查:', {
       messageId,
       isCallMessage,
       isUpdatingCallStatus,
@@ -151,8 +151,8 @@ export async function PUT(
       
       // maybeSingle() returns null if no record found (no error), or data if found
       isRecipient = !!membership && !membershipError
-      
-      console.log('[API] Recipient check:', {
+
+      console.log('[API] 会话成员检查:', {
         messageId,
         conversationId: message.conversation_id,
         userId: user.id,
@@ -180,8 +180,8 @@ export async function PUT(
         { status: 403 }
       )
     }
-    
-    console.log('[API] ✅ Authorization passed:', {
+
+    console.log('[API] ✅ 授权检查通过:', {
       messageId,
       isSender,
       isCallMessage,
@@ -198,7 +198,7 @@ export async function PUT(
         ...existingMetadata,
         ...metadata,
       }
-      console.log('[API] Merged metadata for call message:', {
+      console.log('[API] 合并通话元数据:', {
         existing: existingMetadata,
         new: metadata,
         final: finalMetadata,
@@ -222,7 +222,6 @@ export async function PUT(
         )
       }
 
-      console.log('[API] Message updated successfully:', messageId)
       return NextResponse.json({
         success: true,
         message: updatedMessage,
@@ -364,11 +363,13 @@ export async function PATCH(
   { params }: { params: Promise<{ messageId: string }> | { messageId: string } }
 ) {
   try {
+
     // Handle Next.js 15+ async params
     const resolvedParams = await Promise.resolve(params)
     const messageId = resolvedParams.messageId
 
     if (!messageId) {
+      console.error('[MESSAGE RECALL] messageId 缺失')
       return NextResponse.json(
         { error: 'messageId is required' },
         { status: 400 }
@@ -378,7 +379,13 @@ export async function PATCH(
     const body = await request.json()
     const { action } = body // 'hide', 'unhide', or 'recall'
 
+    console.log('[MESSAGE RECALL] 收到请求:', {
+      messageId,
+      action
+    })
+
     if (!action || !['hide', 'unhide', 'recall'].includes(action)) {
+      console.error('[MESSAGE RECALL] 无效的 action:', action)
       return NextResponse.json(
         { error: 'action must be "hide", "unhide", or "recall"' },
         { status: 400 }
@@ -388,23 +395,40 @@ export async function PATCH(
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
+      console.error('[MESSAGE RECALL] 用户未认证')
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       )
     }
 
+
     const dbClient = await getDatabaseClientForUser(request)
     const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
 
+    console.log('[MESSAGE RECALL] 数据库客户端:', {
+      type: dbClient.type,
+      region: userRegion
+    })
+
     // CN recall / hide / unhide via CloudBase
     if (dbClient.type === 'cloudbase' && userRegion === 'cn') {
+
       const db = dbClient.cloudbase
       const res = await db.collection('messages').doc(messageId).get()
-      
+
+      console.log('[MESSAGE RECALL] CloudBase 查询结果:', {
+        hasRes: !!res,
+        resType: typeof res,
+        resKeys: res ? Object.keys(res) : [],
+        hasData: !!(res && res.data),
+        dataType: res?.data ? typeof res.data : 'undefined',
+        dataIsArray: Array.isArray(res?.data)
+      })
+
       // CloudBase may return data in different formats - try multiple ways
       let m: any = null
-      
+
       // Try res.data first (most common)
       if (res && res.data) {
         if (Array.isArray(res.data)) {
@@ -413,7 +437,7 @@ export async function PATCH(
           m = res.data
         }
       }
-      
+
       // If res.data doesn't work, try res directly
       if (!m && res && typeof res === 'object') {
         // Check if res itself has the message fields
@@ -421,7 +445,7 @@ export async function PATCH(
           m = res
         }
       }
-      
+
       // Last resort: try accessing nested properties
       if (!m && res) {
         // Sometimes CloudBase wraps data in different structures
@@ -445,8 +469,8 @@ export async function PATCH(
       }
 
       if (!m) {
-        console.error('CloudBase message not found:', { 
-          messageId, 
+        console.error('[MESSAGE RECALL] ❌ CloudBase 消息未找到:', {
+          messageId,
           res,
           resType: typeof res,
           resKeys: res ? Object.keys(res) : [],
@@ -460,7 +484,7 @@ export async function PATCH(
       }
 
       // Log the raw message data for debugging
-      console.log('CloudBase message data:', {
+      console.log('[MESSAGE RECALL] CloudBase 消息数据:', {
         messageId,
         sender_id: m.sender_id,
         sender_id_type: typeof m.sender_id,
@@ -472,12 +496,12 @@ export async function PATCH(
       
       // Check if sender_id exists
       if (m.sender_id === undefined || m.sender_id === null) {
-        console.error('CloudBase message missing sender_id:', {
+        console.error('[MESSAGE RECALL] ❌ CloudBase 消息缺少 sender_id:', {
           messageId,
           messageKeys: Object.keys(m),
           fullMessage: JSON.stringify(m, null, 2),
-          resStructure: JSON.stringify({ 
-            hasData: !!res.data, 
+          resStructure: JSON.stringify({
+            hasData: !!res.data,
             resKeys: Object.keys(res || {}),
             resDataKeys: res?.data ? Object.keys(res.data) : [],
           }),
@@ -489,20 +513,21 @@ export async function PATCH(
       }
 
       if (action === 'recall') {
+
         // Convert both to string for comparison (CloudBase may store as string or number)
         // Try multiple comparison methods to handle different formats
         const messageSenderId = String(m.sender_id || '').trim()
         const currentUserId = String(user.id || '').trim()
-        
+
         // Also try comparing as numbers if they look like numbers
         const messageSenderIdNum = Number(m.sender_id)
         const currentUserIdNum = Number(user.id)
         const numericMatch = !isNaN(messageSenderIdNum) && !isNaN(currentUserIdNum) && messageSenderIdNum === currentUserIdNum
-        
+
         const stringMatch = messageSenderId === currentUserId
         const isAuthorized = stringMatch || numericMatch
-        
-        console.log('Recall authorization check:', {
+
+        console.log('[MESSAGE RECALL] 权限验证:', {
           messageId,
           messageSenderId,
           currentUserId,
@@ -514,9 +539,9 @@ export async function PATCH(
           numericMatch,
           isAuthorized,
         })
-        
+
         if (!isAuthorized) {
-          console.error('Recall authorization failed:', {
+          console.error('[MESSAGE RECALL] ❌ 撤回权限验证失败:', {
             messageId,
             messageSenderId,
             currentUserId,
@@ -534,7 +559,7 @@ export async function PATCH(
             },
           })
           return NextResponse.json(
-            { 
+            {
               error: 'Not authorized to recall this message',
               debug: {
                 messageSenderId,
@@ -547,8 +572,10 @@ export async function PATCH(
           )
         }
 
+
         // Check if message is already recalled or deleted
         if (m.is_recalled) {
+          console.error('[MESSAGE RECALL] 消息已被撤回')
           return NextResponse.json(
             { error: 'Message is already recalled' },
             { status: 400 }
@@ -556,29 +583,30 @@ export async function PATCH(
         }
 
         if (m.is_deleted) {
+          console.error('[MESSAGE RECALL] 无法撤回已删除的消息')
           return NextResponse.json(
             { error: 'Cannot recall a deleted message' },
             { status: 400 }
           )
         }
 
-        const messageTime = new Date(m.created_at).getTime()
-        const now = Date.now()
-        const diff = (now - messageTime) / 1000
-        if (diff > 120) {
-          return NextResponse.json(
-            { error: 'Message is too old to recall (must be within 2 minutes)' },
-            { status: 400 }
-          )
-        }
+        // 无时间限制，任何时候都可以撤回
 
         const recalled = await recallMessageCN(messageId)
+
+        console.log('[MESSAGE RECALL] CloudBase 撤回结果:', {
+          success: !!recalled,
+          messageId
+        })
+
         if (!recalled) {
+          console.error('[MESSAGE RECALL] ❌ 撤回操作失败')
           return NextResponse.json(
             { error: 'Failed to recall message' },
             { status: 500 }
           )
         }
+
 
         return NextResponse.json({
           success: true,
@@ -625,6 +653,7 @@ export async function PATCH(
 
     // Handle recall action (Supabase)
     if (action === 'recall') {
+
       // Verify user is the sender of the message
       const { data: message, error: messageError } = await supabase
         .from('messages')
@@ -633,7 +662,11 @@ export async function PATCH(
         .single()
 
       if (messageError) {
-        console.error('Error fetching message for recall:', messageError)
+        console.error('[MESSAGE RECALL] ❌ 获取消息失败:', {
+          messageError,
+          message: messageError.message,
+          messageId
+        })
         return NextResponse.json(
           { error: `Database error: ${messageError.message}` },
           { status: 500 }
@@ -641,21 +674,36 @@ export async function PATCH(
       }
 
       if (!message) {
-        console.error('Message not found:', messageId)
+        console.error('[MESSAGE RECALL] ❌ 消息未找到:', messageId)
         return NextResponse.json(
           { error: 'Message not found' },
           { status: 404 }
         )
       }
 
+      console.log('[MESSAGE RECALL] Supabase 消息数据:', {
+        messageId,
+        senderId: message.sender_id,
+        userId: user.id,
+        isRecalled: message.is_recalled,
+        isDeleted: message.is_deleted,
+        createdAt: message.created_at
+      })
+
       if (message.sender_id !== user.id) {
+        console.error('[MESSAGE RECALL] ❌ 权限验证失败:', {
+          messageSenderId: message.sender_id,
+          currentUserId: user.id
+        })
         return NextResponse.json(
           { error: 'Not authorized to recall this message' },
           { status: 403 }
         )
       }
 
+
       if (message.is_recalled) {
+        console.error('[MESSAGE RECALL] 消息已被撤回')
         return NextResponse.json(
           { error: 'Message is already recalled' },
           { status: 400 }
@@ -663,32 +711,30 @@ export async function PATCH(
       }
 
       if (message.is_deleted) {
+        console.error('[MESSAGE RECALL] 无法撤回已删除的消息')
         return NextResponse.json(
           { error: 'Cannot recall a deleted message' },
           { status: 400 }
         )
       }
 
-      // Check if message was sent within the last 2 minutes
-      const messageTime = new Date(message.created_at).getTime()
-      const now = Date.now()
-      const timeDiff = (now - messageTime) / 1000 // seconds
-
-      if (timeDiff > 120) {
-        return NextResponse.json(
-          { error: 'Message is too old to recall (must be within 2 minutes)' },
-          { status: 400 }
-        )
-      }
+      // 无时间限制，任何时候都可以撤回
 
       const recalledMessage = await recallMessage(messageId)
 
+      console.log('[MESSAGE RECALL] Supabase 撤回结果:', {
+        success: !!recalledMessage,
+        messageId
+      })
+
       if (!recalledMessage) {
+        console.error('[MESSAGE RECALL] ❌ 撤回操作失败')
         return NextResponse.json(
           { error: 'Failed to recall message' },
           { status: 500 }
         )
       }
+
 
       return NextResponse.json({
         success: true,

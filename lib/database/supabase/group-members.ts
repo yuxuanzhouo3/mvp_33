@@ -3,6 +3,7 @@ import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { User } from '@/lib/types'
 
 export async function getGroupMembers(groupId: string): Promise<User[]> {
+  console.log('[getGroupMembers] 开始查询成员', { groupId })
   const supabase = await createClient()
 
   const { data, error } = await supabase
@@ -13,19 +14,29 @@ export async function getGroupMembers(groupId: string): Promise<User[]> {
       is_muted,
       can_send_messages,
       join_status,
-      users (*)
+      users!conversation_members_user_id_fkey (*)
     `)
     .eq('conversation_id', groupId)
     .eq('join_status', 'joined')
 
+  console.log('[getGroupMembers] 查询结果', {
+    hasError: !!error,
+    error: error?.message,
+    dataCount: data?.length || 0,
+    data: data
+  })
+
   if (error || !data) return []
 
-  return data.map(m => ({
+  const result = data.map(m => ({
     ...m.users,
     role: m.role,
     is_muted: m.is_muted,
     can_send_messages: m.can_send_messages
   })) as User[]
+
+  console.log('[getGroupMembers] 返回成员数量', { count: result.length })
+  return result
 }
 
 export async function addGroupMembers(
