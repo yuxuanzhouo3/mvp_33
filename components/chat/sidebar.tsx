@@ -115,13 +115,16 @@ function ConversationItem({
             </AvatarFallback>
           </Avatar>
         ) : (
-          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-            {getConversationIcon(conversation.type, conversation.is_private)}
-          </div>
+          <Avatar className="h-10 w-10">
+            <AvatarImage src={conversation.avatar_url || undefined} />
+            <AvatarFallback className="bg-primary/10">
+              {getConversationIcon(conversation.type, conversation.is_private)}
+            </AvatarFallback>
+          </Avatar>
         )}
         {conversation.unread_count > 0 && (
-          <Badge 
-            variant="destructive" 
+          <Badge
+            variant="destructive"
             className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
           >
             {conversation.unread_count}

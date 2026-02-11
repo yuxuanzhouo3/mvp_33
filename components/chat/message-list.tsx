@@ -1072,15 +1072,15 @@ export function MessageList({
 
                             className={cn(
 
-                              'rounded-2xl break-words relative group',
-                              isMobile 
-                                ? 'px-3 py-2 max-w-[85%]' 
+                              'break-words relative group',
+                              isMobile
+                                ? 'px-3 py-2 max-w-[85%]'
                                 : 'px-4 py-2 max-w-xl',
                               isOwn
 
-                                ? 'bg-primary text-primary-foreground'
+                                ? 'bg-[#95EC69] text-black rounded-[8px] rounded-tr-[2px]'
 
-                                : 'bg-muted',
+                                : 'bg-white text-black rounded-[8px] rounded-tl-[2px] shadow-sm border border-gray-100',
 
                               message.type !== 'text' && 'p-2'
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,6 +35,22 @@ export function GroupSettingsDialog({
   const [isDeleting, setIsDeleting] = useState(false)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
 
+  // 同步 conversation prop 的变化到本地状态
+  useEffect(() => {
+    console.log('[GroupSettings] Name changed:', conversation.name)
+    setName(conversation.name || '')
+  }, [conversation.name])
+
+  useEffect(() => {
+    console.log('[GroupSettings] Description changed:', conversation.description)
+    setDescription(conversation.description || '')
+  }, [conversation.description])
+
+  useEffect(() => {
+    console.log('[GroupSettings] Avatar URL changed:', conversation.avatar_url)
+    setAvatarUrl(conversation.avatar_url || '')
+  }, [conversation.avatar_url])
+
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -49,6 +65,7 @@ export function GroupSettingsDialog({
       return
     }
 
+    console.log('[GroupSettings] Starting avatar upload for conversation:', conversation.id)
     setIsUploadingAvatar(true)
     try {
       const formData = new FormData()
@@ -61,14 +78,19 @@ export function GroupSettingsDialog({
 
       if (response.ok) {
         const data = await response.json()
+        console.log('[GroupSettings] Avatar upload successful, new URL:', data.avatar_url)
+        console.log('[GroupSettings] Current conversation.avatar_url:', conversation.avatar_url)
         setAvatarUrl(data.avatar_url)
+        console.log('[GroupSettings] Local avatarUrl state updated to:', data.avatar_url)
+        console.log('[GroupSettings] Calling onUpdate callback')
         onUpdate?.()
       } else {
         const data = await response.json()
+        console.error('[GroupSettings] Avatar upload failed:', data.error)
         alert(`上传失败: ${data.error || '未知错误'}`)
       }
     } catch (error) {
-      console.error('上传头像失败:', error)
+      console.error('[GroupSettings] 上传头像失败:', error)
       alert('上传失败，请重试')
     } finally {
       setIsUploadingAvatar(false)

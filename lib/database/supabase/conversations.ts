@@ -70,7 +70,7 @@ export async function getUserConversations(
   // Each user's deletion is tracked in conversation_members.deleted_at
   const { data: conversations, error: convError } = await supabase
     .from('conversations')
-    .select('id, workspace_id, type, created_at, last_message_at, name, description, is_private, created_by, deleted_at')
+    .select('id, workspace_id, type, created_at, last_message_at, name, description, is_private, created_by, deleted_at, avatar_url')
     .in('id', conversationIds)
     // Removed .is('deleted_at', null) - deletion is now per-user in conversation_members
 
