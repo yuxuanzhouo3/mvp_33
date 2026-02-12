@@ -33,15 +33,31 @@ export function ScanQRDialog({ open, onOpenChange, onAddContact }: ScanQRDialogP
   }
 
   const startScanning = async () => {
-    if (!qrReaderRef.current) return
+    console.log('[扫码] startScanning 被调用')
 
     try {
+      console.log('[扫码] 开始扫描流程')
       setError(null)
       setScanning(true)
 
+      // 等待 DOM 元素完全就绪
+      console.log('[扫码] 等待 100ms...')
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      // 再次检查元素是否存在
+      const element = document.getElementById('qr-reader')
+      console.log('[扫码] DOM 元素检查:', element)
+      if (!element) {
+        console.error('[扫码] DOM 元素未找到')
+        throw new Error('QR reader element not found')
+      }
+
+      console.log('[扫码] 创建 Html5Qrcode 实例')
       const scanner = new Html5Qrcode('qr-reader')
       scannerRef.current = scanner
+      console.log('[扫码] Html5Qrcode 实例创建成功')
 
+      console.log('[扫码] 调用 scanner.start...')
       await scanner.start(
         { facingMode: 'environment' },
         { fps: 10, qrbox: { width: 250, height: 250 } },

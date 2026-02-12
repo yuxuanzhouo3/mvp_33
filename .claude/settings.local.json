@@ -1,0 +1,10 @@
+{
+  "disabledMcpjsonServers": [
+    "playwright",
+    "cloudbase",
+    "sequential-thinking",
+    "supabase-db",
+    "chrome-devtools",
+    "context"
+  ]
+}
