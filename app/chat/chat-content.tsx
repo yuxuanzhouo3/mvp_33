@@ -12,6 +12,8 @@ import { WorkspaceHeader } from '@/components/chat/workspace-header'
 
 import { ChatHeader } from '@/components/chat/chat-header'
 
+import { AppNavigation } from '@/components/layout/app-navigation'
+
 import { MessageList } from '@/components/chat/message-list'
 
 import { GroupInfoPanel } from '@/components/chat/group-info-panel'
@@ -7592,15 +7594,15 @@ function ChatPageContent() {
 
     <div className="flex h-screen flex-col">
 
-      <WorkspaceHeader 
-        workspace={currentWorkspace} 
+      <WorkspaceHeader
+        workspace={currentWorkspace}
         currentUser={currentUser}
         totalUnreadCount={conversations
           .filter(conv => conv.type === 'direct')
           .reduce((sum, conv) => sum + (conv.unread_count || 0), 0)}
       />
 
-      
+
 
       {/* Limit Alert */}
 
@@ -7623,6 +7625,8 @@ function ChatPageContent() {
       )}
 
       <div className="flex flex-1 overflow-hidden relative">
+        {/* 左侧导航栏（仅桌面端显示） */}
+        {!isMobile && <AppNavigation />}
         {/* Mobile overlay */}
         {isMobile && sidebarOpen && (
           <div

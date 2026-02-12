@@ -111,9 +111,9 @@ export function GroupInfoPanel({
               </div>
 
               <div className="flex items-start gap-3">
-                <Avatar className="h-12 w-12 rounded-lg shrink-0">
+                <Avatar className="h-12 w-12 rounded-xl shrink-0">
                   <AvatarImage src={conversation.avatar_url || undefined} />
-                  <AvatarFallback className="rounded-lg bg-primary/10">
+                  <AvatarFallback className="rounded-xl bg-primary/10">
                     <Users className="h-6 w-6 text-primary" />
                   </AvatarFallback>
                 </Avatar>
@@ -137,7 +137,7 @@ export function GroupInfoPanel({
                 <div className="space-y-1">
                   <Button
                     variant="ghost"
-                    className="w-full justify-start hover:bg-accent transition-colors duration-200"
+                    className="w-full justify-start hover:bg-accent transition-colors duration-200 rounded-lg"
                     onClick={() => setShowAnnouncements(true)}
                   >
                     <Megaphone className="mr-2 h-4 w-4" />
@@ -145,7 +145,7 @@ export function GroupInfoPanel({
                   </Button>
                   <Button
                     variant="ghost"
-                    className="w-full justify-start hover:bg-accent transition-colors duration-200"
+                    className="w-full justify-start hover:bg-accent transition-colors duration-200 rounded-lg"
                     onClick={() => setShowFiles(true)}
                   >
                     <FileIcon className="mr-2 h-4 w-4" />
@@ -155,7 +155,7 @@ export function GroupInfoPanel({
                     <>
                       <Button
                         variant="ghost"
-                        className="w-full justify-start hover:bg-accent transition-colors duration-200"
+                        className="w-full justify-start hover:bg-accent transition-colors duration-200 rounded-lg"
                         onClick={() => setShowAddMembers(true)}
                       >
                         <UserPlus className="mr-2 h-4 w-4" />
@@ -163,7 +163,7 @@ export function GroupInfoPanel({
                       </Button>
                       <Button
                         variant="ghost"
-                        className="w-full justify-start hover:bg-accent transition-colors duration-200"
+                        className="w-full justify-start hover:bg-accent transition-colors duration-200 rounded-lg"
                         onClick={() => setShowSettings(true)}
                       >
                         <Settings className="mr-2 h-4 w-4" />
@@ -201,7 +201,7 @@ export function GroupInfoPanel({
                         }}
                       >
                         <div className="relative">
-                          <Avatar className="h-10 w-10">
+                          <Avatar className="h-10 w-10 rounded-lg">
                             <AvatarImage src={member.avatar_url || undefined} />
                             <AvatarFallback className="text-sm">
                               {member.full_name.split(' ').map(n => n[0]).join('').toUpperCase()}

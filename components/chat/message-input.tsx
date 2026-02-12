@@ -241,9 +241,9 @@ export function MessageInput({
           {selectedFile && (
             <div className={cn("flex items-start gap-3 bg-muted rounded-lg", isMobile ? "p-2 gap-2" : "p-3")}>
               {previewUrl ? (
-                <img 
-                  src={previewUrl || "/placeholder.svg"} 
-                  alt="Preview" 
+                <img
+                  src={previewUrl || "/placeholder.svg"}
+                  alt="Preview"
                   className="w-20 h-20 rounded object-cover"
                 />
               ) : (
@@ -268,8 +268,9 @@ export function MessageInput({
             </div>
           )}
 
-          {/* Toolbar */}
+          {/* 飞书风格单行布局 */}
           <div className="flex items-center gap-2">
+            {/* 隐藏的文件输入 */}
             <input
               ref={fileInputRef}
               type="file"
@@ -277,16 +278,6 @@ export function MessageInput({
               onChange={handleFileSelect}
               accept="*/*"
             />
-            <Button 
-              size="icon" 
-              variant="ghost" 
-              disabled={disabled}
-              onClick={() => fileInputRef.current?.click()}
-              className={cn(isMobile && "h-8 w-8")}
-            >
-              <Paperclip className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
-            </Button>
-
             <input
               ref={imageInputRef}
               type="file"
@@ -294,66 +285,8 @@ export function MessageInput({
               onChange={handleFileSelect}
               accept="image/*,video/*"
             />
-            <Button 
-              size="icon" 
-              variant="ghost" 
-              disabled={disabled}
-              onClick={() => imageInputRef.current?.click()}
-              className={cn(isMobile && "h-8 w-8")}
-            >
-              <ImageIcon className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
-            </Button>
 
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button size="icon" variant="ghost" disabled={disabled} className={cn(isMobile && "h-8 w-8")}>
-                  <Smile className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-2">
-                <div className="grid grid-cols-6 gap-2">
-                  {emojis.map((emoji) => (
-                    <button
-                      key={emoji}
-                      onClick={() => setMessage(prev => prev + emoji)}
-                      className="text-2xl hover:bg-accent rounded p-1 transition-colors"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-            {!isMobile && (
-              <>
-                <Button size="icon" variant="ghost" disabled={disabled}>
-                  <AtSign className="h-5 w-5" />
-                </Button>
-                <Button 
-                  size="icon" 
-                  variant="ghost" 
-                  disabled={disabled}
-                  onClick={() => setShowCodeDialog(true)}
-                  title="分享代码"
-                >
-                  <Code2 className="h-5 w-5" />
-                </Button>
-              </>
-            )}
-            <div className="flex-1" />
-            <Button 
-              size="icon" 
-              variant="ghost" 
-              disabled={disabled}
-              onClick={() => setShowVoiceRecorder(true)}
-              className={cn(isMobile && "h-8 w-8")}
-            >
-              <Mic className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
-            </Button>
-          </div>
-
-          {/* Message input */}
-          <div className="flex items-end gap-2">
+            {/* 输入框 */}
             <Textarea
               ref={textareaRef}
               value={message}
@@ -362,17 +295,90 @@ export function MessageInput({
               onPaste={handlePaste}
               placeholder={t('typeMessage')}
               disabled={disabled}
-              className={cn("min-h-[44px] max-h-[200px] resize-none", isMobile && "text-base")}
+              className={cn("flex-1 min-h-[44px] max-h-[200px] resize-none", isMobile && "text-base")}
               rows={1}
             />
-            <Button
-              size="icon"
-              onClick={handleSend}
-              disabled={(!message.trim() && !selectedFile) || disabled || isSending}
-              className="shrink-0 h-11 w-11"
-            >
-              <Send className="h-5 w-5" />
-            </Button>
+
+            {/* 右侧工具栏 */}
+            <div className="flex items-center gap-1 shrink-0">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button size="icon" variant="ghost" disabled={disabled} className={cn(isMobile && "h-8 w-8")}>
+                    <Smile className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-2">
+                  <div className="grid grid-cols-6 gap-2">
+                    {emojis.map((emoji) => (
+                      <button
+                        key={emoji}
+                        onClick={() => setMessage(prev => prev + emoji)}
+                        className="text-2xl hover:bg-accent rounded p-1 transition-colors"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              {!isMobile && (
+                <Button size="icon" variant="ghost" disabled={disabled}>
+                  <AtSign className="h-5 w-5" />
+                </Button>
+              )}
+
+              <Button
+                size="icon"
+                variant="ghost"
+                disabled={disabled}
+                onClick={() => fileInputRef.current?.click()}
+                className={cn(isMobile && "h-8 w-8")}
+              >
+                <Paperclip className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
+              </Button>
+
+              <Button
+                size="icon"
+                variant="ghost"
+                disabled={disabled}
+                onClick={() => imageInputRef.current?.click()}
+                className={cn(isMobile && "h-8 w-8")}
+              >
+                <ImageIcon className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
+              </Button>
+
+              {!isMobile && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  disabled={disabled}
+                  onClick={() => setShowCodeDialog(true)}
+                  title="分享代码"
+                >
+                  <Code2 className="h-5 w-5" />
+                </Button>
+              )}
+
+              <Button
+                size="icon"
+                variant="ghost"
+                disabled={disabled}
+                onClick={() => setShowVoiceRecorder(true)}
+                className={cn(isMobile && "h-8 w-8")}
+              >
+                <Mic className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
+              </Button>
+
+              <Button
+                size="icon"
+                onClick={handleSend}
+                disabled={(!message.trim() && !selectedFile) || disabled || isSending}
+                className={cn("shrink-0", isMobile ? "h-9 w-9" : "h-10 w-10")}
+              >
+                <Send className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
+              </Button>
+            </div>
           </div>
 
           {!isMobile && (
@@ -389,7 +395,7 @@ export function MessageInput({
         onOpenChange={setShowVoiceRecorder}
         onSend={handleSendVoiceMessage}
       />
-      
+
       <CodeInputDialog
         open={showCodeDialog}
         onOpenChange={setShowCodeDialog}

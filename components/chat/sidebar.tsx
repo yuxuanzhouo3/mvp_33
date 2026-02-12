@@ -101,21 +101,21 @@ function ConversationItem({
           ref={containerRef}
           onClick={onSelect}
           className={cn(
-            'w-full flex items-start gap-3 rounded-lg p-3 text-left transition-colors hover:bg-accent',
+            'w-full flex items-start gap-3 rounded-lg p-3 text-left transition-colors hover:bg-accent/50',
             isActive && 'bg-accent',
             conversation.is_hidden && 'opacity-50'
           )}
         >
       <div className="relative shrink-0">
         {conversation.type === 'direct' ? (
-          <Avatar className="h-10 w-10">
+          <Avatar className="h-10 w-10 rounded-lg">
             <AvatarImage src={display.avatar || undefined} />
             <AvatarFallback name={display.name}>
               {display.name.split(' ').map(n => n[0]).join('')}
             </AvatarFallback>
           </Avatar>
         ) : (
-          <Avatar className="h-10 w-10">
+          <Avatar className="h-10 w-10 rounded-lg">
             <AvatarImage src={conversation.avatar_url || undefined} />
             <AvatarFallback className="bg-primary/10">
               {getConversationIcon(conversation.type, conversation.is_private)}
@@ -139,8 +139,8 @@ function ConversationItem({
               <Pin className="h-3 w-3 text-muted-foreground shrink-0" />
             )}
             <span
-              className="font-medium truncate min-w-0"
-              title={display.name} // 显示完整名称的提示
+              className="font-semibold text-sm truncate min-w-0"
+              title={display.name}
             >
               {display.name}
             </span>
@@ -151,12 +151,12 @@ function ConversationItem({
             </span>
           )}
         </div>
-        <p 
+        <p
           className={cn(
             "text-sm text-muted-foreground",
-            expanded 
-              ? "line-clamp-2" // 展开时最多显示2行，超出部分用省略号
-              : "truncate" // 收起时单行截断
+            expanded
+              ? "line-clamp-2"
+              : "truncate"
           )}
         >
           {getLastMessagePreview()}

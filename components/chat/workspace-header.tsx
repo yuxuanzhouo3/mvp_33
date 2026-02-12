@@ -676,34 +676,6 @@ export function WorkspaceHeader({ workspace, currentUser, totalUnreadCount: prop
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-
-          <div className="flex gap-1">
-            {navItems.map((item) => {
-              const Icon = item.icon
-              const isActive = pathname === item.path
-              const showUnreadBadge = item.path === '/chat' && totalUnreadCount > 0
-              return (
-                <Button
-                  key={item.path}
-                  variant={isActive ? 'secondary' : 'ghost'}
-                  size="sm"
-                  onClick={() => router.push(item.path)}
-                  className={cn('gap-2 relative', isActive && 'font-medium')}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                  {showUnreadBadge && (
-                    <Badge 
-                      variant="destructive" 
-                      className="absolute -top-1 -right-1 h-5 min-w-5 flex items-center justify-center px-1 text-xs"
-                    >
-                      {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
-                    </Badge>
-                  )}
-                </Button>
-              )
-            })}
-          </div>
         </div>
 
         <div className="flex items-center gap-2">
