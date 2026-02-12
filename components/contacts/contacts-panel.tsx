@@ -8,13 +8,15 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { User } from '@/lib/types'
-import { Search, UserPlus, Users, Star, Building2, MessageSquare, Phone, Video, ChevronUp, ChevronDown, Trash2 } from 'lucide-react'
+import { Search, UserPlus, Users, Star, Building2, MessageSquare, Phone, Video, ChevronUp, ChevronDown, Trash2, QrCode, Scan } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
 import { AddContactDialog } from './add-contact-dialog'
 import { ContactRequestsPanel } from './contact-requests-panel'
 import { ContactSkeleton } from './contact-skeleton'
+import { QRCodeDialog } from './qr-code-dialog'
+import { ScanQRDialog } from './scan-qr-dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -98,6 +100,8 @@ export function ContactsPanel({
     }
   }, [initialUserId, users, selectedUser])
   const [showAddContactDialog, setShowAddContactDialog] = useState(false)
+  const [showQRCodeDialog, setShowQRCodeDialog] = useState(false)
+  const [showScanQRDialog, setShowScanQRDialog] = useState(false)
   const [showScrollDownButton, setShowScrollDownButton] = useState(false)
   const [showScrollUpButton, setShowScrollUpButton] = useState(false)
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0)
@@ -372,16 +376,34 @@ export function ContactsPanel({
         <div className="border-b p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">{t('contacts')}</h2>
-            {(onAddContact || onAddManualContact) && (
-              <Button 
-                size="icon" 
+            <div className="flex items-center gap-1">
+              <Button
+                size="icon"
                 variant="ghost"
-                onClick={() => setShowAddContactDialog(true)}
-                title="Add Contact"
+                onClick={() => setShowQRCodeDialog(true)}
+                title={t('myQRCode')}
               >
-                <UserPlus className="h-5 w-5" />
+                <QrCode className="h-5 w-5" />
               </Button>
-            )}
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setShowScanQRDialog(true)}
+                title={t('scanQRCode')}
+              >
+                <Scan className="h-5 w-5" />
+              </Button>
+              {(onAddContact || onAddManualContact) && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => setShowAddContactDialog(true)}
+                  title="Add Contact"
+                >
+                  <UserPlus className="h-5 w-5" />
+                </Button>
+              )}
+            </div>
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -726,6 +748,22 @@ export function ContactsPanel({
           onAddManualContact={onAddManualContact}
         />
       )}
+
+      <QRCodeDialog
+        open={showQRCodeDialog}
+        onOpenChange={setShowQRCodeDialog}
+        currentUser={currentUser}
+      />
+
+      <ScanQRDialog
+        open={showScanQRDialog}
+        onOpenChange={setShowScanQRDialog}
+        onAddContact={(userId) => {
+          if (onAddContact) {
+            onAddContact(userId)
+          }
+        }}
+      />
 
       {/* Delete contact confirmation dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

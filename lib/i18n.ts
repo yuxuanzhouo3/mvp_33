@@ -201,7 +201,22 @@ export const translations = {
     // Delete contact
     deleteContact: 'Delete Contact',
     deleteContactDescription: 'Are you sure you want to remove {name} from your contacts? You will need to send a new friend request to add them back.',
-    
+
+    // QR Code
+    myQRCode: 'My QR Code',
+    scanQRCode: 'Scan QR Code',
+    scanToAddFriend: 'Scan this QR code to add me as a friend',
+    cameraPermissionDenied: 'Camera permission is required to scan QR codes',
+    invalidQRCode: 'This is not a valid OrbitChat QR code',
+    userNotFound: 'User not found or has been deactivated',
+    alreadyFriend: 'This user is already your friend',
+    crossRegionNotAllowed: 'Cannot add users from different regions',
+    networkError: 'Network error, please try again',
+    cameraError: 'Failed to access camera',
+    scanningQRCode: 'Scanning QR code...',
+    retry: 'Retry',
+    loading: 'Loading...',
+
     // File preview
     filePreview: 'File Preview',
     previewNotAvailable: 'Preview not available for this file type',
@@ -451,6 +466,41 @@ export const translations = {
     loadingConversations: '加载会话中...',
     refreshing: '刷新中...',
     requests: '请求',
+
+    // QR Code
+    myQRCode: '我的二维码',
+    scanQRCode: '扫一扫',
+    scanToAddFriend: '扫描此二维码添加我为好友',
+    cameraPermissionDenied: '需要摄像头权限才能扫描二维码',
+    invalidQRCode: '这不是有效的OrbitChat二维码',
+    userNotFound: '该用户不存在或已注销',
+    alreadyFriend: '该用户已经是您的好友',
+    crossRegionNotAllowed: '无法添加不同区域的用户',
+    networkError: '网络错误，请稍后重试',
+    cameraError: '无法访问摄像头',
+    scanningQRCode: '正在扫描二维码...',
+    retry: '重试',
+    loading: '加载中...',
+
+    // Delete contact
+    deleteContact: '删除联系人',
+    deleteContactDescription: '确定要将 {name} 从联系人中移除吗？您需要重新发送好友请求才能再次添加。',
+
+    // File preview
+    filePreview: '文件预览',
+    previewNotAvailable: '此文件类型无法预览',
+    downloadFile: '下载文件',
+
+    // Delete conversation
+    deleteConversation: '删除会话',
+    deleteConversationDescriptionDirect: '确定要删除此会话吗？',
+    deleteConversationDescriptionGroup: '确定要删除此会话吗？',
+
+    // Message status
+    noMessages: '暂无消息',
+    systemMessage: '系统消息',
+    addReaction: '添加表情',
+    pinned: '已置顶',
   }
 }
 
