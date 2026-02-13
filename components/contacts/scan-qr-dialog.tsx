@@ -8,7 +8,7 @@ import { User } from '@/lib/types'
 import { Html5Qrcode } from 'html5-qrcode'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
-import { Loader2, Camera, AlertCircle, UserPlus } from 'lucide-react'
+import { Loader2, Camera, AlertCircle, UserPlus, Image as ImageIcon } from 'lucide-react'
 
 interface ScanQRDialogProps {
   open: boolean
@@ -26,6 +26,7 @@ export function ScanQRDialog({ open, onOpenChange, onAddContact }: ScanQRDialogP
   const [loading, setLoading] = useState(false)
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const qrReaderRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const parseQRCode = (data: string): string | null => {
     const match = data.match(/orbitchat:\/\/add-friend\?userId=(.+)/)
@@ -113,6 +114,87 @@ export function ScanQRDialog({ open, onOpenChange, onAddContact }: ScanQRDialogP
     setScanning(false)
   }
 
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('[扫码] 开始处理选择的图片')
+    const file = e.target.files?.[0]
+    if (!file) {
+      console.log('[扫码] 未选择文件')
+      return
+    }
+
+    console.log('[扫码] 选择的文件:', file.name, file.type, file.size)
+
+    console.log('[扫码] 停止摄像头扫描...')
+    await stopScanning()
+    console.log('[扫码] 摄像头扫描已停止')
+
+    setError(null)
+
+    // 等待 DOM 元素完全就绪
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    try {
+      console.log('[扫码] 创建 Html5Qrcode 实例用于图片扫描')
+      const html5QrCode = new Html5Qrcode('qr-reader')
+      console.log('[扫码] Html5Qrcode 实例创建成功')
+
+      console.log('[扫码] 准备调用 scanFile 方法...')
+      console.log('[扫码] 文件详情:', { name: file.name, type: file.type, size: file.size })
+
+      const decodedText = await html5QrCode.scanFile(file, false)
+
+      // 扫描完成后设置 loading 状态
+      setLoading(true)
+
+      console.log('[扫码] scanFile 调用完成')
+      console.log('[扫码] 扫描成功，解码结果:', decodedText)
+
+      const userId = parseQRCode(decodedText)
+      console.log('[扫码] 解析用户ID:', userId)
+
+      if (!userId) {
+        console.error('[扫码] 无效的二维码格式')
+        setError(t('invalidQRCode'))
+        setLoading(false)
+        return
+      }
+
+      console.log('[扫码] 开始查询用户信息，userId:', userId)
+      const response = await fetch(`/api/users/${encodeURIComponent(userId)}`)
+      console.log('[扫码] API 响应状态:', response.status, response.statusText)
+
+      const data = await response.json()
+      console.log('[扫码] API 响应数据:', data)
+
+      if (!response.ok || !data.user) {
+        console.error('[扫码] 用户未找到')
+        setError(t('userNotFound'))
+        setLoading(false)
+        return
+      }
+
+      console.log('[扫码] 找到用户:', data.user)
+      setScannedUser(data.user)
+      console.log('[扫码] 用户信息已设置')
+    } catch (err: any) {
+      console.error('[扫码] 图片扫描失败')
+      console.error('[扫码] 错误类型:', err?.constructor?.name)
+      console.error('[扫码] 错误消息:', err?.message)
+      console.error('[扫码] 错误堆栈:', err?.stack)
+      console.error('[扫码] 完整错误对象:', err)
+      setError(t('invalidQRCode'))
+    } finally {
+      console.log('[扫码] 进入 finally 块')
+      setLoading(false)
+      console.log('[扫码] loading 已设置为 false')
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+        console.log('[扫码] 文件输入已清空')
+      }
+      console.log('[扫码] handleImageSelect 执行完成')
+    }
+  }
+
   const handleClose = async () => {
     await stopScanning()
     setError(null)
@@ -182,17 +264,41 @@ export function ScanQRDialog({ open, onOpenChange, onAddContact }: ScanQRDialogP
               </Button>
             </div>
           ) : (
-            <div className="w-full">
-              <div id="qr-reader" ref={qrReaderRef} className="w-full" />
+            <div className="flex flex-col gap-3 w-full">
+              <div id="qr-reader" ref={qrReaderRef} className="w-full min-h-[250px] flex items-center justify-center bg-muted/30 rounded-lg">
+                {!scanning && (
+                  <div className="text-sm text-muted-foreground">
+                    请选择扫描方式
+                  </div>
+                )}
+              </div>
               {scanning && (
-                <div className="flex items-center justify-center gap-2 mt-4 text-sm text-muted-foreground">
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                   <Camera className="h-4 w-4" />
                   <span>{t('scanningQRCode')}</span>
                 </div>
               )}
+              <div className="flex gap-2">
+                <Button onClick={startScanning} variant="outline" className="flex-1" disabled={scanning}>
+                  <Camera className="h-4 w-4 mr-2" />
+                  扫一扫
+                </Button>
+                <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="flex-1">
+                  <ImageIcon className="h-4 w-4 mr-2" />
+                  从相册选择
+                </Button>
+              </div>
             </div>
           )}
         </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageSelect}
+          className="hidden"
+        />
       </DialogContent>
     </Dialog>
   )

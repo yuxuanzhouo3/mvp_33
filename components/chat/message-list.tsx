@@ -992,7 +992,14 @@ export function MessageList({
 
                 )}
 
-
+                {/* 撤回消息显示为系统提示 */}
+                {message.is_recalled ? (
+                  <div className="flex justify-center my-2">
+                    <span className="text-xs text-muted-foreground">
+                      {isOwn ? '你撤回了一条消息' : `${displaySender?.full_name || '对方'}撤回了一条消息`}
+                    </span>
+                  </div>
+                ) : (
 
                 <div
                   className={cn(
@@ -1675,6 +1682,7 @@ export function MessageList({
                   </div>
 
                 </div>
+                )}
 
               </div>
 

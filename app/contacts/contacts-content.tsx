@@ -560,11 +560,14 @@ function ContactsPageContent() {
         status: response.status,
         data,
       })
+      console.log('[AddContact] 详细错误信息:', JSON.stringify(data, null, 2))
 
       if (!response.ok) {
         // Provide more user-friendly error messages（仅用页面内 toast 提示，不再使用浏览器 alert）
         let description = data.error || 'Failed to send contact request'
-        if (data.errorType === 'sent_pending') {
+        if (data.error === 'Cannot send request to yourself') {
+          description = '不能添加自己为好友，请扫描其他用户的二维码'
+        } else if (data.errorType === 'sent_pending') {
           description = 'You have already sent a contact request to this user. Please check the "Requests" tab for pending requests.'
         } else if (data.errorType === 'received_pending') {
           description = data.error || 'This user has already sent you a contact request. Please check the "Requests" tab to accept it.'
