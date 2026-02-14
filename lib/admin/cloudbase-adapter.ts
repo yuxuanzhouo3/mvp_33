@@ -1295,10 +1295,60 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
    * 删除广告
    */
   async deleteAd(id: string): Promise<void> {
+    console.log('[CloudBaseAdapter] 删除广告:', id);
     try {
       await this.ensureInitialized();
       await this.db.collection("advertisements").doc(id).remove();
+      console.log('[CloudBaseAdapter] 广告删除成功');
     } catch (error: any) {
+      console.error('[CloudBaseAdapter] 删除广告失败:', error);
+      throw handleDatabaseError(error);
+    }
+  }
+
+  /**
+   * 切换广告状态
+   */
+  async toggleAdStatus(id: string): Promise<Advertisement> {
+    console.log('[CloudBaseAdapter] 切换广告状态:', id);
+    try {
+      await this.ensureInitialized();
+      const ad = await this.getAdById(id);
+      if (!ad) {
+        throw new Error('广告不存在');
+      }
+      const newStatus = ad.status === 'active' ? 'inactive' : 'active';
+      return this.updateAd(id, { status: newStatus });
+    } catch (error: any) {
+      console.error('[CloudBaseAdapter] 切换广告状态失败:', error);
+      throw handleDatabaseError(error);
+    }
+  }
+
+  /**
+   * 获取广告统计
+   */
+  async getAdStats(): Promise<{ total: number; active: number; inactive: number; byType: { image: number; video: number } }> {
+    console.log('[CloudBaseAdapter] 获取广告统计');
+    try {
+      await this.ensureInitialized();
+      const result = await this.db.collection("advertisements").get();
+      const data = result.data || [];
+
+      const stats = {
+        total: data.length,
+        active: data.filter((ad: any) => ad.status === 'active').length,
+        inactive: data.filter((ad: any) => ad.status === 'inactive').length,
+        byType: {
+          image: data.filter((ad: any) => ad.type === 'image').length,
+          video: data.filter((ad: any) => ad.type === 'video').length,
+        },
+      };
+
+      console.log('[CloudBaseAdapter] 广告统计:', stats);
+      return stats;
+    } catch (error: any) {
+      console.error('[CloudBaseAdapter] 获取广告统计失败:', error);
       throw handleDatabaseError(error);
     }
   }
@@ -1350,14 +1400,18 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
    * 列出社交链接
    */
   async listSocialLinks(): Promise<SocialLink[]> {
+    console.log('[CloudBaseAdapter] 获取社交链接列表');
     try {
+      await this.ensureInitialized();
       const result = await this.db
         .collection("social_links")
         .orderBy("order", "asc")
         .get();
 
+      console.log('[CloudBaseAdapter] 获取到', result.data?.length || 0, '个社交链接');
       return result.data.map((doc: any) => this.dbToSocialLink(doc));
     } catch (error: any) {
+      console.error('[CloudBaseAdapter] 获取社交链接失败:', error);
       throw handleDatabaseError(error);
     }
   }
@@ -1420,9 +1474,33 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
    * 删除社交链接
    */
   async deleteSocialLink(id: string): Promise<void> {
+    console.log('[CloudBaseAdapter] 删除社交链接:', id);
     try {
+      await this.ensureInitialized();
       await this.db.collection("social_links").doc(id).remove();
+      console.log('[CloudBaseAdapter] 社交链接删除成功');
     } catch (error: any) {
+      console.error('[CloudBaseAdapter] 删除社交链接失败:', error);
+      throw handleDatabaseError(error);
+    }
+  }
+
+  /**
+   * 批量更新社交链接排序
+   */
+  async updateSocialLinksOrder(updates: Array<{ id: string; order: number }>): Promise<void> {
+    console.log('[CloudBaseAdapter] 更新社交链接排序:', updates.length, '个');
+    try {
+      await this.ensureInitialized();
+      for (const update of updates) {
+        await this.db
+          .collection("social_links")
+          .doc(update.id)
+          .update({ order: update.order, updated_at: new Date().toISOString() });
+      }
+      console.log('[CloudBaseAdapter] 排序更新成功');
+    } catch (error: any) {
+      console.error('[CloudBaseAdapter] 更新排序失败:', error);
       throw handleDatabaseError(error);
     }
   }
@@ -1661,38 +1739,29 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
    * 删除版本发布
    */
   async deleteRelease(id: string): Promise<void> {
+    console.log('[CloudBaseAdapter] 删除版本发布:', id);
     await this.ensureInitialized();
     try {
-      console.log(`[deleteRelease] 删除版本 ID: ${id}`);
-
-      // 先验证文档是否存在
       const existing = await this.db.collection("releases").doc(id).get();
       if (!existing.data || existing.data.length === 0) {
-        console.warn(`[deleteRelease] 版本不存在: ${id}`);
-        throw new DatabaseError(`版本不存在: ${id}`, "DOC_NOT_FOUND");
+        console.warn('[CloudBaseAdapter] 版本不存在:', id);
+        throw new Error(`版本不存在: ${id}`);
       }
 
-      // 删除文档
-      const result = await this.db.collection("releases").doc(id).remove();
-
-      console.log(`[deleteRelease] 删除结果:`, {
-        id,
-        requestId: result.requestId,
-        removed: result.removed
-      });
-
-      // 验证删除是否成功
-      const verify = await this.db.collection("releases").doc(id).get();
-      if (verify.data && verify.data.length > 0) {
-        console.error(`[deleteRelease] 删除后验证失败，文档仍存在: ${id}`);
-        throw new DatabaseError("删除失败：文档仍然存在", "DELETE_FAILED");
-      }
-
-      console.log(`[deleteRelease] 成功删除版本: ${id}`);
+      await this.db.collection("releases").doc(id).remove();
+      console.log('[CloudBaseAdapter] 版本发布删除成功');
     } catch (error: any) {
-      console.error(`[deleteRelease] 删除版本失败:`, { id, error: error.message, code: error.code });
+      console.error('[CloudBaseAdapter] 删除版本发布失败:', error);
       throw handleDatabaseError(error);
     }
+  }
+
+  /**
+   * 切换发布版本状态
+   */
+  async toggleReleaseStatus(id: string, isActive: boolean): Promise<Release> {
+    console.log('[CloudBaseAdapter] 切换发布版本状态:', id, isActive);
+    return this.updateRelease(id, { status: isActive ? 'published' : 'draft' });
   }
 
   /**
@@ -1726,6 +1795,139 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
     } catch (error) {
       console.error("CloudBase 健康检查失败:", error);
       return false;
+    }
+  }
+
+  // ==================== 文件管理操作 ====================
+
+  /**
+   * 获取存储文件列表
+   */
+  async listStorageFiles(): Promise<Array<{ name: string; url: string; size?: number; lastModified?: string; source: string }>> {
+    console.log('[CloudBaseAdapter] 获取存储文件列表');
+    try {
+      await this.ensureInitialized();
+      const app = this.connector.getApp();
+
+      // CloudBase Storage API 列出文件
+      const result = await app.listFiles({
+        prefix: '',
+        maxKeys: 1000,
+      });
+
+      const files = (result.fileList || []).map((file: any) => ({
+        name: file.Key,
+        url: file.DownloadUrl || '',
+        size: file.Size,
+        lastModified: file.LastModified,
+        source: 'cloudbase' as const,
+      }));
+
+      console.log('[CloudBaseAdapter] 获取到', files.length, '个文件');
+      return files;
+    } catch (error: any) {
+      console.error('[CloudBaseAdapter] 获取文件列表失败:', error);
+      throw handleDatabaseError(error);
+    }
+  }
+
+  /**
+   * 删除存储文件
+   */
+  async deleteStorageFile(fileName: string, fileId?: string, adId?: string): Promise<void> {
+    console.log('[CloudBaseAdapter] 删除存储文件:', fileName, { fileId, adId });
+    try {
+      await this.ensureInitialized();
+      const app = this.connector.getApp();
+
+      // 删除文件
+      await app.deleteFile({
+        fileList: [fileId || fileName],
+      });
+
+      // 如果提供了 adId，同时删除广告记录
+      if (adId) {
+        await this.deleteAd(adId);
+        console.log('[CloudBaseAdapter] 已删除关联的广告记录:', adId);
+      }
+
+      console.log('[CloudBaseAdapter] 文件删除成功');
+    } catch (error: any) {
+      console.error('[CloudBaseAdapter] 删除文件失败:', error);
+      throw handleDatabaseError(error);
+    }
+  }
+
+  /**
+   * 重命名存储文件
+   */
+  async renameStorageFile(oldName: string, newName: string): Promise<void> {
+    console.log('[CloudBaseAdapter] 重命名文件:', oldName, '->', newName);
+    try {
+      await this.ensureInitialized();
+      const app = this.connector.getApp();
+
+      // CloudBase 不支持直接重命名，需要下载后重新上传
+      // 1. 下载文件
+      const downloadResult = await this.downloadStorageFile(oldName);
+
+      // 2. 上传新文件
+      const buffer = Buffer.from(downloadResult.data, 'base64');
+      await app.uploadFile({
+        cloudPath: newName,
+        fileContent: buffer,
+      });
+
+      // 3. 删除旧文件
+      await app.deleteFile({
+        fileList: [oldName],
+      });
+
+      console.log('[CloudBaseAdapter] 文件重命名成功');
+    } catch (error: any) {
+      console.error('[CloudBaseAdapter] 重命名文件失败:', error);
+      throw handleDatabaseError(error);
+    }
+  }
+
+  /**
+   * 下载存储文件
+   */
+  async downloadStorageFile(fileName: string, fileId?: string): Promise<{ data: string; contentType: string; fileName: string }> {
+    console.log('[CloudBaseAdapter] 下载文件:', fileName);
+    try {
+      await this.ensureInitialized();
+      const app = this.connector.getApp();
+
+      // 获取临时下载链接
+      const result = await app.getTempFileURL({
+        fileList: [fileId || fileName],
+      });
+
+      if (!result.fileList || result.fileList.length === 0) {
+        throw new Error('获取文件下载链接失败');
+      }
+
+      const downloadUrl = result.fileList[0].tempFileURL;
+
+      // 下载文件内容
+      const response = await fetch(downloadUrl);
+      if (!response.ok) {
+        throw new Error(`下载文件失败: ${response.statusText}`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const base64 = Buffer.from(arrayBuffer).toString('base64');
+
+      console.log('[CloudBaseAdapter] 文件下载成功');
+      return {
+        data: base64,
+        contentType: response.headers.get('content-type') || 'application/octet-stream',
+        fileName: fileName,
+      };
+    } catch (error: any) {
+      console.error('[CloudBaseAdapter] 下载文件失败:', error);
+      throw handleDatabaseError(error);
     }
   }
 }
