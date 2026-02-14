@@ -37,10 +37,8 @@ import type {
   SocialLink,
   CreateSocialLinkData,
   UpdateSocialLinkData,
-  Release,
-  ReleaseFilters,
+  AppRelease,
   CreateReleaseData,
-  UpdateReleaseData,
 } from "./types";
 import { handleDatabaseError, toISOString } from "./database";
 
@@ -1395,205 +1393,122 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
   // ==================== 版本发布管理操作 ====================
 
   /**
-   * 根据 ID 获取版本发布
+   * 获取所有发布版本
    */
-  async getReleaseById(id: string): Promise<Release | null> {
-    try {
-      const result = await this.supabase
-        .from("releases")
-        .select("*")
-        .eq("id", id)
-        .single();
+  async listReleases(): Promise<AppRelease[]> {
+    console.log('[SupabaseAdapter] 获取发布版本列表');
 
-      if (result.error || !result.data) {
-        return null;
-      }
-      return this.dbToRelease(result.data);
-    } catch (error: any) {
-      throw handleDatabaseError(error);
+    const { data, error } = await this.supabase
+      .from('releases')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[SupabaseAdapter] 获取发布版本失败:', error);
+      throw new Error(`获取发布版本失败: ${error.message}`);
     }
+
+    console.log('[SupabaseAdapter] 获取到', data?.length || 0, '个版本');
+    return data || [];
   }
 
   /**
-   * 列出版本发布
+   * 根据ID获取发布版本
    */
-  async listReleases(filters?: ReleaseFilters): Promise<Release[]> {
-    let query = this.supabase
-      .from("releases")
-      .select("*");
+  async getReleaseById(id: string): Promise<AppRelease | null> {
+    const { data, error } = await this.supabase
+      .from('releases')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    if (filters?.status) {
-      query = query.eq("status", filters.status);
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      throw new Error(`获取发布版本失败: ${error.message}`);
     }
 
-    if (filters?.search) {
-      query = query.or(`title.ilike.%${filters.search}%,version.ilike.%${filters.search}%`);
-    }
-
-    if (filters?.start_date) {
-      query = query.gte("created_at", filters.start_date);
-    }
-
-    if (filters?.end_date) {
-      query = query.lte("created_at", filters.end_date);
-    }
-
-    query = query.order("created_at", { ascending: false });
-
-    if (filters?.limit) {
-      query = query.limit(filters.limit);
-    }
-
-    if (filters?.offset) {
-      query = query.range(filters.offset, (filters.offset || 0) + (filters.limit || 50) - 1);
-    }
-
-    try {
-      const result = await query;
-      if (result.error) throw result.error;
-      return (result.data || []).map((doc: any) => this.dbToRelease(doc));
-    } catch (error: any) {
-      throw handleDatabaseError(error);
-    }
+    return data;
   }
 
   /**
-   * 统计版本发布数量
+   * 创建新的发布版本
    */
-  async countReleases(filters?: ReleaseFilters): Promise<number> {
-    let query = this.supabase
-      .from("releases")
-      .select("*", { count: "exact", head: true });
+  async createRelease(data: CreateReleaseData): Promise<AppRelease> {
+    console.log('[SupabaseAdapter] 创建发布版本:', data.version);
 
-    if (filters?.status) {
-      query = query.eq("status", filters.status);
+    const { data: result, error } = await this.supabase
+      .from('releases')
+      .insert({
+        version: data.version,
+        platform: data.platform,
+        variant: data.variant,
+        file_url: data.file_url,
+        file_name: data.file_name,
+        file_size: data.file_size,
+        release_notes: data.release_notes,
+        is_active: data.is_active,
+        is_mandatory: data.is_mandatory,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[SupabaseAdapter] 创建发布版本失败:', error);
+      throw new Error(`创建发布版本失败: ${error.message}`);
     }
 
-    if (filters?.search) {
-      query = query.or(`title.ilike.%${filters.search}%,version.ilike.%${filters.search}%`);
-    }
-
-    if (filters?.start_date) {
-      query = query.gte("created_at", filters.start_date);
-    }
-
-    if (filters?.end_date) {
-      query = query.lte("created_at", filters.end_date);
-    }
-
-    try {
-      const result = await query;
-      if (result.error) throw result.error;
-      return result.count || 0;
-    } catch (error: any) {
-      throw handleDatabaseError(error);
-    }
+    console.log('[SupabaseAdapter] 发布版本创建成功:', result.id);
+    return result;
   }
 
   /**
-   * 创建版本发布
+   * 更新发布版本
    */
-  async createRelease(data: CreateReleaseData): Promise<Release> {
-    const now = new Date().toISOString();
+  async updateRelease(id: string, data: Partial<CreateReleaseData>): Promise<AppRelease> {
+    console.log('[SupabaseAdapter] 更新发布版本:', id);
 
-    const doc: any = {
-      version: data.version,
-      title: data.title,
-      description: data.description,
-      status: data.status ?? "draft",
-      releaseNotes: data.releaseNotes,
-      fileUrl: data.fileUrl,
-      created_at: now,
-      updated_at: now,
-    };
+    const { data: result, error } = await this.supabase
+      .from('releases')
+      .update(data)
+      .eq('id', id)
+      .select()
+      .single();
 
-    if (data.status === "published") {
-      doc.published_at = now;
+    if (error) {
+      console.error('[SupabaseAdapter] 更新发布版本失败:', error);
+      throw new Error(`更新发布版本失败: ${error.message}`);
     }
 
-    try {
-      const result = await this.supabase
-        .from("releases")
-        .insert(doc)
-        .select()
-        .single();
-
-      if (result.error) throw result.error;
-      return this.dbToRelease(result.data);
-    } catch (error: any) {
-      throw handleDatabaseError(error);
-    }
+    console.log('[SupabaseAdapter] 发布版本更新成功');
+    return result;
   }
 
   /**
-   * 更新版本发布
-   */
-  async updateRelease(id: string, data: UpdateReleaseData): Promise<Release> {
-    const update: any = {
-      updated_at: new Date().toISOString(),
-    };
-
-    if (data.version !== undefined) update.version = data.version;
-    if (data.title !== undefined) update.title = data.title;
-    if (data.description !== undefined) update.description = data.description;
-    if (data.status !== undefined) {
-      update.status = data.status;
-      // 如果状态从未发布变为已发布，设置发布时间
-      if (data.status === "published") {
-        update.published_at = new Date().toISOString();
-      }
-    }
-    if (data.releaseNotes !== undefined) update.releaseNotes = data.releaseNotes;
-    if (data.fileUrl !== undefined) update.fileUrl = data.fileUrl;
-    if (data.published_at !== undefined) update.published_at = data.published_at;
-
-    try {
-      const result = await this.supabase
-        .from("releases")
-        .update(update)
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (result.error) throw result.error;
-      return this.dbToRelease(result.data);
-    } catch (error: any) {
-      throw handleDatabaseError(error);
-    }
-  }
-
-  /**
-   * 删除版本发布
+   * 删除发布版本
    */
   async deleteRelease(id: string): Promise<void> {
-    try {
-      const result = await this.supabase
-        .from("releases")
-        .delete()
-        .eq("id", id);
+    console.log('[SupabaseAdapter] 删除发布版本:', id);
 
-      if (result.error) throw result.error;
-    } catch (error: any) {
-      throw handleDatabaseError(error);
+    const { error } = await this.supabase
+      .from('releases')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('[SupabaseAdapter] 删除发布版本失败:', error);
+      throw new Error(`删除发布版本失败: ${error.message}`);
     }
+
+    console.log('[SupabaseAdapter] 发布版本删除成功');
   }
 
   /**
-   * 辅助方法：从数据库格式转换为 Release
+   * 切换发布版本状态
    */
-  private dbToRelease(doc: any): Release {
-    return {
-      id: doc.id,
-      version: doc.version,
-      title: doc.title,
-      description: doc.description,
-      status: doc.status || "draft",
-      releaseNotes: doc.releaseNotes,
-      fileUrl: doc.fileUrl,
-      created_at: doc.created_at,
-      updated_at: doc.updated_at,
-      published_at: doc.published_at,
-    };
+  async toggleReleaseStatus(id: string, isActive: boolean): Promise<AppRelease> {
+    console.log('[SupabaseAdapter] 切换发布版本状态:', id, isActive);
+
+    return this.updateRelease(id, { is_active: isActive });
   }
 
   // ==================== 健康检查 ====================
