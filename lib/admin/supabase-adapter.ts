@@ -39,6 +39,7 @@ import type {
   UpdateSocialLinkData,
   AppRelease,
   CreateReleaseData,
+  StorageFile,
 } from "./types";
 import { handleDatabaseError, toISOString } from "./database";
 
@@ -1528,5 +1529,100 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
       console.error("Supabase 健康检查失败:", error);
       return false;
     }
+  }
+
+  // ==================== 文件管理操作 ====================
+
+  /**
+   * 获取存储文件列表
+   */
+  async listStorageFiles(): Promise<StorageFile[]> {
+    console.log('[SupabaseAdapter] 获取存储文件列表');
+
+    const { data, error } = await this.supabase
+      .storage
+      .from('admin-files')
+      .list();
+
+    if (error) {
+      console.error('[SupabaseAdapter] 获取文件列表失败:', error);
+      throw new Error(`获取文件列表失败: ${error.message}`);
+    }
+
+    const files: StorageFile[] = (data || []).map(file => ({
+      name: file.name,
+      url: this.supabase.storage.from('admin-files').getPublicUrl(file.name).data.publicUrl,
+      size: file.metadata?.size,
+      lastModified: file.metadata?.lastModified || file.created_at,
+      source: 'supabase' as const,
+    }));
+
+    console.log('[SupabaseAdapter] 获取到', files.length, '个文件');
+    return files;
+  }
+
+  /**
+   * 删除存储文件
+   */
+  async deleteStorageFile(fileName: string): Promise<void> {
+    console.log('[SupabaseAdapter] 删除存储文件:', fileName);
+
+    const { error } = await this.supabase
+      .storage
+      .from('admin-files')
+      .remove([fileName]);
+
+    if (error) {
+      console.error('[SupabaseAdapter] 删除文件失败:', error);
+      throw new Error(`删除文件失败: ${error.message}`);
+    }
+
+    console.log('[SupabaseAdapter] 文件删除成功');
+  }
+
+  /**
+   * 重命名存储文件
+   */
+  async renameStorageFile(oldName: string, newName: string): Promise<void> {
+    console.log('[SupabaseAdapter] 重命名文件:', oldName, '->', newName);
+
+    const { error } = await this.supabase
+      .storage
+      .from('admin-files')
+      .move(oldName, newName);
+
+    if (error) {
+      console.error('[SupabaseAdapter] 重命名文件失败:', error);
+      throw new Error(`重命名文件失败: ${error.message}`);
+    }
+
+    console.log('[SupabaseAdapter] 文件重命名成功');
+  }
+
+  /**
+   * 下载存储文件
+   */
+  async downloadStorageFile(fileName: string): Promise<{ data: string; contentType: string; fileName: string }> {
+    console.log('[SupabaseAdapter] 下载文件:', fileName);
+
+    const { data, error } = await this.supabase
+      .storage
+      .from('admin-files')
+      .download(fileName);
+
+    if (error) {
+      console.error('[SupabaseAdapter] 下载文件失败:', error);
+      throw new Error(`下载文件失败: ${error.message}`);
+    }
+
+    const arrayBuffer = await data.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
+
+    console.log('[SupabaseAdapter] 文件下载成功');
+    return {
+      data: base64,
+      contentType: data.type,
+      fileName: fileName,
+    };
   }
 }
