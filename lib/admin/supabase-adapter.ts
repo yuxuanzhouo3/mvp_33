@@ -632,9 +632,9 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
    */
   async getUserByUsername(username: string): Promise<User | null> {
     // Supabase 用户在 auth.users 表中，这里我们查询扩展的用户信息表
-    // profiles 表使用 email 作为主要标识
+    // users 表使用 email 作为主要标识
     const result = await this.supabase
-      .from("profiles")
+      .from("users")
       .select("*")
       .eq("email", username)
       .single();
@@ -651,7 +651,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
    */
   async getUserById(id: string): Promise<User | null> {
     const result = await this.supabase
-      .from("profiles")
+      .from("users")
       .select("*")
       .eq("id", id)
       .single();
@@ -667,15 +667,15 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
    * 列出普通用户
    */
   async listUsers(filters?: UserFilters): Promise<User[]> {
-    let query = this.supabase.from("profiles").select("*");
+    let query = this.supabase.from("users").select("*");
 
     if (filters?.status) {
-      // profiles 表可能没有 status 字段，暂时跳过
+      // users 表可能没有 status 字段，暂时跳过
       // query = query.eq("status", filters.status);
     }
 
     if (filters?.subscription_plan) {
-      // profiles 表可能没有 subscription_plan 字段，暂时跳过
+      // users 表可能没有 subscription_plan 字段，暂时跳过
       // query = query.eq("subscription_plan", filters.subscription_plan);
     }
 
@@ -711,7 +711,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
 
     if (authError) {
       console.error('Failed to fetch auth users:', authError);
-      // 如果获取失败，仍然返回 profiles 数据，但订阅信息会是默认值
+      // 如果获取失败，仍然返回 users 数据，但订阅信息会是默认值
       return result.data.map((doc: any) => this.dbToUser(doc));
     }
 
@@ -721,7 +721,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
       authMetadataMap.set(authUser.id, authUser.user_metadata || {});
     });
 
-    // 合并 profiles 数据和 auth metadata
+    // 合并 users 数据和 auth metadata
     return result.data.map((doc: any) => this.dbToUser(doc, authMetadataMap.get(doc.id)));
   }
 
@@ -729,15 +729,15 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
    * 统计普通用户数量
    */
   async countUsers(filters?: UserFilters): Promise<number> {
-    let query = this.supabase.from("profiles").select("*", { count: "exact", head: true });
+    let query = this.supabase.from("users").select("*", { count: "exact", head: true });
 
     if (filters?.status) {
-      // profiles 表可能没有 status 字段，暂时跳过
+      // users 表可能没有 status 字段，暂时跳过
       // query = query.eq("status", filters.status);
     }
 
     if (filters?.subscription_plan) {
-      // profiles 表可能没有 subscription_plan 字段，暂时跳过
+      // users 表可能没有 subscription_plan 字段，暂时跳过
       // query = query.eq("subscription_plan", filters.subscription_plan);
     }
 
@@ -769,17 +769,17 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
       updated_at: new Date().toISOString(),
     };
 
-    // 只更新 profiles 表中实际存在的字段
+    // 只更新 users 表中实际存在的字段
     if (updates.name !== undefined) data.name = updates.name;
     if (updates.email !== undefined) data.email = updates.email;
     if (updates.avatar !== undefined) data.avatar = updates.avatar;
     if (updates.region !== undefined) data.region = updates.region;
 
-    // 注意: subscription_plan, pro_expires_at, status 等字段不在 profiles 表中
+    // 注意: subscription_plan, pro_expires_at, status 等字段不在 users 表中
     // 这些字段在 dbToUser() 中使用默认值
 
     const result = await this.supabase
-      .from("profiles")
+      .from("users")
       .update(data)
       .eq("id", id)
       .select()
@@ -797,7 +797,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
    */
   async deleteUser(id: string): Promise<void> {
     const result = await this.supabase
-      .from("profiles")
+      .from("users")
       .delete()
       .eq("id", id);
 
@@ -815,10 +815,10 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
       email: doc.email || "",
       name: doc.name || "",
       avatar: doc.avatar,
-      role: "free", // profiles 表默认没有 role 字段
+      role: "free", // users 表默认没有 role 字段
       subscription_plan: authMetadata?.subscription_plan || "free", // 从 auth metadata 读取订阅信息
       region: doc.region || "US",
-      status: "active", // profiles 表默认没有 status 字段
+      status: "active", // users 表默认没有 status 字段
       created_at: doc.created_at,
       last_login_at: doc.last_login_at,
       pro_expires_at: doc.plan_exp || doc.pro_expires_at,
@@ -952,7 +952,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
    */
   async getPaymentById(id: string): Promise<Payment | null> {
     const result = await this.supabase
-      .from("payments")
+      .from("orders")
       .select("*")
       .eq("id", id)
       .single();
@@ -968,7 +968,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
    * 列出支付记录
    */
   async listPayments(filters?: PaymentFilters): Promise<Payment[]> {
-    let query = this.supabase.from("payments").select("*");
+    let query = this.supabase.from("orders").select("*");
 
     // 国际版只查询 stripe 和 paypal
     query = query.in("method", ["stripe", "paypal"]);
@@ -1018,7 +1018,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
    * 统计支付记录数量
    */
   async countPayments(filters?: PaymentFilters): Promise<number> {
-    let query = this.supabase.from("payments").select("*", { count: "exact", head: true });
+    let query = this.supabase.from("orders").select("*", { count: "exact", head: true });
 
     // 国际版只查询 stripe 和 paypal
     query = query.in("method", ["stripe", "paypal"]);

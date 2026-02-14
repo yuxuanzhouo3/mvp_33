@@ -966,7 +966,7 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
   async getPaymentById(id: string): Promise<Payment | null> {
     await this.ensureInitialized();
     try {
-      const result = await this.db.collection("payments").doc(id).get();
+      const result = await this.db.collection("orders").doc(id).get();
       if (!result.data || result.data.length === 0) {
         return null;
       }
@@ -1015,7 +1015,7 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
       }
     }
 
-    let query = this.db.collection("payments");
+    let query = this.db.collection("orders");
 
     if (Object.keys(where).length > 0) {
       query = query.where(where);
@@ -1075,7 +1075,7 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
     }
 
     try {
-      const result = await this.db.collection("payments").where(where).count();
+      const result = await this.db.collection("orders").where(where).count();
       return result.total;
     } catch (error: any) {
       throw handleDatabaseError(error);
