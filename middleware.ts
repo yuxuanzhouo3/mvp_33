@@ -26,6 +26,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // 管理后台路由保护
+  if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
+    const adminSession = request.cookies.get("admin_session");
+    if (!adminSession) {
+      return NextResponse.redirect(new URL("/admin/login", request.url));
+    }
+  }
+
   // 初始化响应对象
   let supabaseResponse = NextResponse.next({
     request,
