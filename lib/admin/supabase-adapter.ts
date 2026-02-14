@@ -1297,138 +1297,139 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
   // ==================== 社交链接管理操作 ====================
 
   /**
-   * 根据 ID 获取社交链接
-   */
-  async getSocialLinkById(id: string): Promise<SocialLink | null> {
-    try {
-      const result = await this.supabase
-        .from("social_links")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (result.error || !result.data) {
-        return null;
-      }
-      return this.dbToSocialLink(result.data);
-    } catch (error: any) {
-      throw handleDatabaseError(error);
-    }
-  }
-
-  /**
    * 列出社交链接
    */
   async listSocialLinks(): Promise<SocialLink[]> {
-    try {
-      const result = await this.supabase
-        .from("social_links")
-        .select("*")
-        .order("sort_order", { ascending: true });
+    console.log('[SupabaseAdapter] 获取社交链接列表');
 
-      if (result.error) throw result.error;
-      return (result.data || []).map((doc: any) => this.dbToSocialLink(doc));
-    } catch (error: any) {
-      throw handleDatabaseError(error);
+    const { data, error } = await this.supabase
+      .from('social_links')
+      .select('*')
+      .order('order', { ascending: true });
+
+    if (error) {
+      console.error('[SupabaseAdapter] 获取社交链接失败:', error);
+      throw new Error(`获取社交链接失败: ${error.message}`);
     }
+
+    console.log('[SupabaseAdapter] 获取到', data?.length || 0, '个社交链接');
+    return data || [];
+  }
+
+  /**
+   * 根据 ID 获取社交链接
+   */
+  async getSocialLinkById(id: string): Promise<SocialLink | null> {
+    console.log('[SupabaseAdapter] 获取社交链接:', id);
+
+    const { data, error } = await this.supabase
+      .from('social_links')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        console.log('[SupabaseAdapter] 社交链接不存在:', id);
+        return null;
+      }
+      console.error('[SupabaseAdapter] 获取社交链接失败:', error);
+      throw new Error(`获取社交链接失败: ${error.message}`);
+    }
+
+    return data;
   }
 
   /**
    * 创建社交链接
    */
   async createSocialLink(data: CreateSocialLinkData): Promise<SocialLink> {
-    const now = new Date().toISOString();
+    console.log('[SupabaseAdapter] 创建社交链接:', data);
 
-    // 获取当前最大 sort_order 值
-    const existing = await this.listSocialLinks();
-    const maxOrder = existing.length > 0
-      ? Math.max(...existing.map((link) => link.order))
-      : 0;
+    const { data: result, error } = await this.supabase
+      .from('social_links')
+      .insert({
+        icon: data.icon,
+        title: data.title,
+        description: data.description,
+        url: data.url,
+        order: data.order,
+      })
+      .select()
+      .single();
 
-    const doc: any = {
-      icon_url: data.icon,
-      title: data.title,
-      description: data.description,
-      target_url: data.url,
-      sort_order: data.order ?? maxOrder + 1,
-      is_active: true,
-      created_at: now,
-      updated_at: now,
-    };
-
-    try {
-      const result = await this.supabase
-        .from("social_links")
-        .insert(doc)
-        .select()
-        .single();
-
-      if (result.error) throw result.error;
-      return this.dbToSocialLink(result.data);
-    } catch (error: any) {
-      throw handleDatabaseError(error);
+    if (error) {
+      console.error('[SupabaseAdapter] 创建社交链接失败:', error);
+      throw new Error(`创建社交链接失败: ${error.message}`);
     }
+
+    console.log('[SupabaseAdapter] 社交链接创建成功:', result.id);
+    return result;
   }
 
   /**
    * 更新社交链接
    */
   async updateSocialLink(id: string, data: UpdateSocialLinkData): Promise<SocialLink> {
-    const update: any = {
-      updated_at: new Date().toISOString(),
-    };
+    console.log('[SupabaseAdapter] 更新社交链接:', id, data);
 
-    if (data.icon !== undefined) update.icon_url = data.icon;
-    if (data.title !== undefined) update.title = data.title;
-    if (data.description !== undefined) update.description = data.description;
-    if (data.url !== undefined) update.target_url = data.url;
-    if (data.order !== undefined) update.sort_order = data.order;
+    const { data: result, error } = await this.supabase
+      .from('social_links')
+      .update({
+        ...data,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
 
-    try {
-      const result = await this.supabase
-        .from("social_links")
-        .update(update)
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (result.error) throw result.error;
-      return this.dbToSocialLink(result.data);
-    } catch (error: any) {
-      throw handleDatabaseError(error);
+    if (error) {
+      console.error('[SupabaseAdapter] 更新社交链接失败:', error);
+      throw new Error(`更新社交链接失败: ${error.message}`);
     }
+
+    console.log('[SupabaseAdapter] 社交链接更新成功');
+    return result;
   }
 
   /**
    * 删除社交链接
    */
   async deleteSocialLink(id: string): Promise<void> {
-    try {
-      const result = await this.supabase
-        .from("social_links")
-        .delete()
-        .eq("id", id);
+    console.log('[SupabaseAdapter] 删除社交链接:', id);
 
-      if (result.error) throw result.error;
-    } catch (error: any) {
-      throw handleDatabaseError(error);
+    const { error } = await this.supabase
+      .from('social_links')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('[SupabaseAdapter] 删除社交链接失败:', error);
+      throw new Error(`删除社交链接失败: ${error.message}`);
     }
+
+    console.log('[SupabaseAdapter] 社交链接删除成功');
   }
 
   /**
-   * 辅助方法：从数据库格式转换为 SocialLink
+   * 批量更新社交链接排序
    */
-  private dbToSocialLink(doc: any): SocialLink {
-    return {
-      id: doc.id,
-      icon: doc.icon_url,
-      title: doc.title,
-      description: doc.description,
-      url: doc.target_url,
-      order: doc.sort_order ?? 0,
-      created_at: doc.created_at,
-      updated_at: doc.updated_at,
-    };
+  async updateSocialLinksOrder(updates: Array<{ id: string; order: number }>): Promise<void> {
+    console.log('[SupabaseAdapter] 更新社交链接排序:', updates.length, '个');
+
+    for (const update of updates) {
+      const { error } = await this.supabase
+        .from('social_links')
+        .update({ order: update.order })
+        .eq('id', update.id);
+
+      if (error) {
+        console.error('[SupabaseAdapter] 更新排序失败:', error);
+        throw new Error(`更新排序失败: ${error.message}`);
+      }
+    }
+
+    console.log('[SupabaseAdapter] 排序更新成功');
   }
 
   // ==================== 版本发布管理操作 ====================
