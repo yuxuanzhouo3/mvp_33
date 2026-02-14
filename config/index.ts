@@ -3,7 +3,10 @@ const envDefaultLang = (process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE || "en").toLowe
 export const DEFAULT_LANGUAGE: string = envDefaultLang === "zh" ? "zh" : "en";
 
 // 版本标识
-export const IS_DOMESTIC_VERSION = DEFAULT_LANGUAGE === "zh";
+// 优先检查 FORCE_GLOBAL_DATABASE，如果设置为 true，则强制使用国际版（Supabase）
+export const IS_DOMESTIC_VERSION = process.env.FORCE_GLOBAL_DATABASE === "true"
+  ? false
+  : DEFAULT_LANGUAGE === "zh";
 
 // 地区标识 (兼容现有代码)
 export const DEFAULT_REGION: 'cn' | 'global' = IS_DOMESTIC_VERSION ? 'cn' : 'global';

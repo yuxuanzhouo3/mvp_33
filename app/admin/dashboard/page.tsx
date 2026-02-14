@@ -46,33 +46,61 @@ export default function DashboardPage() {
   async function loadAllStats() {
     setError(null);
     try {
+      console.log("[Dashboard] 开始加载统计数据...");
       const days = parseInt(timeRange);
-      const [users, payments, userTrendData, paymentTrendData] = await Promise.all([
-        getUserStats(),
-        getPaymentStats(),
-        getUserTrends(days),
-        getPaymentTrends(days),
-      ]);
+
+      console.log("[Dashboard] 调用 getUserStats...");
+      const users = await getUserStats();
+      console.log("[Dashboard] getUserStats 结果:", users);
+
+      console.log("[Dashboard] 调用 getPaymentStats...");
+      const payments = await getPaymentStats();
+      console.log("[Dashboard] getPaymentStats 结果:", payments);
+
+      console.log("[Dashboard] 调用 getUserTrends...");
+      const userTrendData = await getUserTrends(days);
+      console.log("[Dashboard] getUserTrends 结果:", userTrendData);
+
+      console.log("[Dashboard] 调用 getPaymentTrends...");
+      const paymentTrendData = await getPaymentTrends(days);
+      console.log("[Dashboard] getPaymentTrends 结果:", paymentTrendData);
 
       // Validate all responses before updating state
-      if (!users.success || !payments.success || !userTrendData.success || !paymentTrendData.success) {
-        throw new Error("部分数据加载失败");
+      if (!users.success) {
+        console.error("[Dashboard] getUserStats 失败:", users.error);
+        throw new Error(`用户统计失败: ${users.error}`);
+      }
+      if (!payments.success) {
+        console.error("[Dashboard] getPaymentStats 失败:", payments.error);
+        throw new Error(`支付统计失败: ${payments.error}`);
+      }
+      if (!userTrendData.success) {
+        console.error("[Dashboard] getUserTrends 失败:", userTrendData.error);
+        throw new Error(`用户趋势失败: ${userTrendData.error}`);
+      }
+      if (!paymentTrendData.success) {
+        console.error("[Dashboard] getPaymentTrends 失败:", paymentTrendData.error);
+        throw new Error(`支付趋势失败: ${paymentTrendData.error}`);
       }
 
       // Atomic state update - all or nothing
       if (users.data && payments.data && userTrendData.data && paymentTrendData.data) {
+        console.log("[Dashboard] 所有数据加载成功，更新状态");
         setUserStats(users.data);
         setPaymentStats(payments.data);
         setUserTrends(userTrendData.data);
         setPaymentTrends(paymentTrendData.data);
       } else {
+        console.error("[Dashboard] 数据验证失败 - 缺少数据");
         throw new Error("数据验证失败");
       }
 
       setLoading(false);
       setRefreshing(false);
-    } catch (err) {
-      setError("加载统计数据失败");
+      console.log("[Dashboard] 数据加载完成");
+    } catch (err: any) {
+      console.error("[Dashboard] 加载统计数据失败:", err);
+      setError(err.message || "加载统计数据失败");
       setLoading(false);
       setRefreshing(false);
     }

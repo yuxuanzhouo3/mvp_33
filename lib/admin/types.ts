@@ -956,3 +956,68 @@ export interface AssessmentFilters {
   limit?: number;
   offset?: number;
 }
+
+// ==================== 广告统计 ====================
+
+export interface AdStats {
+  total: number;
+  active: number;
+  inactive: number;
+  byType: {
+    image: number;
+    video: number;
+  };
+}
+
+// ==================== 应用发布版本管理 ====================
+
+export type Platform = 'ios' | 'android' | 'windows' | 'macos' | 'linux';
+export type Variant = 'x64' | 'x86' | 'arm64' | 'intel' | 'm' | 'deb' | 'rpm' | 'appimage' | 'snap' | 'flatpak' | 'aur';
+
+export interface AppRelease {
+  id: string;
+  version: string;
+  platform: Platform;
+  variant?: Variant;
+  file_url: string;
+  file_name: string;
+  file_size: number;
+  release_notes?: string;
+  is_active: boolean;
+  is_mandatory: boolean;
+  created_at: string;
+}
+
+export interface CreateReleaseData {
+  version: string;
+  platform: Platform;
+  variant?: Variant;
+  file_url: string;
+  file_name: string;
+  file_size: number;
+  release_notes?: string;
+  is_active: boolean;
+  is_mandatory: boolean;
+}
+
+// ==================== 文件存储管理 ====================
+
+export interface StorageFile {
+  name: string;
+  url: string;
+  size?: number;
+  lastModified?: string;
+  source: 'cloudbase' | 'supabase';
+  fileId?: string;
+  adId?: string;
+}
+
+export interface ReleaseFile extends StorageFile {
+  platform?: Platform;
+  version?: string;
+  releaseId?: string;
+}
+
+export interface SocialLinkFile extends StorageFile {
+  linkId?: string;
+}

@@ -36,8 +36,14 @@ export async function getUserStats(): Promise<ApiResponse<{
   };
 }>> {
   try {
+    console.log('[getUserStats] ========== 开始获取用户统计 ==========');
+    console.log('[getUserStats] 验证管理员会话...');
     const session = await requireAdminSession();
+    console.log('[getUserStats] ✓ 会话验证通过, 管理员:', session.username);
+
+    console.log('[getUserStats] 获取数据库适配器...');
     const db = await getDatabaseAdapter();
+    console.log('[getUserStats] ✓ 数据库适配器获取成功');
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();

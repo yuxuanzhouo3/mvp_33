@@ -971,7 +971,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
     let query = this.supabase.from("orders").select("*");
 
     // 国际版只查询 stripe 和 paypal
-    query = query.in("method", ["stripe", "paypal"]);
+    query = query.in("payment_method", ["stripe", "paypal"]);
 
     if (filters?.user_id) {
       query = query.eq("user_id", filters.user_id);
@@ -982,7 +982,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
     }
 
     if (filters?.method) {
-      query = query.eq("method", filters.method);
+      query = query.eq("payment_method", filters.method);
     }
 
     if (filters?.type) {
@@ -1021,7 +1021,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
     let query = this.supabase.from("orders").select("*", { count: "exact", head: true });
 
     // 国际版只查询 stripe 和 paypal
-    query = query.in("method", ["stripe", "paypal"]);
+    query = query.in("payment_method", ["stripe", "paypal"]);
 
     if (filters?.user_id) {
       query = query.eq("user_id", filters.user_id);
@@ -1032,7 +1032,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
     }
 
     if (filters?.method) {
-      query = query.eq("method", filters.method);
+      query = query.eq("payment_method", filters.method);
     }
 
     if (filters?.type) {
@@ -1065,7 +1065,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
       user_email: doc.user_email,
       amount: doc.amount || 0,
       currency: doc.currency || "USD",
-      method: doc.provider || doc.method || "stripe", // 优先从 provider 字段读取
+      method: doc.payment_method || doc.provider || doc.method || "stripe", // 优先从 payment_method 字段读取
       status: doc.status || "pending",
       type: doc.product_type || "subscription",
       product_id: doc.product_id,
