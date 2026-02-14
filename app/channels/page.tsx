@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { mockAuth } from '@/lib/mock-auth'
 import { mockUsers, pinConversation, unpinConversation, hideConversation, deleteConversation } from '@/lib/mock-data'
 import { WorkspaceHeader } from '@/components/chat/workspace-header'
+import { AppNavigation } from '@/components/layout/app-navigation'
 import { ChannelsPanel } from '@/components/channels/channels-panel'
 import { ChatHeader } from '@/components/chat/chat-header'
 import { MessageList } from '@/components/chat/message-list'
@@ -308,6 +309,9 @@ export default function ChannelsPage() {
       />
 
       <div className="flex flex-1 overflow-hidden relative">
+        {/* 左侧导航栏（仅桌面端显示） */}
+        {!isMobile && <AppNavigation />}
+
         {/* Mobile overlay */}
         {isMobile && sidebarOpen && (
           <div
