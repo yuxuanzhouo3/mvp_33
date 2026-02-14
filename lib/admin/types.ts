@@ -375,19 +375,14 @@ export interface AdminDatabaseAdapter {
 
   // ==================== 广告管理操作 ====================
   /**
+   * 列出广告
+   */
+  listAds(filters: { limit?: number; offset?: number }): Promise<{ items: Advertisement[]; total: number }>;
+
+  /**
    * 根据 ID 获取广告
    */
   getAdById(id: string): Promise<Advertisement | null>;
-
-  /**
-   * 列出广告
-   */
-  listAds(filters?: AdFilters): Promise<Advertisement[]>;
-
-  /**
-   * 统计广告数量
-   */
-  countAds(filters?: AdFilters): Promise<number>;
 
   /**
    * 创建广告
@@ -397,23 +392,33 @@ export interface AdminDatabaseAdapter {
   /**
    * 更新广告
    */
-  updateAd(id: string, data: UpdateAdData): Promise<Advertisement>;
+  updateAd(id: string, data: Partial<CreateAdData>): Promise<Advertisement>;
 
   /**
    * 删除广告
    */
   deleteAd(id: string): Promise<void>;
 
-  // ==================== 社交链接管理操作 ====================
   /**
-   * 根据 ID 获取社交链接
+   * 切换广告状态
    */
-  getSocialLinkById(id: string): Promise<SocialLink | null>;
+  toggleAdStatus(id: string): Promise<Advertisement>;
 
+  /**
+   * 获取广告统计
+   */
+  getAdStats(): Promise<AdStats>;
+
+  // ==================== 社交链接管理操作 ====================
   /**
    * 列出社交链接
    */
   listSocialLinks(): Promise<SocialLink[]>;
+
+  /**
+   * 根据 ID 获取社交链接
+   */
+  getSocialLinkById(id: string): Promise<SocialLink | null>;
 
   /**
    * 创建社交链接
@@ -430,36 +435,62 @@ export interface AdminDatabaseAdapter {
    */
   deleteSocialLink(id: string): Promise<void>;
 
-  // ==================== 版本发布管理操作 ====================
   /**
-   * 根据 ID 获取版本发布
+   * 更新社交链接排序
    */
-  getReleaseById(id: string): Promise<Release | null>;
+  updateSocialLinksOrder(updates: Array<{ id: string; order: number }>): Promise<void>;
 
+  // ==================== 版本发布管理操作 ====================
   /**
    * 列出版本发布
    */
-  listReleases(filters?: ReleaseFilters): Promise<Release[]>;
+  listReleases(): Promise<AppRelease[]>;
 
   /**
-   * 统计版本发布数量
+   * 根据 ID 获取版本发布
    */
-  countReleases(filters?: ReleaseFilters): Promise<number>;
+  getReleaseById(id: string): Promise<AppRelease | null>;
 
   /**
    * 创建版本发布
    */
-  createRelease(data: CreateReleaseData): Promise<Release>;
+  createRelease(data: CreateReleaseData): Promise<AppRelease>;
 
   /**
    * 更新版本发布
    */
-  updateRelease(id: string, data: UpdateReleaseData): Promise<Release>;
+  updateRelease(id: string, data: Partial<CreateReleaseData>): Promise<AppRelease>;
 
   /**
    * 删除版本发布
    */
   deleteRelease(id: string): Promise<void>;
+
+  /**
+   * 切换版本发布状态
+   */
+  toggleReleaseStatus(id: string, isActive: boolean): Promise<AppRelease>;
+
+  // ==================== 文件管理操作 ====================
+  /**
+   * 列出存储文件
+   */
+  listStorageFiles(): Promise<StorageFile[]>;
+
+  /**
+   * 删除存储文件
+   */
+  deleteStorageFile(fileName: string, fileId?: string, adId?: string): Promise<void>;
+
+  /**
+   * 重命名存储文件
+   */
+  renameStorageFile(oldName: string, newName: string): Promise<void>;
+
+  /**
+   * 下载存储文件
+   */
+  downloadStorageFile(fileName: string, fileId?: string): Promise<{ data: string; contentType: string; fileName: string }>;
 
   // ==================== 配置操作 ====================
   /**
