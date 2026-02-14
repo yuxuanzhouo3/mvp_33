@@ -33,6 +33,7 @@ import type {
   AdFilters,
   CreateAdData,
   UpdateAdData,
+  AdStats,
   SocialLink,
   CreateSocialLinkData,
   UpdateSocialLinkData,
@@ -1078,220 +1079,179 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
   // ==================== 广告管理操作 ====================
 
   /**
-   * 根据 ID 获取广告
+   * 获取广告列表，支持分页
    */
-  async getAdById(id: string): Promise<Advertisement | null> {
-    try {
-      const result = await this.supabase
-        .from("advertisements")
-        .select("*")
-        .eq("id", id)
-        .single();
+  async listAds(filters: { limit?: number; offset?: number }): Promise<{ items: Advertisement[]; total: number }> {
+    console.log('[SupabaseAdapter] 获取广告列表:', filters);
 
-      if (result.error || !result.data) {
-        return null;
-      }
-      return this.dbToAd(result.data);
-    } catch (error: any) {
-      throw handleDatabaseError(error);
-    }
-  }
-
-  /**
-   * 列出广告
-   */
-  async listAds(filters?: AdFilters): Promise<Advertisement[]> {
     let query = this.supabase
-      .from("advertisements")
-      .select("*");
+      .from('advertisements')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false });
 
-    if (filters?.status) {
-      // is_active 是 boolean，需要转换
-      const isActive = filters.status === "active";
-      query = query.eq("is_active", isActive);
-    }
-
-    if (filters?.type) {
-      query = query.eq("media_type", filters.type);
-    }
-
-    if (filters?.position) {
-      query = query.eq("position", filters.position);
-    }
-
-    if (filters?.search) {
-      query = query.ilike("title", `%${filters.search}%`);
-    }
-
-    if (filters?.start_date) {
-      query = query.gte("created_at", filters.start_date);
-    }
-
-    if (filters?.end_date) {
-      query = query.lte("created_at", filters.end_date);
-    }
-
-    query = query
-      .order("priority", { ascending: false })
-      .order("created_at", { ascending: false });
-
-    if (filters?.limit) {
+    if (filters.limit) {
       query = query.limit(filters.limit);
     }
-
-    if (filters?.offset) {
-      query = query.range(filters.offset, (filters.offset || 0) + (filters.limit || 50) - 1);
+    if (filters.offset) {
+      query = query.range(filters.offset, filters.offset + (filters.limit || 20) - 1);
     }
 
-    try {
-      const result = await query;
-      if (result.error) throw result.error;
-      return (result.data || []).map((doc: any) => this.dbToAd(doc));
-    } catch (error: any) {
-      throw handleDatabaseError(error);
+    const { data, error, count } = await query;
+
+    if (error) {
+      console.error('[SupabaseAdapter] 获取广告列表失败:', error);
+      throw new Error(`获取广告列表失败: ${error.message}`);
     }
+
+    console.log('[SupabaseAdapter] 获取到', data?.length || 0, '个广告，总数:', count);
+    return { items: data || [], total: count || 0 };
   }
 
   /**
-   * 统计广告数量
+   * 根据ID获取广告
    */
-  async countAds(filters?: AdFilters): Promise<number> {
-    let query = this.supabase
-      .from("advertisements")
-      .select("*", { count: "exact", head: true });
+  async getAdById(id: string): Promise<Advertisement | null> {
+    const { data, error } = await this.supabase
+      .from('advertisements')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    if (filters?.status) {
-      const isActive = filters.status === "active";
-      query = query.eq("is_active", isActive);
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      throw new Error(`获取广告失败: ${error.message}`);
     }
 
-    if (filters?.type) {
-      query = query.eq("media_type", filters.type);
-    }
-
-    if (filters?.position) {
-      query = query.eq("position", filters.position);
-    }
-
-    if (filters?.search) {
-      query = query.ilike("title", `%${filters.search}%`);
-    }
-
-    if (filters?.start_date) {
-      query = query.gte("created_at", filters.start_date);
-    }
-
-    if (filters?.end_date) {
-      query = query.lte("created_at", filters.end_date);
-    }
-
-    try {
-      const result = await query;
-      if (result.error) throw result.error;
-      return result.count || 0;
-    } catch (error: any) {
-      throw handleDatabaseError(error);
-    }
+    return data;
   }
 
   /**
-   * 创建广告
+   * 创建新广告
    */
   async createAd(data: CreateAdData): Promise<Advertisement> {
-    const now = new Date().toISOString();
+    console.log('[SupabaseAdapter] 创建广告:', data.title);
 
-    const doc: any = {
-      title: data.title,
-      media_type: data.type,
-      position: data.position,
-      media_url: data.fileUrl,
-      target_url: data.linkUrl,
-      priority: data.priority ?? 0,
-      is_active: data.status === "active",
-      file_size: data.fileSize || 0, // 添加文件大小
-      created_at: now,
-    };
+    const { data: result, error } = await this.supabase
+      .from('advertisements')
+      .insert({
+        title: data.title,
+        type: data.type,
+        position: data.position,
+        file_url: data.fileUrl,
+        file_url_cn: data.fileUrlCn,
+        file_url_intl: data.fileUrlIntl,
+        link_url: data.linkUrl,
+        priority: data.priority,
+        status: data.status,
+        file_size: data.file_size,
+        start_date: data.startDate,
+        end_date: data.endDate,
+      })
+      .select()
+      .single();
 
-    try {
-      const result = await this.supabase
-        .from("advertisements")
-        .insert(doc)
-        .select()
-        .single();
-
-      if (result.error) throw result.error;
-      return this.dbToAd(result.data);
-    } catch (error: any) {
-      throw handleDatabaseError(error);
+    if (error) {
+      console.error('[SupabaseAdapter] 创建广告失败:', error);
+      throw new Error(`创建广告失败: ${error.message}`);
     }
+
+    console.log('[SupabaseAdapter] 广告创建成功:', result.id);
+    return result;
   }
 
   /**
    * 更新广告
    */
-  async updateAd(id: string, data: UpdateAdData): Promise<Advertisement> {
-    const update: any = {};
+  async updateAd(id: string, data: Partial<CreateAdData>): Promise<Advertisement> {
+    console.log('[SupabaseAdapter] 更新广告:', id);
 
-    if (data.title !== undefined) update.title = data.title;
-    if (data.type !== undefined) update.media_type = data.type;
-    if (data.position !== undefined) update.position = data.position;
-    if (data.fileUrl !== undefined) update.media_url = data.fileUrl;
-    if (data.linkUrl !== undefined) update.target_url = data.linkUrl;
-    if (data.priority !== undefined) update.priority = data.priority;
-    if (data.status !== undefined) update.is_active = data.status === "active";
+    const updateData: any = {};
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.type !== undefined) updateData.type = data.type;
+    if (data.position !== undefined) updateData.position = data.position;
+    if (data.linkUrl !== undefined) updateData.link_url = data.linkUrl;
+    if (data.priority !== undefined) updateData.priority = data.priority;
+    if (data.status !== undefined) updateData.status = data.status;
+    if (data.startDate !== undefined) updateData.start_date = data.startDate;
+    if (data.endDate !== undefined) updateData.end_date = data.endDate;
 
-    try {
-      const result = await this.supabase
-        .from("advertisements")
-        .update(update)
-        .eq("id", id)
-        .select()
-        .single();
+    const { data: result, error } = await this.supabase
+      .from('advertisements')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
 
-      if (result.error) throw result.error;
-      return this.dbToAd(result.data);
-    } catch (error: any) {
-      throw handleDatabaseError(error);
+    if (error) {
+      console.error('[SupabaseAdapter] 更新广告失败:', error);
+      throw new Error(`更新广告失败: ${error.message}`);
     }
+
+    console.log('[SupabaseAdapter] 广告更新成功');
+    return result;
   }
 
   /**
    * 删除广告
    */
   async deleteAd(id: string): Promise<void> {
-    try {
-      const result = await this.supabase
-        .from("advertisements")
-        .delete()
-        .eq("id", id);
+    console.log('[SupabaseAdapter] 删除广告:', id);
 
-      if (result.error) throw result.error;
-    } catch (error: any) {
-      throw handleDatabaseError(error);
+    const { error } = await this.supabase
+      .from('advertisements')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('[SupabaseAdapter] 删除广告失败:', error);
+      throw new Error(`删除广告失败: ${error.message}`);
     }
+
+    console.log('[SupabaseAdapter] 广告删除成功');
   }
 
   /**
-   * 辅助方法：从数据库格式转换为 Advertisement
+   * 切换广告状态
    */
-  private dbToAd(doc: any): Advertisement {
-    return {
-      id: doc.id,
-      title: doc.title,
-      type: doc.media_type || "image",
-      position: doc.position || "bottom",
-      fileUrl: doc.media_url,
-      fileUrlCn: doc.media_url, // 使用同一个 URL
-      fileUrlIntl: doc.media_url, // 使用同一个 URL
-      linkUrl: doc.target_url,
-      priority: doc.priority ?? 0,
-      status: doc.is_active ? "active" : "inactive",
-      startDate: undefined,
-      endDate: undefined,
-      created_at: doc.created_at,
-      updated_at: doc.updated_at,
-      file_size: doc.file_size, // 添加文件大小字段
+  async toggleAdStatus(id: string): Promise<Advertisement> {
+    console.log('[SupabaseAdapter] 切换广告状态:', id);
+
+    const ad = await this.getAdById(id);
+    if (!ad) {
+      throw new Error('广告不存在');
+    }
+
+    const newStatus = ad.status === 'active' ? 'inactive' : 'active';
+    return this.updateAd(id, { status: newStatus });
+  }
+
+  /**
+   * 获取广告统计
+   */
+  async getAdStats(): Promise<AdStats> {
+    console.log('[SupabaseAdapter] 获取广告统计');
+
+    const { data, error } = await this.supabase
+      .from('advertisements')
+      .select('status, type');
+
+    if (error) {
+      console.error('[SupabaseAdapter] 获取广告统计失败:', error);
+      throw new Error(`获取广告统计失败: ${error.message}`);
+    }
+
+    const stats: AdStats = {
+      total: data?.length || 0,
+      active: data?.filter(ad => ad.status === 'active').length || 0,
+      inactive: data?.filter(ad => ad.status === 'inactive').length || 0,
+      byType: {
+        image: data?.filter(ad => ad.type === 'image').length || 0,
+        video: data?.filter(ad => ad.type === 'video').length || 0,
+      },
     };
+
+    console.log('[SupabaseAdapter] 广告统计:', stats);
+    return stats;
   }
 
   // ==================== 社交链接管理操作 ====================
