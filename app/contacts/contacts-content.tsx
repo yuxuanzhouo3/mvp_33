@@ -5,10 +5,12 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { mockAuth } from '@/lib/mock-auth'
 import { ContactsPanel } from '@/components/contacts/contacts-panel'
 import { WorkspaceHeader } from '@/components/chat/workspace-header'
+import { AppNavigation } from '@/components/layout/app-navigation'
 import { useToast } from '@/components/ui/use-toast'
 import { User, Workspace } from '@/lib/types'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
+import { useIsMobile } from '@/hooks/use-mobile'
 import {
   Dialog,
   DialogContent,
@@ -34,6 +36,7 @@ function ContactsPageContent() {
   const isLoadingContactsRef = useRef(false)
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
+  const isMobile = useIsMobile()
 
   const loadContacts = useCallback(async (forceRefresh = false, showLoading = true) => {
     if (!currentUser) return
@@ -814,36 +817,40 @@ function ContactsPageContent() {
   return (
     <>
       <div className="flex h-screen flex-col">
-        <WorkspaceHeader 
-          workspace={currentWorkspace} 
+        <WorkspaceHeader
+          workspace={currentWorkspace}
           currentUser={currentUser}
           totalUnreadCount={totalUnreadCount}
         />
-        <div className="flex-1 overflow-hidden">
-          <ContactsPanel
-            users={contacts}
-            currentUser={currentUser}
-            onStartChat={handleStartChat}
-            onAddContact={handleAddContact}
-            onAddManualContact={handleAddManualContact}
-            onDeleteContact={handleDeleteContact}
-            allUsers={[]}
-            isLoading={isLoading}
-            onContactAccepted={() => {
-              // Clear cache when contact is accepted
-              if (typeof window !== 'undefined' && currentUser) {
-                const cacheKey = `contacts_${currentUser.id}`
-                const cacheTsKey = `contacts_timestamp_${currentUser.id}`
-                localStorage.removeItem(cacheKey)
-                localStorage.removeItem(cacheTsKey)
-              }
-              // Don't set hasLoadedContacts to false - this would trigger full reload
-              // Instead, do a background refresh without showing loading
-              loadContacts(false, false) // forceRefresh = false, showLoading = false (silent refresh)
-            }}
-            isLoading={isLoading}
-            initialUserId={initialUserId}
-          />
+        <div className="flex flex-1 overflow-hidden relative">
+          {/* 左侧导航栏（仅桌面端显示） */}
+          {!isMobile && <AppNavigation />}
+          <div className="flex-1 overflow-hidden">
+            <ContactsPanel
+              users={contacts}
+              currentUser={currentUser}
+              onStartChat={handleStartChat}
+              onAddContact={handleAddContact}
+              onAddManualContact={handleAddManualContact}
+              onDeleteContact={handleDeleteContact}
+              allUsers={[]}
+              isLoading={isLoading}
+              onContactAccepted={() => {
+                // Clear cache when contact is accepted
+                if (typeof window !== 'undefined' && currentUser) {
+                  const cacheKey = `contacts_${currentUser.id}`
+                  const cacheTsKey = `contacts_timestamp_${currentUser.id}`
+                  localStorage.removeItem(cacheKey)
+                  localStorage.removeItem(cacheTsKey)
+                }
+                // Don't set hasLoadedContacts to false - this would trigger full reload
+                // Instead, do a background refresh without showing loading
+                loadContacts(false, false) // forceRefresh = false, showLoading = false (silent refresh)
+              }}
+              isLoading={isLoading}
+              initialUserId={initialUserId}
+            />
+          </div>
         </div>
       </div>
 

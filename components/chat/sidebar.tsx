@@ -537,14 +537,6 @@ export function Sidebar({
             className="pl-9"
           />
         </div>
-        <Button 
-          variant="outline" 
-          className="w-full justify-start"
-          onClick={() => router.push('/contacts')}
-        >
-          <Users className="h-4 w-4 mr-2" />
-          {t('viewContacts')}
-        </Button>
       </div>
 
       {/* Refresh indicator (small loading bar at top) - Hidden for silent refresh */}
