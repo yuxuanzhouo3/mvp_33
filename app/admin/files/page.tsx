@@ -5,22 +5,9 @@ import {
   listStorageFiles,
   deleteStorageFile,
   renameStorageFile,
-  renameCloudBaseFile,
   downloadStorageFile,
-  getCloudBaseFileUrl,
   type StorageFile,
-} from "@/actions/admin-ads";
-import {
-  listReleaseFiles,
-  deleteReleaseFile,
-  downloadReleaseFile,
-  type ReleaseFile,
-} from "@/actions/admin-releases";
-import {
-  listSocialLinkFiles,
-  deleteSocialLinkFile,
-  type SocialLinkFile,
-} from "@/actions/admin-social-links";
+} from "@/actions/admin-files";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
