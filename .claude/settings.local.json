@@ -5,12 +5,23 @@
       "Bash(git commit:*)",
       "Bash(test:*)",
       "Bash(npm install:*)",
-      "Bash(claude mcp list:*)"
+      "Bash(claude mcp list:*)",
+      "Bash(npm run build:*)",
+      "mcp__cloudbase__readNoSqlDatabaseStructure",
+      "mcp__cloudbase__writeNoSqlDatabaseStructure"
     ]
   },
-  "disabledMcpjsonServers": [
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
     "playwright",
     "cloudbase",
+    "sequential-thinking",
+    "supabase-db",
+    "chrome-devtools",
+    "context"
+  ],
+  "disabledMcpjsonServers": [
+    "playwright",
     "sequential-thinking",
     "supabase-db",
     "chrome-devtools",

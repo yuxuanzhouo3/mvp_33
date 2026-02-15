@@ -21,7 +21,20 @@ export function createClient() {
   }
 
   try {
-    return createBrowserClient(supabaseUrl, supabaseAnonKey)
+    return createBrowserClient(supabaseUrl, supabaseAnonKey, {
+      realtime: {
+        params: {
+          eventsPerSecond: 10,
+        },
+        timeout: 60000, // 60秒超时（默认是10秒）
+        heartbeatIntervalMs: 30000, // 30秒心跳
+      },
+      global: {
+        headers: {
+          'x-client-info': 'supabase-js-web',
+        },
+      },
+    })
   } catch (error: any) {
     console.error('❌ Failed to create Supabase client:', error)
     throw new Error(`Failed to create Supabase client: ${error.message || 'Unknown error'}`)
