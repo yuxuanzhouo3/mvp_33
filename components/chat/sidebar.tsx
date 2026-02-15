@@ -33,6 +33,7 @@ interface ConversationItemProps {
   onUnpinConversation?: (id: string) => void
   onHideConversation?: (id: string) => void
   onDeleteConversation?: (id: string) => void
+  currentUser: User
 }
 
 function ConversationItem({
@@ -46,7 +47,8 @@ function ConversationItem({
   onPinConversation,
   onUnpinConversation,
   onHideConversation,
-  onDeleteConversation
+  onDeleteConversation,
+  currentUser
 }: ConversationItemProps) {
   const containerRef = useRef<HTMLButtonElement>(null)
   const { language } = useSettings()
@@ -595,6 +597,7 @@ export function Sidebar({
                     onUnpinConversation={onUnpinConversation}
                     onHideConversation={onHideConversation}
                     onDeleteConversation={onDeleteConversation}
+                    currentUser={currentUser}
                   />
                 )
               })
