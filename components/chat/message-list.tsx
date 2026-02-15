@@ -771,9 +771,9 @@ export function MessageList({
 
                 "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-colors",
 
-                hasReacted 
+                hasReacted
 
-                  ? "bg-primary/20 border border-primary/30" 
+                  ? "bg-primary/20 border border-primary/30"
 
                   : "bg-accent hover:bg-accent/80"
 
@@ -790,62 +790,6 @@ export function MessageList({
           )
 
         })}
-
-        {onAddReaction && (
-
-          <DropdownMenu>
-
-            <DropdownMenuTrigger asChild>
-
-              <Button
-
-                size="icon"
-
-                variant="ghost"
-
-                className="h-6 w-6 rounded-full"
-
-              >
-
-                <Smile className="h-3 w-3" />
-
-              </Button>
-
-            </DropdownMenuTrigger>
-
-            <DropdownMenuContent>
-
-              <div className="grid grid-cols-4 gap-1 p-2">
-
-                {commonEmojis.map((emoji) => (
-
-                  <button
-
-                    key={emoji}
-
-                    onClick={() => {
-
-                      handleReactionClick(message, emoji)
-
-                    }}
-
-                    className="text-xl hover:bg-accent rounded p-1 transition-colors"
-
-                  >
-
-                    {emoji}
-
-                  </button>
-
-                ))}
-
-              </div>
-
-            </DropdownMenuContent>
-
-          </DropdownMenu>
-
-        )}
 
       </div>
 
@@ -1021,7 +965,7 @@ export function MessageList({
                       }}
                       title={displaySender?.full_name || ''}
                     >
-                      <Avatar className={cn("h-8 w-8", isMobile && "h-9 w-9")}>
+                      <Avatar className={cn("h-8 w-8", isMobile && "h-9 w-9")} userId={displaySender?.id} showOnlineStatus={true}>
                         <AvatarImage src={displaySender?.avatar_url || undefined} />
                         <AvatarFallback name={displaySender?.full_name}>
                           {displaySender?.full_name
@@ -1049,15 +993,15 @@ export function MessageList({
                     {/* 名字 + 时间：自己和对方都会显示；自己的在右侧，对方在左侧 */}
                     {!grouped && !isMobile && (
 
-                      <div className="flex items-baseline gap-2 mb-1">
+                      <div className="flex items-baseline gap-2 mb-1.5">
 
-                        <span className="font-semibold text-sm">
+                        <span className="font-medium text-sm text-gray-700">
 
                           {displaySender?.full_name || ''}
 
                         </span>
 
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-gray-400">
 
                           {formatTime(message.created_at)}
 
@@ -1082,12 +1026,12 @@ export function MessageList({
                               'break-words relative group',
                               isMobile
                                 ? 'px-3 py-2 max-w-[85%]'
-                                : 'px-4 py-2 max-w-xl',
+                                : 'px-4 py-2.5 max-w-xl',
                               isOwn
 
-                                ? 'bg-[#95EC69] text-black rounded-[8px] rounded-tr-[2px]'
+                                ? 'bg-[#E8F3FF] text-gray-900 rounded-lg'
 
-                                : 'bg-white text-black rounded-[8px] rounded-tl-[2px] shadow-sm border border-gray-100',
+                                : 'bg-white text-gray-900 rounded-lg shadow-sm border border-gray-200',
 
                               message.type !== 'text' && 'p-2'
 
@@ -1410,7 +1354,7 @@ export function MessageList({
                       {message.type === 'text' && (
                         <p
                           className={cn(
-                            isMobile ? 'text-[15px] leading-[1.4]' : 'text-sm leading-relaxed',
+                            isMobile ? 'text-[15px] leading-[1.5]' : 'text-[14px] leading-[1.6]',
                             (message.is_deleted || message.is_recalled) && 'italic opacity-60',
                           )}
                         >

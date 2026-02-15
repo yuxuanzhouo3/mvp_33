@@ -108,7 +108,7 @@ function ConversationItem({
         >
       <div className="relative shrink-0">
         {conversation.type === 'direct' ? (
-          <Avatar className="h-10 w-10 rounded-lg">
+          <Avatar className="h-10 w-10 rounded-lg" userId={conversation.members.find(m => m.id !== conversation.members[0]?.id)?.id} showOnlineStatus={true}>
             <AvatarImage src={display.avatar || undefined} />
             <AvatarFallback name={display.name}>
               {display.name.split(' ').map(n => n[0]).join('')}

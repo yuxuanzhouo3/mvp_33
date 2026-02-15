@@ -82,7 +82,7 @@ export function GroupMembersSection({
 
           <div className="flex flex-row gap-2 items-center flex-wrap">
             {displayMembers.map((member) => (
-              <Avatar key={member.id} className="h-10 w-10">
+              <Avatar key={member.id} className="h-10 w-10" userId={member.id} showOnlineStatus={true}>
                 <AvatarImage src={member.avatar_url || undefined} />
                 <AvatarFallback className="text-xs">
                   {member.full_name.split(' ').map(n => n[0]).join('').toUpperCase()}

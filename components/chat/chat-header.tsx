@@ -228,7 +228,7 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
                   className="cursor-pointer hover:opacity-80 transition-opacity"
                   title="View contact details"
                 >
-                  <Avatar className="h-10 w-10">
+                  <Avatar className="h-10 w-10" userId={display.user?.id} showOnlineStatus={true}>
                     <AvatarImage src={display.avatar || undefined} />
                     <AvatarFallback name={display.name}>
                       {display.name

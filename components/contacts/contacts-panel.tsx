@@ -492,13 +492,12 @@ export function ContactsPanel({
                         )}
                       >
                         <div className="relative">
-                          <Avatar className="h-10 w-10">
+                          <Avatar className="h-10 w-10" userId={user.id} showOnlineStatus={true}>
                             <AvatarImage src={user.avatar_url || undefined} />
                             <AvatarFallback name={user.full_name}>
                               {user.full_name.split(' ').map(n => n[0]).join('')}
                             </AvatarFallback>
                           </Avatar>
-                          <span className={cn('absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background', getStatusColor(user.status))} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-medium truncate">{user.full_name}</div>
@@ -531,13 +530,12 @@ export function ContactsPanel({
                         )}
                       >
                         <div className="relative">
-                          <Avatar className="h-10 w-10">
+                          <Avatar className="h-10 w-10" userId={user.id} showOnlineStatus={true}>
                             <AvatarImage src={user.avatar_url || undefined} />
                             <AvatarFallback name={user.full_name}>
                               {user.full_name.split(' ').map(n => n[0]).join('')}
                             </AvatarFallback>
                           </Avatar>
-                          <span className={cn('absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background', getStatusColor(user.status))} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-medium truncate">{user.full_name}</div>
@@ -585,13 +583,12 @@ export function ContactsPanel({
             <div className="border-b p-6">
               <div className="flex items-start gap-4">
                 <div className="relative">
-                  <Avatar className="h-20 w-20">
+                  <Avatar className="h-20 w-20" userId={selectedUser.id} showOnlineStatus={true}>
                     <AvatarImage src={selectedUser.avatar_url || undefined} />
                     <AvatarFallback name={selectedUser.full_name} className="text-2xl">
                       {selectedUser.full_name.split(' ').map(n => n[0]).join('')}
                     </AvatarFallback>
                   </Avatar>
-                  <span className={cn('absolute bottom-1 right-1 h-4 w-4 rounded-full border-2 border-background', getStatusColor(selectedUser.status))} />
                 </div>
                 <div className="flex-1">
                   <h2 className="text-2xl font-semibold mb-1">

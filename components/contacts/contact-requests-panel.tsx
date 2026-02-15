@@ -634,7 +634,7 @@ export function ContactRequestsPanel({
               key={request.id}
               className="flex items-start gap-3 p-4 border rounded-lg hover:bg-accent/50 transition-colors"
             >
-              <Avatar className="h-10 w-10 shrink-0">
+              <Avatar className="h-10 w-10 shrink-0" userId={requester.id} showOnlineStatus={true}>
                 <AvatarImage src={requester.avatar_url || undefined} />
                 <AvatarFallback name={requester.full_name}>
                   {requester.full_name.split(' ').map(n => n[0]).join('')}

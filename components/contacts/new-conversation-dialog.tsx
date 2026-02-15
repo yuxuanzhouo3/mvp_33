@@ -129,7 +129,7 @@ export function NewConversationDialog({
                     }}
                     className="w-full flex items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-accent"
                   >
-                    <Avatar className="h-10 w-10">
+                    <Avatar className="h-10 w-10" userId={user.id} showOnlineStatus={true}>
                       <AvatarImage src={user.avatar_url || undefined} />
                       <AvatarFallback name={user.full_name}>
                         {user.full_name.split(' ').map(n => n[0]).join('')}
@@ -178,7 +178,7 @@ export function NewConversationDialog({
                         checked={selectedUsers.includes(user.id)}
                         onCheckedChange={() => handleUserToggle(user.id)}
                       />
-                      <Avatar className="h-8 w-8">
+                      <Avatar className="h-8 w-8" userId={user.id} showOnlineStatus={true}>
                         <AvatarImage src={user.avatar_url || undefined} />
                         <AvatarFallback name={user.full_name}>
                           {user.full_name.split(' ').map(n => n[0]).join('')}
