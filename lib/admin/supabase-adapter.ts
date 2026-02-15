@@ -5,7 +5,7 @@
  * 用于国际版（INTL）部署环境
  *
  * 表命名：
- * - admin_users: 管理员用户
+ * - admins: 管理员用户
  * - system_logs: 系统操作日志
  * - system_config: 系统配置
  */
@@ -61,7 +61,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
   async testConnection(): Promise<boolean> {
     try {
       console.log('[Supabase] 测试数据库连接...');
-      const { error } = await this.supabase.from('admin_users').select('id').limit(1);
+      const { error } = await this.supabase.from('admins').select('id').limit(1);
       if (error) throw error;
       console.log('[Supabase] 连接测试成功');
       return true;
@@ -161,25 +161,61 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
    * 根据用户名获取管理员
    */
   async getAdminByUsername(username: string): Promise<AdminUser | null> {
-    const result = await this.supabase
-      .from("admin_users")
-      .select("*")
-      .eq("username", username)
-      .single();
+    console.log('[SupabaseAdapter] ========== getAdminByUsername 开始 ==========');
+    console.log('[SupabaseAdapter] 查询用户名:', username);
+    console.log('[SupabaseAdapter] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
+    console.log('[SupabaseAdapter] Service Role Key 已设置:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-    if (result.error) {
-      // 记录不存在
-      if (result.error.code === "PGRST116") {
+    try {
+      const result = await this.supabase
+        .from("admins")
+        .select("*")
+        .eq("username", username)
+        .single();
+
+      console.log('[SupabaseAdapter] 查询结果 - error:', result.error);
+      console.log('[SupabaseAdapter] 查询结果 - data:', result.data ? {
+        id: result.data.id,
+        username: result.data.username,
+        role: result.data.role,
+        status: result.data.status,
+        hasPasswordHash: !!result.data.password_hash,
+        passwordHashLength: result.data.password_hash?.length
+      } : null);
+
+      if (result.error) {
+        console.log('[SupabaseAdapter] 查询错误详情:');
+        console.log('[SupabaseAdapter] - 错误代码:', result.error.code);
+        console.log('[SupabaseAdapter] - 错误消息:', result.error.message);
+        console.log('[SupabaseAdapter] - 错误详情:', result.error.details);
+        console.log('[SupabaseAdapter] - 错误提示:', result.error.hint);
+
+        // 记录不存在
+        if (result.error.code === "PGRST116") {
+          console.log('[SupabaseAdapter] 用户不存在 (PGRST116)');
+          return null;
+        }
+
+        console.error('[SupabaseAdapter] 数据库查询失败，抛出错误');
+        throw handleDatabaseError(result.error);
+      }
+
+      if (!result.data) {
+        console.log('[SupabaseAdapter] 查询成功但无数据返回');
         return null;
       }
-      throw handleDatabaseError(result.error);
-    }
 
-    if (!result.data) {
-      return null;
+      console.log('[SupabaseAdapter] 查询成功，返回管理员数据');
+      console.log('[SupabaseAdapter] ========== getAdminByUsername 结束 ==========');
+      return this.dbToAdminUser(result.data);
+    } catch (error: any) {
+      console.error('[SupabaseAdapter] ========== getAdminByUsername 异常 ==========');
+      console.error('[SupabaseAdapter] 异常类型:', error?.constructor?.name);
+      console.error('[SupabaseAdapter] 异常消息:', error?.message);
+      console.error('[SupabaseAdapter] 异常堆栈:', error?.stack);
+      console.error('[SupabaseAdapter] 完整异常:', JSON.stringify(error, null, 2));
+      throw error;
     }
-
-    return this.dbToAdminUser(result.data);
   }
 
   /**
@@ -187,7 +223,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
    */
   async getAdminById(id: string): Promise<AdminUser | null> {
     const result = await this.supabase
-      .from("admin_users")
+      .from("admins")
       .select("*")
       .eq("id", id)
       .single();
@@ -226,7 +262,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
     };
 
     const result = await this.supabase
-      .from("admin_users")
+      .from("admins")
       .insert(doc)
       .select()
       .single();
@@ -258,7 +294,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
     }
 
     const result = await this.supabase
-      .from("admin_users")
+      .from("admins")
       .update(updates)
       .eq("id", id)
       .select()
@@ -276,7 +312,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
    */
   async deleteAdmin(id: string): Promise<void> {
     const result = await this.supabase
-      .from("admin_users")
+      .from("admins")
       .delete()
       .eq("id", id);
 
@@ -289,7 +325,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
    * 列出所有管理员
    */
   async listAdmins(filters?: AdminFilters): Promise<AdminUser[]> {
-    let query = this.supabase.from("admin_users").select("*");
+    let query = this.supabase.from("admins").select("*");
 
     // 添加过滤条件
     if (filters?.status) {
@@ -329,7 +365,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
    * 统计管理员数量
    */
   async countAdmins(filters?: AdminFilters): Promise<number> {
-    let query = this.supabase.from("admin_users").select("*", { count: "exact", head: true });
+    let query = this.supabase.from("admins").select("*", { count: "exact", head: true });
 
     if (filters?.status) {
       query = query.eq("status", filters.status);
@@ -362,7 +398,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
       // 如果管理员不存在，创建新管理员
       const now = toISOString(new Date());
       const result = await this.supabase
-        .from("admin_users")
+        .from("admins")
         .insert({
           username,
           password_hash: hashedPassword,
@@ -378,7 +414,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
     } else {
       // 如果管理员存在，更新密码
       const result = await this.supabase
-        .from("admin_users")
+        .from("admins")
         .update({
           password_hash: hashedPassword,
           updated_at: toISOString(new Date()),
@@ -1521,7 +1557,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
     try {
       // 尝试执行一个简单的查询
       const result = await this.supabase
-        .from("admin_users")
+        .from("admins")
         .select("*", { count: "exact", head: true });
 
       return !result.error;

@@ -4,9 +4,13 @@
 
 /**
  * 判断是否是中国区域
+ * 与 config/index.ts 中的 IS_DOMESTIC_VERSION 逻辑保持一致
  */
 export function isChinaRegion(): boolean {
-  return process.env.FORCE_GLOBAL_DATABASE !== "true";
+  const envDefaultLang = (process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE || "en").toLowerCase();
+  const defaultLanguage = envDefaultLang === "zh" ? "zh" : "en";
+  const isDomestic = process.env.FORCE_GLOBAL_DATABASE === "true" ? false : defaultLanguage === "zh";
+  return isDomestic;
 }
 
 /**

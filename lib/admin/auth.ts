@@ -266,7 +266,7 @@ export async function changePassword(
 
     // 获取当前管理员
     const { data: admin, error: fetchError } = await supabase
-      .from("admin_users")
+      .from("admins")
       .select("id, username, password_hash")
       .eq("id", adminId)
       .single();
@@ -294,7 +294,7 @@ export async function changePassword(
 
     // 更新密码
     const { error: updateError } = await supabase
-      .from("admin_users")
+      .from("admins")
       .update({ password_hash: newHash })
       .eq("id", adminId);
 
