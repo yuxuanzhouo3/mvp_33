@@ -485,6 +485,9 @@ export function Sidebar({
     return msgDate.toLocaleDateString()
   }
 
+  // 计算总未读消息数量
+  const totalUnreadCount = conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0)
+
   return (
     <div className="flex h-full flex-col border-r bg-background relative z-50">
       {/* Mobile expand button (shown when collapsed) */}
@@ -521,7 +524,17 @@ export function Sidebar({
       {/* Search header */}
       <div className="border-b p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{t('messages')}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold">{t('messages')}</h2>
+            {totalUnreadCount > 0 && (
+              <Badge
+                variant="destructive"
+                className="h-5 px-2 flex items-center justify-center text-xs font-medium"
+              >
+                {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
+              </Badge>
+            )}
+          </div>
           <Button
             size="icon"
             variant="ghost"

@@ -12,15 +12,16 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const type = searchParams.get('type') || 'received' // 'sent' or 'received'
+    const status = searchParams.get('status') || 'pending' // 'pending', 'accepted', 'rejected', or 'all'
 
     // Get current user
     const supabase = await createClient()
     const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser()
-    
+
     if (authError) {
       console.error('Auth error in contact-requests API (GET):', authError)
     }
-    
+
     if (!currentUser) {
       console.error('No current user in contact-requests API (GET). Auth error:', authError)
       return NextResponse.json(
@@ -28,8 +29,8 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       )
     }
-    
-    console.log(`[Contact Requests API] Current user ID: ${currentUser.id}, Type: ${type}`)
+
+    console.log(`[Contact Requests API] Current user ID: ${currentUser.id}, Type: ${type}, Status: ${status}`)
 
     // Decide which database this user actually uses
     const dbClient = await getDatabaseClientForUser(request)
@@ -41,8 +42,12 @@ export async function GET(request: NextRequest) {
       const cmd = db.command
 
       const where: any = {
-        status: 'pending',
         region: 'cn',
+      }
+
+      // Add status filter
+      if (status !== 'all') {
+        where.status = status
       }
 
       if (type === 'sent') {
@@ -160,8 +165,12 @@ export async function GET(request: NextRequest) {
       query = query.eq('recipient_id', currentUser.id)
     }
 
-    query = query.eq('status', 'pending')
-      .order('created_at', { ascending: false })
+    // Add status filter
+    if (status !== 'all') {
+      query = query.eq('status', status)
+    }
+
+    query = query.order('created_at', { ascending: false })
 
     const { data: requests, error } = await query
 
