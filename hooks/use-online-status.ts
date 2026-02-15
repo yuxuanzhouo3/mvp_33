@@ -14,33 +14,54 @@ export function useOnlineStatus(userId?: string) {
 
     const isGlobal = process.env.NEXT_PUBLIC_FORCE_GLOBAL_DATABASE !== 'false'
 
-    if (!isGlobal) {
-      return
-    }
-
-    let supabase: any
-    try {
-      supabase = createClient()
-    } catch (error) {
-      console.error('Failed to create Supabase client:', error)
-      return
-    }
-
-    const channel = supabase
-      .channel('online-users')
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState()
-        const userPresent = Object.values(state).some((presences: any) =>
-          presences.some((presence: any) => presence.user_id === userId)
-        )
-        setIsOnline(userPresent)
-      })
-      .subscribe()
-
-    return () => {
-      if (supabase) {
-        supabase.removeChannel(channel)
+    if (isGlobal) {
+      let supabase: any
+      try {
+        supabase = createClient()
+      } catch (error) {
+        console.error('Failed to create Supabase client:', error)
+        return
       }
+
+      const channel = supabase
+        .channel('online-users')
+        .on('presence', { event: 'sync' }, () => {
+          const state = channel.presenceState()
+          const userPresent = Object.values(state).some((presences: any) =>
+            presences.some((presence: any) => presence.user_id === userId)
+          )
+          setIsOnline(userPresent)
+        })
+        .subscribe()
+
+      return () => {
+        if (supabase) {
+          supabase.removeChannel(channel)
+        }
+      }
+    } else {
+      const checkOnlineStatus = async () => {
+        try {
+          const res = await fetch(`/api/users/${userId}`)
+          if (res.ok) {
+            const { user } = await res.json()
+            if (user?.last_seen_at) {
+              const lastSeen = new Date(user.last_seen_at).getTime()
+              const now = Date.now()
+              setIsOnline(now - lastSeen < 120000)
+            } else {
+              setIsOnline(false)
+            }
+          }
+        } catch (error) {
+          console.error('Failed to check online status:', error)
+        }
+      }
+
+      checkOnlineStatus()
+      const interval = setInterval(checkOnlineStatus, 30000)
+
+      return () => clearInterval(interval)
     }
   }, [userId])
 

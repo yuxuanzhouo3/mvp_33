@@ -20,6 +20,7 @@ export interface User {
   country?: string | null // Country code (e.g., 'CN', 'US')
   subscription_type?: 'free' | 'monthly' | 'yearly' | null
   subscription_expires_at?: string | null
+  last_seen_at?: string
   created_at: string
   updated_at: string
 }
