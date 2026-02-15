@@ -35,6 +35,7 @@ import { LimitAlert } from '@/components/subscription/limit-alert'
 import { createClient } from '@/lib/supabase/client'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useHeartbeat } from '@/hooks/use-heartbeat'
+import { useNotifications } from '@/hooks/use-notifications'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
@@ -105,6 +106,7 @@ function ChatPageContent() {
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
 
   useHeartbeat(currentUser?.id)
+  useNotifications(currentUser?.id)
 
   const loadingConversationsRef = useRef<Set<string>>(new Set())
 

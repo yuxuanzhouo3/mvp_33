@@ -106,6 +106,24 @@ export function ContactRequestsPanel({
     }
   }, [activeTab])
 
+  // 监听全局通知更新事件
+  useEffect(() => {
+    const handleFriendRequestsUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent
+      const requests = customEvent.detail?.requests || []
+      setPendingRequests(requests)
+      if (onPendingCountChange) {
+        onPendingCountChange(requests.length)
+      }
+    }
+
+    window.addEventListener('friend-requests-updated', handleFriendRequestsUpdate)
+
+    return () => {
+      window.removeEventListener('friend-requests-updated', handleFriendRequestsUpdate)
+    }
+  }, [onPendingCountChange])
+
   const handleAccept = async (requestId: string, requesterId: string) => {
     if (processingIds.has(requestId)) return
 
