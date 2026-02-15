@@ -5,11 +5,21 @@ import * as AvatarPrimitive from '@radix-ui/react-avatar'
 
 import { cn } from '@/lib/utils'
 import { getAvatarColor, getInitials } from '@/lib/avatar-utils'
+import { useOnlineStatus } from '@/hooks/use-online-status'
+
+interface AvatarProps extends React.ComponentProps<typeof AvatarPrimitive.Root> {
+  userId?: string
+  showOnlineStatus?: boolean
+}
 
 function Avatar({
   className,
+  userId,
+  showOnlineStatus,
   ...props
-}: React.ComponentProps<typeof AvatarPrimitive.Root>) {
+}: AvatarProps) {
+  const isOnline = useOnlineStatus(userId)
+
   return (
     <AvatarPrimitive.Root
       data-slot="avatar"
@@ -18,7 +28,17 @@ function Avatar({
         className,
       )}
       {...props}
-    />
+    >
+      {props.children}
+      {showOnlineStatus && userId && (
+        <span
+          className={cn(
+            'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-white',
+            isOnline ? 'bg-green-500' : 'bg-gray-400'
+          )}
+        />
+      )}
+    </AvatarPrimitive.Root>
   )
 }
 
