@@ -30,14 +30,6 @@ function Avatar({
       {...props}
     >
       {props.children}
-      {showOnlineStatus && userId && (
-        <span
-          className={cn(
-            'absolute top-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-white shadow-sm',
-            isOnline ? 'bg-green-400' : 'bg-red-500'
-          )}
-        />
-      )}
     </AvatarPrimitive.Root>
   )
 }
