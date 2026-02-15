@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getUserByEmail as getSupabaseUserByEmail, createUser as createSupabaseUser } from '@/lib/database/supabase/users'
+import { getUserByEmail as getCloudBaseUserByEmail } from '@/lib/cloudbase/database'
+import { createCloudBaseSession, setCloudBaseSessionCookie } from '@/lib/cloudbase/auth'
 import { User } from '@/lib/types'
+import { v4 as uuidv4 } from 'uuid'
+import { hashPassword } from '@/lib/utils/password'
 
 export async function POST(request: NextRequest) {
   try {
@@ -34,11 +38,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if we should use CloudBase (when FORCE_GLOBAL_DATABASE is false)
+    const shouldUseCloudBase = process.env.FORCE_GLOBAL_DATABASE !== 'true'
+
+    if (shouldUseCloudBase) {
+      console.log('[REGISTER] Using CloudBase (domestic version)')
+      return handleCloudBaseRegister(email, password, name)
+    }
+
+    // Continue with existing Supabase logic
+    console.log('[REGISTER] Using Supabase (global version)')
+
     // Always use global region (Supabase) - IP detection removed
     const region = 'global'
     const country = null
-
-    console.log('[REGISTER] Using global region (Supabase only, IP detection removed)')
 
     // Check if user already exists in Supabase (use admin client to bypass RLS during pre-auth)
     const existingUser = await getSupabaseUserByEmail(email, true)
@@ -230,6 +243,112 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Registration error:', error)
+    return NextResponse.json(
+      { error: error.message || 'Registration failed' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * Handle CloudBase registration (for domestic version)
+ * Skips email verification - user can login immediately
+ */
+async function handleCloudBaseRegister(
+  email: string,
+  password: string,
+  name: string
+): Promise<NextResponse> {
+  try {
+    console.log('[REGISTER] CloudBase registration for:', email)
+
+    // Check if user already exists
+    const existingUser = await getCloudBaseUserByEmail(email)
+    if (existingUser) {
+      return NextResponse.json(
+        { error: 'Email already registered' },
+        { status: 400 }
+      )
+    }
+
+    // Generate unique user ID
+    const userId = uuidv4()
+
+    // Hash password
+    const passwordHash = await hashPassword(password)
+
+    // Get CloudBase database
+    const { getCloudBaseDb } = await import('@/lib/cloudbase/client')
+    const db = getCloudBaseDb()
+
+    if (!db) {
+      throw new Error('CloudBase not configured')
+    }
+
+    // Create user in CloudBase
+    const userData = {
+      id: userId,
+      email: email,
+      username: email.split('@')[0],
+      full_name: name,
+      avatar_url: null,
+      password_hash: passwordHash,
+      provider: 'email',
+      provider_id: email,
+      status: 'online',
+      region: 'cn',
+      country: 'CN',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    await db.collection('users').add(userData)
+
+    console.log('[REGISTER] CloudBase user created:', userId)
+
+    // Create user object for response (without password_hash)
+    const user: User = {
+      id: userId,
+      email: email,
+      username: email.split('@')[0],
+      full_name: name,
+      avatar_url: null,
+      auth_email: null,
+      provider: 'email',
+      provider_id: email,
+      wechat_openid: null,
+      wechat_unionid: null,
+      status: 'online',
+      region: 'cn',
+      country: 'CN',
+      subscription_type: null,
+      subscription_expires_at: null,
+      created_at: userData.created_at,
+      updated_at: userData.updated_at,
+    }
+
+    // Create session token
+    const token = createCloudBaseSession(user, {
+      provider: 'email',
+      provider_id: email,
+    })
+
+    // Create response with session cookie
+    const response = NextResponse.json({
+      success: true,
+      user,
+      token,
+      requiresEmailConfirmation: false, // No email verification needed
+    })
+
+    // Set session cookie
+    setCloudBaseSessionCookie(response, token)
+
+    console.log('[REGISTER] CloudBase registration successful, session created')
+
+    return response
+  } catch (error: any) {
+    console.error('[REGISTER] CloudBase registration error:', error)
     return NextResponse.json(
       { error: error.message || 'Registration failed' },
       { status: 500 }

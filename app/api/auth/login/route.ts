@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getUserByEmail as getSupabaseUserByEmail, createUser as createSupabaseUser } from '@/lib/database/supabase/users'
 import { getUserByEmail as getCloudBaseUserByEmail } from '@/lib/database/cloudbase/users'
-import { createCloudBaseSession } from '@/lib/cloudbase/auth'
+import { createCloudBaseSession, setCloudBaseSessionCookie } from '@/lib/cloudbase/auth'
 import { User } from '@/lib/types'
 import { IS_DOMESTIC_VERSION } from '@/config'
+import { verifyPassword } from '@/lib/utils/password'
 
 export async function POST(request: NextRequest) {
   try {
@@ -385,8 +386,6 @@ export async function POST(request: NextRequest) {
  */
 async function handleCloudBaseLogin(email: string, password: string) {
   try {
-    // For demo purposes, CloudBase uses mock authentication
-    // In production, you would verify password against CloudBase database
     console.log('[LOGIN] CloudBase authentication for:', email)
 
     // Get user from CloudBase
@@ -400,20 +399,43 @@ async function handleCloudBaseLogin(email: string, password: string) {
       )
     }
 
-    // TODO: In production, verify password here
-    // For demo, we accept any password for existing users
-    console.log('[LOGIN] CloudBase user found:', user.id)
+    // Verify password
+    const storedPasswordHash = (user as any).password_hash
+    if (!storedPasswordHash) {
+      console.error('[LOGIN] No password hash found for user:', email)
+      return NextResponse.json(
+        { error: 'Invalid email or password' },
+        { status: 401 }
+      )
+    }
+
+    const isPasswordValid = await verifyPassword(password, storedPasswordHash)
+    if (!isPasswordValid) {
+      console.error('[LOGIN] Invalid password for user:', email)
+      return NextResponse.json(
+        { error: 'Invalid email or password' },
+        { status: 401 }
+      )
+    }
+
+    console.log('[LOGIN] CloudBase user authenticated:', user.id)
 
     // Create CloudBase session
     const token = createCloudBaseSession(user)
 
-    console.log('[LOGIN] CloudBase session created successfully')
-
-    return NextResponse.json({
+    // Create response with session cookie
+    const response = NextResponse.json({
       success: true,
       user: user,
       token,
     })
+
+    // Set session cookie
+    setCloudBaseSessionCookie(response, token)
+
+    console.log('[LOGIN] CloudBase session created successfully')
+
+    return response
   } catch (error: any) {
     console.error('[LOGIN] CloudBase login error:', error)
     return NextResponse.json(
