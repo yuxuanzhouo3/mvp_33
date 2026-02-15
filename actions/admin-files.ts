@@ -2,7 +2,7 @@
 
 import { getDatabaseAdapter } from '@/lib/admin/database';
 import type { StorageFile } from '@/lib/admin/types';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getSupabaseAdmin } from '@/lib/integrations/supabase-admin';
 import { CloudBaseConnector } from '@/lib/cloudbase/connector';
 import { RegionConfig } from '@/lib/config/region';
 import { requireAdminSession } from '@/lib/admin/session';
@@ -204,6 +204,7 @@ export async function listReleaseFiles() {
 
     if (RegionConfig.region === 'INTL') {
       // 国际版：只获取 Supabase Storage 文件
+      const supabaseAdmin = getSupabaseAdmin();
       if (supabaseAdmin) {
         try {
           const { data: storageFiles, error } = await supabaseAdmin.storage
@@ -391,6 +392,7 @@ export async function deleteReleaseFile(
     await requireAdminSession();
 
     if (source === 'supabase') {
+      const supabaseAdmin = getSupabaseAdmin();
       if (!supabaseAdmin) {
         return { success: false, error: 'Supabase 未配置' };
       }
@@ -454,6 +456,7 @@ export async function downloadReleaseFile(
     await requireAdminSession();
 
     if (source === 'supabase') {
+      const supabaseAdmin = getSupabaseAdmin();
       if (!supabaseAdmin) {
         return { success: false, error: 'Supabase 未配置' };
       }
@@ -540,6 +543,7 @@ export async function listSocialLinkFiles() {
 
     if (RegionConfig.region === 'INTL') {
       // 国际版：只获取 Supabase Storage 文件
+      const supabaseAdmin = getSupabaseAdmin();
       if (supabaseAdmin) {
         try {
           const { data, error } = await supabaseAdmin.storage
@@ -695,6 +699,7 @@ export async function deleteSocialLinkFile(
     await requireAdminSession();
 
     if (source === 'supabase') {
+      const supabaseAdmin = getSupabaseAdmin();
       if (!supabaseAdmin) {
         return { success: false, error: 'Supabase 未配置' };
       }
