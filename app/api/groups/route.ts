@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createGroup } from '@/lib/database/supabase/groups'
+import { createGroup as createGroupSupabase } from '@/lib/database/supabase/groups'
+import { createGroup as createGroupCloudbase } from '@/lib/database/cloudbase/groups'
+
+const isCloudBase = process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE === 'zh' && !process.env.FORCE_GLOBAL_DATABASE
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,9 +35,14 @@ export async function POST(request: NextRequest) {
     // }
 
     console.error('[API /api/groups POST] 调用 createGroup 函数', {
-      params: JSON.stringify({ userId: user.id, userIds, workspaceId })
+      params: JSON.stringify({ userId: user.id, userIds, workspaceId }),
+      database: isCloudBase ? 'CloudBase' : 'Supabase'
     })
-    const result = await createGroup(user.id, userIds, workspaceId)
+
+    // 根据环境变量选择数据库
+    const result = isCloudBase
+      ? await createGroupCloudbase(user.id, userIds, workspaceId)
+      : await createGroupSupabase(user.id, userIds, workspaceId)
 
     console.error('[API /api/groups POST] createGroup 返回', {
       hasResult: !!result,
