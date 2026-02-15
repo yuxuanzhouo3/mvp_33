@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getGroupMembers, addGroupMembers } from '@/lib/database/supabase/group-members'
+import { getGroupMembers as getGroupMembersSupabase, addGroupMembers as addGroupMembersSupabase } from '@/lib/database/supabase/group-members'
+import { getGroupMembers as getGroupMembersCloudbase, addGroupMembers as addGroupMembersCloudbase } from '@/lib/database/cloudbase/group-members'
+
+const isCloudBase = process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE === 'zh' && !process.env.FORCE_GLOBAL_DATABASE
 
 export async function GET(
   request: NextRequest,
@@ -18,7 +21,9 @@ export async function GET(
 
     const { id } = await params
     console.log('[API /api/groups/[id]/members GET] 调用 getGroupMembers', { groupId: id, userId: user.id })
-    const members = await getGroupMembers(id)
+    const members = isCloudBase
+      ? await getGroupMembersCloudbase(id)
+      : await getGroupMembersSupabase(id)
     console.log('[API /api/groups/[id]/members GET] getGroupMembers 返回', { count: members.length })
 
     return NextResponse.json({ success: true, members })
@@ -43,7 +48,9 @@ export async function POST(
     const { id } = await params
     const { userIds } = await request.json()
 
-    const success = await addGroupMembers(id, userIds, user.id)
+    const success = isCloudBase
+      ? await addGroupMembersCloudbase(id, userIds, user.id)
+      : await addGroupMembersSupabase(id, userIds, user.id)
 
     if (!success) {
       return NextResponse.json({ error: 'Failed to add members' }, { status: 500 })
