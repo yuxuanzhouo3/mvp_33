@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getGroupInfo, updateGroupSettings, deleteGroup } from '@/lib/database/supabase/groups'
+import { getGroupInfo as getGroupInfoSupabase, updateGroupSettings as updateGroupSettingsSupabase, deleteGroup as deleteGroupSupabase } from '@/lib/database/supabase/groups'
+import { getGroupInfo as getGroupInfoCloudbase, updateGroupSettings as updateGroupSettingsCloudbase, deleteGroup as deleteGroupCloudbase } from '@/lib/database/cloudbase/groups'
+
+const isCloudBase = process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE === 'zh' && !process.env.FORCE_GLOBAL_DATABASE
 
 export async function GET(
   request: NextRequest,
@@ -15,7 +18,9 @@ export async function GET(
     }
 
     const { id } = await params
-    const group = await getGroupInfo(id)
+    const group = isCloudBase
+      ? await getGroupInfoCloudbase(id)
+      : await getGroupInfoSupabase(id)
 
     if (!group) {
       return NextResponse.json({ error: 'Group not found' }, { status: 404 })
@@ -43,7 +48,9 @@ export async function PUT(
     const updates = await request.json()
     console.log('[PUT /api/groups/[id]] 更新群设置', { groupId: id, updates, userId: user.id })
 
-    const success = await updateGroupSettings(id, updates)
+    const success = isCloudBase
+      ? await updateGroupSettingsCloudbase(id, updates)
+      : await updateGroupSettingsSupabase(id, updates)
 
     if (!success) {
       console.error('[PUT /api/groups/[id]] 更新失败')
@@ -74,7 +81,9 @@ export async function DELETE(
     }
 
     const { id } = await params
-    const success = await deleteGroup(id)
+    const success = isCloudBase
+      ? await deleteGroupCloudbase(id)
+      : await deleteGroupSupabase(id)
 
     if (!success) {
       return NextResponse.json({ error: 'Failed to delete' }, { status: 500 })
