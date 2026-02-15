@@ -2,6 +2,9 @@
  * 直接通过 Supabase 创建管理员账户
  */
 
+// 加载环境变量
+require('dotenv').config({ path: '.env.local' });
+
 const { createClient } = require('@supabase/supabase-js');
 const bcrypt = require('bcryptjs');
 const readline = require('readline');
