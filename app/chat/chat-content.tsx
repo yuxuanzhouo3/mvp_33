@@ -34,6 +34,7 @@ import { LimitAlert } from '@/components/subscription/limit-alert'
 
 import { createClient } from '@/lib/supabase/client'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useHeartbeat } from '@/hooks/use-heartbeat'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
@@ -102,6 +103,8 @@ function ChatPageContent() {
   const { limits, subscription } = useSubscription()
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
+
+  useHeartbeat(currentUser?.id)
 
   const loadingConversationsRef = useRef<Set<string>>(new Set())
 
@@ -240,6 +243,40 @@ function ChatPageContent() {
 
     currentUserRef.current = currentUser
 
+  }, [currentUser])
+
+  useEffect(() => {
+    if (!currentUser) return
+
+    const isGlobal = process.env.NEXT_PUBLIC_FORCE_GLOBAL_DATABASE !== 'false'
+
+    if (isGlobal) {
+      let supabase: any
+      try {
+        supabase = createClient()
+      } catch (error) {
+        console.error('Failed to create Supabase client for Presence:', error)
+        return
+      }
+
+      const channel = supabase
+        .channel('online-users')
+        .subscribe(async (status: string) => {
+          if (status === 'SUBSCRIBED') {
+            await channel.track({
+              user_id: currentUser.id,
+              online_at: new Date().toISOString(),
+            })
+            console.log('✅ Tracking presence for user:', currentUser.id)
+          }
+        })
+
+      return () => {
+        if (supabase) {
+          supabase.removeChannel(channel)
+        }
+      }
+    }
   }, [currentUser])
 
   useEffect(() => {
