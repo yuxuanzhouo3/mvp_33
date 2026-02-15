@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { transferOwnership } from '@/lib/database/supabase/group-members'
+import { transferOwnership as transferOwnershipSupabase } from '@/lib/database/supabase/group-members'
+import { transferOwnership as transferOwnershipCloudbase } from '@/lib/database/cloudbase/group-members'
+
+const isCloudBase = process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE === 'zh' && !process.env.FORCE_GLOBAL_DATABASE
 
 export async function POST(
   request: NextRequest,
@@ -21,7 +24,9 @@ export async function POST(
       return NextResponse.json({ error: 'newOwnerId is required' }, { status: 400 })
     }
 
-    const success = await transferOwnership(id, user.id, newOwnerId)
+    const success = isCloudBase
+      ? await transferOwnershipCloudbase(id, user.id, newOwnerId)
+      : await transferOwnershipSupabase(id, user.id, newOwnerId)
 
     if (!success) {
       return NextResponse.json({ error: 'Failed to transfer ownership' }, { status: 500 })
