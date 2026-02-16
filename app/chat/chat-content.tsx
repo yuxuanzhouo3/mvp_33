@@ -12,6 +12,8 @@ import { WorkspaceHeader } from '@/components/chat/workspace-header'
 
 import { ChatHeader } from '@/components/chat/chat-header'
 
+import { ChatTabs } from '@/components/chat/chat-tabs'
+
 import { AppNavigation } from '@/components/layout/app-navigation'
 
 import { MessageList } from '@/components/chat/message-list'
@@ -73,6 +75,7 @@ function ChatPageContent() {
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true) // Mobile sidebar state
   const [groupInfoOpen, setGroupInfoOpen] = useState(false) // Group info panel state
+  const [activeTab, setActiveTab] = useState('messages') // Chat tabs state
   const isMobile = useIsMobile()
 
   const [showLimitAlert, setShowLimitAlert] = useState<string | null>(null)
@@ -7831,6 +7834,13 @@ function ChatPageContent() {
                 onToggleSidebar={isMobile ? () => setSidebarOpen(!sidebarOpen) : undefined}
                 onToggleGroupInfo={() => setGroupInfoOpen(!groupInfoOpen)}
               />
+
+              {displayConversation.type === 'group' && (
+                <ChatTabs
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                />
+              )}
 
               <MessageList 
 

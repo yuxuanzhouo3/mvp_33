@@ -218,9 +218,9 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
 
   return (
     <>
-      <div className={cn("border-b bg-background", isMobile ? "px-3 py-2" : "px-6 py-3")}>
+      <div className={cn("border-b bg-background", isMobile ? "px-3 py-2" : "px-4 py-2.5")}>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {conversation.type === 'direct' ? (
               <div className="relative">
                 <button
@@ -254,17 +254,17 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button 
-              size="icon" 
+          <div className="flex items-center gap-1">
+            <Button
+              size="icon"
               variant="ghost"
               onClick={() => setShowVoiceCall(true)}
-              className={cn(isMobile && "h-8 w-8")}
+              className={cn("h-8 w-8", isMobile && "h-7 w-7")}
             >
-              <Phone className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
+              <Phone className="h-4 w-4" />
             </Button>
-            <Button 
-              size="icon" 
+            <Button
+              size="icon"
               variant="ghost"
               onClick={() => {
                 if (!limits.canUseVideoCall) {
@@ -273,23 +273,24 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
                   setShowVideoCall(true)
                 }
               }}
-              className={cn(isMobile && "h-8 w-8")}
+              className={cn("h-8 w-8", isMobile && "h-7 w-7")}
             >
-              <Video className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
+              <Video className="h-4 w-4" />
             </Button>
             {!isMobile && conversation.type === 'group' && (
               <Button
                 size="icon"
                 variant="ghost"
                 onClick={onToggleGroupInfo}
+                className="h-8 w-8"
               >
-                <Info className="h-5 w-5" />
+                <Info className="h-4 w-4" />
               </Button>
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="ghost">
-                  <MoreVertical className="h-5 w-5" />
+                <Button size="icon" variant="ghost" className={cn("h-8 w-8", isMobile && "h-7 w-7")}>
+                  <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">

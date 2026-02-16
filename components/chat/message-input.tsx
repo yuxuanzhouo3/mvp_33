@@ -236,8 +236,8 @@ export function MessageInput({
 
   return (
     <>
-      <div className="border-t bg-background p-4">
-        <div className="max-w-4xl mx-auto space-y-3">
+      <div className="border-t bg-background px-4 py-3">
+        <div className="max-w-4xl mx-auto space-y-2">
           {selectedFile && (
             <div className={cn("flex items-start gap-3 bg-muted rounded-lg", isMobile ? "p-2 gap-2" : "p-3")}>
               {previewUrl ? (
@@ -299,12 +299,12 @@ export function MessageInput({
               rows={1}
             />
 
-            {/* 右侧工具栏 */}
-            <div className="flex items-center gap-1 shrink-0">
+            {/* 右侧工具栏 - 飞书风格紧凑布局 */}
+            <div className="flex items-center gap-0.5 shrink-0">
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button size="icon" variant="ghost" disabled={disabled} className={cn(isMobile && "h-8 w-8")}>
-                    <Smile className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
+                  <Button size="icon" variant="ghost" disabled={disabled} className="h-8 w-8">
+                    <Smile className="h-4 w-4" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-64 p-2">
@@ -323,8 +323,8 @@ export function MessageInput({
               </Popover>
 
               {!isMobile && (
-                <Button size="icon" variant="ghost" disabled={disabled}>
-                  <AtSign className="h-5 w-5" />
+                <Button size="icon" variant="ghost" disabled={disabled} className="h-8 w-8">
+                  <AtSign className="h-4 w-4" />
                 </Button>
               )}
 
@@ -333,9 +333,9 @@ export function MessageInput({
                 variant="ghost"
                 disabled={disabled}
                 onClick={() => fileInputRef.current?.click()}
-                className={cn(isMobile && "h-8 w-8")}
+                className="h-8 w-8"
               >
-                <Paperclip className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
+                <Paperclip className="h-4 w-4" />
               </Button>
 
               <Button
@@ -343,9 +343,9 @@ export function MessageInput({
                 variant="ghost"
                 disabled={disabled}
                 onClick={() => imageInputRef.current?.click()}
-                className={cn(isMobile && "h-8 w-8")}
+                className="h-8 w-8"
               >
-                <ImageIcon className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
+                <ImageIcon className="h-4 w-4" />
               </Button>
 
               {!isMobile && (
@@ -355,8 +355,9 @@ export function MessageInput({
                   disabled={disabled}
                   onClick={() => setShowCodeDialog(true)}
                   title="分享代码"
+                  className="h-8 w-8"
                 >
-                  <Code2 className="h-5 w-5" />
+                  <Code2 className="h-4 w-4" />
                 </Button>
               )}
 
@@ -365,18 +366,18 @@ export function MessageInput({
                 variant="ghost"
                 disabled={disabled}
                 onClick={() => setShowVoiceRecorder(true)}
-                className={cn(isMobile && "h-8 w-8")}
+                className="h-8 w-8"
               >
-                <Mic className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
+                <Mic className="h-4 w-4" />
               </Button>
 
               <Button
                 size="icon"
                 onClick={handleSend}
                 disabled={(!message.trim() && !selectedFile) || disabled || isSending}
-                className={cn("shrink-0", isMobile ? "h-9 w-9" : "h-10 w-10")}
+                className={cn("shrink-0 ml-1", isMobile ? "h-8 w-8" : "h-9 w-9")}
               >
-                <Send className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
+                <Send className="h-4 w-4" />
               </Button>
             </div>
           </div>

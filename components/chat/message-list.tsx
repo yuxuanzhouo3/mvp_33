@@ -847,7 +847,7 @@ export function MessageList({
 
           ) : (
 
-            <div className={cn("space-y-4 max-w-4xl mx-auto", isMobile && "space-y-3")} ref={scrollRef}>
+            <div className={cn("space-y-4 px-4", isMobile && "space-y-3 px-3")} ref={scrollRef}>
 
             {messages.map((message, index) => {
 

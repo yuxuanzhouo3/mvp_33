@@ -103,7 +103,7 @@ function ConversationItem({
           ref={containerRef}
           onClick={onSelect}
           className={cn(
-            'w-full flex items-start gap-3 rounded-lg p-3 text-left transition-colors hover:bg-accent/50',
+            'w-full flex items-start gap-2.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-accent/50',
             isActive && 'bg-accent',
             conversation.is_hidden && 'opacity-50'
           )}

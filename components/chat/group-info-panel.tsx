@@ -91,7 +91,7 @@ export function GroupInfoPanel({
       <div
         className={cn(
           'border-l bg-background transition-all duration-300 ease-out',
-          isOpen ? 'w-80' : 'w-0 overflow-hidden'
+          isOpen ? 'w-72' : 'w-0 overflow-hidden'
         )}
       >
         {isOpen && (
