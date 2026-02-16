@@ -59,26 +59,44 @@ export async function adminLogin(
     // 使用数据库适配器获取管理员信息
     console.log("[adminLogin] ========== 开始登录流程 ==========");
     console.log("[adminLogin] 用户名:", username);
-    console.log("[adminLogin] 环境变量 NEXT_PUBLIC_DEPLOYMENT_REGION:", process.env.NEXT_PUBLIC_DEPLOYMENT_REGION);
+    console.log("[adminLogin] 密码长度:", password.length);
+    console.log("[adminLogin] IP地址:", ipAddress);
+    console.log("[adminLogin] User Agent:", userAgent);
+    console.log("[adminLogin] 环境变量:");
+    console.log("[adminLogin] - NODE_ENV:", process.env.NODE_ENV);
+    console.log("[adminLogin] - NEXT_PUBLIC_DEFAULT_LANGUAGE:", process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE);
+    console.log("[adminLogin] - FORCE_GLOBAL_DATABASE:", process.env.FORCE_GLOBAL_DATABASE);
+    console.log("[adminLogin] - NEXT_PUBLIC_DEPLOYMENT_REGION:", process.env.NEXT_PUBLIC_DEPLOYMENT_REGION);
+    console.log("[adminLogin] - SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30) + "...");
+    console.log("[adminLogin] - CLOUDBASE_ENV_ID:", process.env.CLOUDBASE_ENV_ID);
 
     const { getDatabaseAdapter } = await import("@/lib/admin/database");
     console.log("[adminLogin] getDatabaseAdapter 函数已导入");
 
     const db = await getDatabaseAdapter();
     console.log("[adminLogin] 数据库适配器已获取, 类型:", db.constructor.name);
+    console.log("[adminLogin] 开始查询管理员...");
 
     const admin = await db.getAdminByUsername(username);
-    console.log("[adminLogin] 查询管理员结果:", admin ? {
-      id: admin.id,
-      username: admin.username,
-      role: admin.role,
-      status: admin.status,
-      hasPasswordHash: !!admin.password_hash,
-      passwordHashLength: admin.password_hash?.length
-    } : null);
+    console.log("[adminLogin] ========== 查询管理员结果 ==========");
+    if (admin) {
+      console.log("[adminLogin] ✅ 找到管理员:");
+      console.log("[adminLogin] - ID:", admin.id);
+      console.log("[adminLogin] - 用户名:", admin.username);
+      console.log("[adminLogin] - 角色:", admin.role);
+      console.log("[adminLogin] - 状态:", admin.status);
+      console.log("[adminLogin] - 有密码哈希:", !!admin.password_hash);
+      console.log("[adminLogin] - 密码哈希长度:", admin.password_hash?.length);
+      console.log("[adminLogin] - 密码哈希前缀:", admin.password_hash?.substring(0, 10) + "...");
+      console.log("[adminLogin] - 创建时间:", admin.created_at);
+      console.log("[adminLogin] - 最后登录:", admin.last_login_at);
+    } else {
+      console.log("[adminLogin] ❌ 管理员不存在");
+      console.log("[adminLogin] 数据库中没有找到用户名为", username, "的管理员");
+    }
 
     if (!admin) {
-      console.log("[adminLogin] 管理员不存在");
+      console.log("[adminLogin] 记录失败登录尝试...");
       await logFailedLoginAttempt(username, "user_not_found", ipAddress, userAgent);
       return {
         success: false,
@@ -97,17 +115,23 @@ export async function adminLogin(
     }
 
     // 验证密码
-    console.log("[adminLogin] 开始验证密码");
+    console.log("[adminLogin] ========== 开始验证密码 ==========");
+    console.log("[adminLogin] 输入的密码长度:", password.length);
+    console.log("[adminLogin] 存储的密码哈希:", admin.password_hash?.substring(0, 20) + "...");
+
     const isPasswordValid = await bcrypt.compare(password, admin.password_hash);
-    console.log("[adminLogin] 密码验证结果:", isPasswordValid);
+    console.log("[adminLogin] 密码验证结果:", isPasswordValid ? "✅ 密码正确" : "❌ 密码错误");
 
     if (!isPasswordValid) {
+      console.log("[adminLogin] 密码验证失败，记录失败尝试");
       await logFailedLoginAttempt(username, "invalid_password", ipAddress, userAgent);
       return {
         success: false,
         error: "用户名或密码错误",
       };
     }
+
+    console.log("[adminLogin] ✅ 密码验证通过");
 
     // 更新最后登录时间
     try {

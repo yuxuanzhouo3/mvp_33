@@ -1,0 +1,6 @@
+{
+  "envId": "cloudbase-5gnufro77ac6a045",
+  "cloudrun": {
+    "name": "orbitchat"
+  }
+}

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { MessageSquare, Users, Hash, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -35,7 +36,11 @@ const navItems: NavItem[] = [
   },
 ]
 
-export function AppNavigation() {
+interface AppNavigationProps {
+  totalUnreadCount?: number
+}
+
+export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
   const pathname = usePathname()
 
   const isActive = (href: string) => {
@@ -47,18 +52,27 @@ export function AppNavigation() {
       {navItems.map((item) => {
         const Icon = item.icon
         const active = isActive(item.href)
+        const showBadge = item.href === '/chat' && totalUnreadCount > 0
 
         return (
           <Link key={item.href} href={item.href} className="w-full">
             <Button
               variant="ghost"
               className={cn(
-                'w-full h-12 flex items-center justify-start gap-3 px-4 rounded-lg transition-colors',
+                'w-full h-12 flex items-center justify-start gap-3 px-4 rounded-lg transition-colors relative',
                 active && 'bg-primary/10 text-primary hover:bg-primary/15'
               )}
             >
               <Icon className="h-5 w-5 shrink-0" />
               <span className="text-sm font-medium">{item.label}</span>
+              {showBadge && (
+                <Badge
+                  variant="destructive"
+                  className="absolute right-2 h-5 px-2 flex items-center justify-center text-xs font-medium"
+                >
+                  {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
+                </Badge>
+              )}
             </Button>
           </Link>
         )

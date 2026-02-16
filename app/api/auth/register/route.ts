@@ -7,14 +7,25 @@ import { createCloudBaseSession, setCloudBaseSessionCookie } from '@/lib/cloudba
 import { User } from '@/lib/types'
 import { v4 as uuidv4 } from 'uuid'
 import { hashPassword } from '@/lib/utils/password'
+import { IS_DOMESTIC_VERSION } from '@/config'
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('[REGISTER] ===== Registration request started =====')
+    console.log('[REGISTER] Environment variables:', {
+      DEFAULT_LANGUAGE: process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE,
+      FORCE_GLOBAL_DATABASE: process.env.FORCE_GLOBAL_DATABASE,
+      IS_DOMESTIC_VERSION,
+      CLOUDBASE_ENV_ID: process.env.CLOUDBASE_ENV_ID ? 'configured' : 'missing',
+    })
+
     const body = await request.json()
     const { email, password, name } = body
+    console.log('[REGISTER] Request data:', { email, name, passwordLength: password?.length })
 
     // Validate input
     if (!email || !password || !name) {
+      console.log('[REGISTER] Validation failed: missing required fields')
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -24,6 +35,7 @@ export async function POST(request: NextRequest) {
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
+      console.log('[REGISTER] Validation failed: invalid email format')
       return NextResponse.json(
         { error: 'Invalid email format' },
         { status: 400 }
@@ -32,18 +44,20 @@ export async function POST(request: NextRequest) {
 
     // Validate password strength
     if (password.length < 8) {
+      console.log('[REGISTER] Validation failed: password too short')
       return NextResponse.json(
         { error: 'Password must be at least 8 characters' },
         { status: 400 }
       )
     }
 
-    // Check if we should use CloudBase (when FORCE_GLOBAL_DATABASE is false)
-    const shouldUseCloudBase = process.env.FORCE_GLOBAL_DATABASE !== 'true'
-
-    if (shouldUseCloudBase) {
-      console.log('[REGISTER] Using CloudBase (domestic version)')
+    // Check if we should use CloudBase (domestic version)
+    console.log('[REGISTER] Checking version:', { IS_DOMESTIC_VERSION })
+    if (IS_DOMESTIC_VERSION) {
+      console.log('[REGISTER] ✓ Using CloudBase (domestic version)')
       return handleCloudBaseRegister(email, password, name)
+    } else {
+      console.log('[REGISTER] ✓ Using Supabase (global version)')
     }
 
     // Continue with existing Supabase logic
@@ -260,11 +274,16 @@ async function handleCloudBaseRegister(
   name: string
 ): Promise<NextResponse> {
   try {
+    console.log('[REGISTER] ===== CloudBase registration started =====')
     console.log('[REGISTER] CloudBase registration for:', email)
 
     // Check if user already exists
+    console.log('[REGISTER] Checking if user already exists...')
     const existingUser = await getCloudBaseUserByEmail(email)
+    console.log('[REGISTER] Existing user check result:', existingUser ? 'User exists' : 'User not found')
+
     if (existingUser) {
+      console.log('[REGISTER] ✗ Registration failed: Email already registered')
       return NextResponse.json(
         { error: 'Email already registered' },
         { status: 400 }
@@ -273,15 +292,21 @@ async function handleCloudBaseRegister(
 
     // Generate unique user ID
     const userId = uuidv4()
+    console.log('[REGISTER] Generated user ID:', userId)
 
     // Hash password
+    console.log('[REGISTER] Hashing password...')
     const passwordHash = await hashPassword(password)
+    console.log('[REGISTER] Password hashed successfully')
 
     // Get CloudBase database
+    console.log('[REGISTER] Getting CloudBase database instance...')
     const { getCloudBaseDb } = await import('@/lib/cloudbase/client')
     const db = getCloudBaseDb()
+    console.log('[REGISTER] Database instance:', db ? 'obtained' : 'null')
 
     if (!db) {
+      console.log('[REGISTER] ✗ CloudBase not configured')
       throw new Error('CloudBase not configured')
     }
 
@@ -301,12 +326,22 @@ async function handleCloudBaseRegister(
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
+    console.log('[REGISTER] User data prepared:', {
+      id: userData.id,
+      email: userData.email,
+      username: userData.username,
+      full_name: userData.full_name,
+      provider: userData.provider,
+    })
 
-    await db.collection('users').add(userData)
+    console.log('[REGISTER] Writing to CloudBase users collection...')
+    const result = await db.collection('users').add(userData)
+    console.log('[REGISTER] CloudBase write result:', result)
 
-    console.log('[REGISTER] CloudBase user created:', userId)
+    console.log('[REGISTER] ✓ CloudBase user created:', userId)
 
     // Create user object for response (without password_hash)
+    console.log('[REGISTER] Creating user object for response...')
     const user: User = {
       id: userId,
       email: email,
@@ -328,12 +363,15 @@ async function handleCloudBaseRegister(
     }
 
     // Create session token
+    console.log('[REGISTER] Creating session token...')
     const token = createCloudBaseSession(user, {
       provider: 'email',
       provider_id: email,
     })
+    console.log('[REGISTER] Session token created:', token ? 'success' : 'failed')
 
     // Create response with session cookie
+    console.log('[REGISTER] Creating response with session cookie...')
     const response = NextResponse.json({
       success: true,
       user,
@@ -342,13 +380,20 @@ async function handleCloudBaseRegister(
     })
 
     // Set session cookie
+    console.log('[REGISTER] Setting session cookie...')
     setCloudBaseSessionCookie(response, token)
 
-    console.log('[REGISTER] CloudBase registration successful, session created')
+    console.log('[REGISTER] ✓ CloudBase registration successful, session created')
+    console.log('[REGISTER] ===== Registration completed successfully =====')
 
     return response
   } catch (error: any) {
-    console.error('[REGISTER] CloudBase registration error:', error)
+    console.error('[REGISTER] ✗ CloudBase registration error:', error)
+    console.error('[REGISTER] Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    })
     return NextResponse.json(
       { error: error.message || 'Registration failed' },
       { status: 500 }

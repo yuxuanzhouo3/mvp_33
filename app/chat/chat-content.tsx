@@ -7665,7 +7665,7 @@ function ChatPageContent() {
 
       <div className="flex flex-1 overflow-hidden relative">
         {/* 左侧导航栏（仅桌面端显示） */}
-        {!isMobile && <AppNavigation />}
+        {!isMobile && <AppNavigation totalUnreadCount={conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0)} />}
         {/* Mobile overlay */}
         {isMobile && sidebarOpen && (
           <div

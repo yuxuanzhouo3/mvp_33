@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Mail, ArrowLeft } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
+import { IS_DOMESTIC_VERSION } from '@/config'
 import {
   Dialog,
   DialogContent,
@@ -141,10 +142,14 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
       }
 
       if (data.success && data.user) {
-        // 始终走“邮箱确认”流程：不论 Supabase 是否立即创建 session，
-        // 都不自动当作已登录，不直接进入 workspace，而是提示去邮箱确认。
-        setShowEmailConfirmDialog(true)
-        // 不调用 onSuccess，保持在注册/登录流程，用户去邮箱确认后再到登录页登录
+        // 根据 requiresEmailConfirmation 决定流程
+        if (data.requiresEmailConfirmation) {
+          // 国际版：需要邮箱验证，显示确认对话框
+          setShowEmailConfirmDialog(true)
+        } else {
+          // 国内版：不需要邮箱验证，直接登录
+          onSuccess()
+        }
       } else {
         throw new Error('Registration failed')
       }
@@ -192,18 +197,33 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* OAuth Button - Google only (same as login page) */}
+          {/* OAuth Buttons - Dynamic based on region */}
           <div className="grid grid-cols-1 gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOAuth('google')}
-              disabled={isLoading}
-              className="w-full"
-            >
-              <GoogleIcon className="mr-2 h-5 w-5" />
-              {t('google')}
-            </Button>
+            {IS_DOMESTIC_VERSION ? (
+              // 国内版：显示微信登录
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleOAuth('wechat')}
+                disabled={isLoading}
+                className="w-full"
+              >
+                <WeChatIcon className="mr-2 h-5 w-5" />
+                {t('wechat')}
+              </Button>
+            ) : (
+              // 国际版：显示 Google 登录
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleOAuth('google')}
+                disabled={isLoading}
+                className="w-full"
+              >
+                <GoogleIcon className="mr-2 h-5 w-5" />
+                {t('google')}
+              </Button>
+            )}
           </div>
 
           {/* Divider */}

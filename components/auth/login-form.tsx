@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { mockAuth } from '@/lib/mock-auth'
 import { Loader2, Mail } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
+import { IS_DOMESTIC_VERSION } from '@/config'
 
 interface LoginFormProps {
   onSuccess: () => void
@@ -258,18 +259,33 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister }: LoginForm
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* OAuth Login Button - Google only */}
+        {/* OAuth Login Buttons - Dynamic based on region */}
         <div className="grid grid-cols-1 gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => handleOAuthLogin('google')}
-            disabled={isLoading}
-            className="w-full"
-          >
-            <GoogleIcon className="mr-2 h-5 w-5" />
-            {t('google')}
-          </Button>
+          {IS_DOMESTIC_VERSION ? (
+            // 国内版：显示微信登录
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleOAuthLogin('wechat')}
+              disabled={isLoading}
+              className="w-full"
+            >
+              <WeChatIcon className="mr-2 h-5 w-5" />
+              {t('wechat')}
+            </Button>
+          ) : (
+            // 国际版：显示 Google 登录
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleOAuthLogin('google')}
+              disabled={isLoading}
+              className="w-full"
+            >
+              <GoogleIcon className="mr-2 h-5 w-5" />
+              {t('google')}
+            </Button>
+          )}
         </div>
 
         {/* Divider */}
