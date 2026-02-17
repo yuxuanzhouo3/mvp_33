@@ -53,6 +53,7 @@ export function GroupMembersSection({
 
   const filteredMembers = searchQuery
     ? members.filter(m =>
+        (m as any).group_nickname?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         m.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         m.username?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         m.email?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -85,14 +86,22 @@ export function GroupMembersSection({
           </div>
 
           <div className="flex flex-row gap-2 items-center flex-wrap">
-            {displayMembers.map((member) => (
-              <Avatar key={member.id} className="h-10 w-10" userId={member.id}>
-                <AvatarImage src={member.avatar_url || undefined} />
-                <AvatarFallback className="text-xs">
-                  {member.full_name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-            ))}
+            {displayMembers.map((member) => {
+              const displayName = (member as any).group_nickname || member.full_name
+              return (
+                <div key={member.id} className="flex flex-col items-center gap-1">
+                  <Avatar className="h-10 w-10" userId={member.id}>
+                    <AvatarImage src={member.avatar_url || undefined} />
+                    <AvatarFallback className="text-xs">
+                      {displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-xs text-muted-foreground truncate max-w-[60px]" title={displayName}>
+                    {displayName}
+                  </span>
+                </div>
+              )
+            })}
 
             {remainingCount > 0 && (
               <div className="h-10 w-10 rounded-full bg-accent flex items-center justify-center">

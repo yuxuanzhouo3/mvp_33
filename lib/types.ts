@@ -73,6 +73,7 @@ export interface ConversationMember {
   joined_at: string
   last_read_at?: string
   notification_setting: 'all' | 'mentions' | 'none'
+  group_nickname?: string
 }
 
 export interface Message {
@@ -159,6 +160,10 @@ export interface ConversationWithDetails extends Conversation {
   is_pinned?: boolean
   pinned_at?: string | null // Timestamp when conversation was pinned (for sorting)
   is_hidden?: boolean
+}
+
+export interface UserWithGroupNickname extends User {
+  group_nickname?: string
 }
 
 export interface MessageWithSender extends Message {

@@ -8,9 +8,8 @@ import { MessageWithSender } from '@/lib/types'
 
 export async function getMessages(conversationId: string): Promise<MessageWithSender[]> {
   const supabase = await createClient()
-  
-  // OPTIMIZED: Only fetch messages, skip conversation check (it's already verified in API route)
-  // This reduces one database query
+
+  // Fetch messages with sender info and group nicknames
   const { data: messages, error: messagesError } = await supabase
     .from('messages')
     .select(`
@@ -25,7 +24,7 @@ export async function getMessages(conversationId: string): Promise<MessageWithSe
     `)
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true })
-    .limit(1000) // Reasonable limit for chat messages
+    .limit(1000)
 
   if (messagesError) {
     console.error('getMessages: Error fetching messages:', messagesError)
@@ -37,21 +36,33 @@ export async function getMessages(conversationId: string): Promise<MessageWithSe
     return []
   }
 
+  // Fetch group nicknames for all members in this conversation
+  const { data: members } = await supabase
+    .from('conversation_members')
+    .select('user_id, group_nickname')
+    .eq('conversation_id', conversationId)
+
+  const nicknameMap = new Map(
+    members?.map(m => [m.user_id, m.group_nickname]) || []
+  )
+
   console.log('getMessages: Retrieved', messages.length, 'messages from conversation:', conversationId)
 
-  // OPTIMIZED: Map messages more efficiently
-  // Pre-allocate array size for better performance
   const mappedMessages: MessageWithSender[] = []
   for (const msg of messages) {
-    if (msg.users) { // Only include messages with valid sender
+    if (msg.users) {
+      const groupNickname = nicknameMap.get(msg.sender_id)
       mappedMessages.push({
         ...msg,
-        sender: msg.users,
+        sender: {
+          ...msg.users,
+          group_nickname: groupNickname || undefined
+        },
         reactions: Array.isArray(msg.reactions) ? msg.reactions : [],
       } as MessageWithSender)
     }
   }
-  
+
   console.log('getMessages: Returning', mappedMessages.length, 'valid messages')
   return mappedMessages
 }

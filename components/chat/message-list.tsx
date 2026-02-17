@@ -865,6 +865,12 @@ export function MessageList({
               return message.sender || currentUser
             })()
 
+            // 获取显示名称：优先显示群昵称，其次显示真实姓名
+            const getDisplayName = (sender: User | undefined) => {
+              if (!sender) return ''
+              return (sender as any).group_nickname || sender.full_name || ''
+            }
+
             const grouped = shouldGroupWithPrevious(index)
 
             const showDate = shouldShowDateSeparator(index)
@@ -940,7 +946,7 @@ export function MessageList({
                 {message.is_recalled ? (
                   <div className="flex justify-center my-2">
                     <span className="text-xs text-muted-foreground">
-                      {isOwn ? '你撤回了一条消息' : `${displaySender?.full_name || '对方'}撤回了一条消息`}
+                      {isOwn ? '你撤回了一条消息' : `${getDisplayName(displaySender) || '对方'}撤回了一条消息`}
                     </span>
                   </div>
                 ) : (
@@ -963,7 +969,7 @@ export function MessageList({
                           router.push(`/contacts?userId=${displaySender.id}`)
                         }
                       }}
-                      title={displaySender?.full_name || ''}
+                      title={getDisplayName(displaySender)}
                     >
                       <Avatar className={cn("h-8 w-8", isMobile && "h-9 w-9")} userId={displaySender?.id} showOnlineStatus={true}>
                         <AvatarImage src={displaySender?.avatar_url || undefined} />
@@ -997,7 +1003,7 @@ export function MessageList({
 
                         <span className="font-medium text-sm text-gray-700">
 
-                          {displaySender?.full_name || ''}
+                          {getDisplayName(displaySender)}
 
                         </span>
 

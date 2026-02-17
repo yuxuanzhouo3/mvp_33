@@ -14,6 +14,7 @@ export async function getGroupMembers(groupId: string): Promise<User[]> {
       is_muted,
       can_send_messages,
       join_status,
+      group_nickname,
       users!conversation_members_user_id_fkey (*)
     `)
     .eq('conversation_id', groupId)
@@ -32,7 +33,8 @@ export async function getGroupMembers(groupId: string): Promise<User[]> {
     ...m.users,
     role: m.role,
     is_muted: m.is_muted,
-    can_send_messages: m.can_send_messages
+    can_send_messages: m.can_send_messages,
+    group_nickname: m.group_nickname
   })) as User[]
 
   console.log('[getGroupMembers] 返回成员数量', { count: result.length })

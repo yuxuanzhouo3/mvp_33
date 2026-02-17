@@ -14,6 +14,7 @@ import { MemberActionsMenu } from './member-actions-menu'
 import { GroupMembersSection } from './group-members-section'
 import { AnnouncementDrawer } from './announcement-drawer'
 import { GroupFilesDialog } from './group-files-dialog'
+import { GroupNicknameDialog } from './group-nickname-dialog'
 
 interface GroupInfoPanelProps {
   conversation: ConversationWithDetails
@@ -34,10 +35,12 @@ export function GroupInfoPanel({
   const [showAddMembers, setShowAddMembers] = useState(false)
   const [showAnnouncements, setShowAnnouncements] = useState(false)
   const [showFiles, setShowFiles] = useState(false)
+  const [showNickname, setShowNickname] = useState(false)
   const [selectedMember, setSelectedMember] = useState<User | null>(null)
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null)
   const [isMuted, setIsMuted] = useState(false)
   const [isPinned, setIsPinned] = useState(false)
+  const [currentNickname, setCurrentNickname] = useState<string>('')
 
   // 获取当前用户在群聊中的角色
   const currentUserMember = conversation.members.find(m => m.id === currentUser.id)
@@ -152,6 +155,14 @@ export function GroupInfoPanel({
                   >
                     <FileIcon className="mr-2 h-4 w-4" />
                     群文件
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start hover:bg-accent transition-colors duration-200 rounded-lg"
+                    onClick={() => setShowNickname(true)}
+                  >
+                    <Users className="mr-2 h-4 w-4" />
+                    群昵称
                   </Button>
                   {isAdmin && (
                     <>
@@ -277,6 +288,14 @@ export function GroupInfoPanel({
         conversationId={conversation.id}
         currentUserId={currentUser.id}
         isAdmin={isAdmin}
+      />
+
+      <GroupNicknameDialog
+        open={showNickname}
+        onOpenChange={setShowNickname}
+        conversationId={conversation.id}
+        currentNickname={currentNickname}
+        onUpdate={onUpdate}
       />
 
       {selectedMember && menuPosition && (
