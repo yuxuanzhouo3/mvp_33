@@ -16,6 +16,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Set build-time environment variables for China deployment
+ENV NEXT_PUBLIC_DEPLOYMENT_REGION=CN
+
 # Build Next.js
 RUN npm run build
 
