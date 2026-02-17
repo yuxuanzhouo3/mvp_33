@@ -33,6 +33,8 @@ pnpm-debug.log*
 .env.test.local
 .env.production.local
 .env.cloudbase
+.env.cn
+.env.intl
 
 # Vercel
 .vercel

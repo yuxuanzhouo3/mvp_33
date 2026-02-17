@@ -386,32 +386,51 @@ export async function POST(request: NextRequest) {
  */
 async function handleCloudBaseLogin(email: string, password: string) {
   try {
+    console.log('[LOGIN] ========== CloudBase Login Started ==========')
     console.log('[LOGIN] CloudBase authentication for:', email)
+    console.log('[LOGIN] Password length:', password.length)
+    console.log('[LOGIN] Password first 2 chars:', password.substring(0, 2))
+    console.log('[LOGIN] Password last 2 chars:', password.substring(password.length - 2))
 
-    // Get user from CloudBase
-    const user = await getCloudBaseUserByEmail(email)
+    // Get user from CloudBase (with password hash for authentication)
+    const user = await getCloudBaseUserByEmail(email, true)
 
     if (!user) {
-      console.error('[LOGIN] User not found in CloudBase:', email)
+      console.error('[LOGIN] ❌ User not found in CloudBase:', email)
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
       )
     }
+
+    console.log('[LOGIN] ✓ User found in CloudBase:', {
+      userId: user.id,
+      email: user.email,
+      username: user.username,
+    })
 
     // Verify password
     const storedPasswordHash = (user as any).password_hash
     if (!storedPasswordHash) {
-      console.error('[LOGIN] No password hash found for user:', email)
+      console.error('[LOGIN] ❌ No password hash found for user:', email)
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
       )
     }
 
+    console.log('[LOGIN] Password hash from database:', storedPasswordHash)
+    console.log('[LOGIN] Password hash length:', storedPasswordHash.length)
+    console.log('[LOGIN] Password hash starts with:', storedPasswordHash.substring(0, 7))
+
+    console.log('[LOGIN] Calling verifyPassword...')
     const isPasswordValid = await verifyPassword(password, storedPasswordHash)
+    console.log('[LOGIN] Password verification result:', isPasswordValid ? '✓ VALID' : '❌ INVALID')
+
     if (!isPasswordValid) {
-      console.error('[LOGIN] Invalid password for user:', email)
+      console.error('[LOGIN] ❌ Invalid password for user:', email)
+      console.error('[LOGIN] Password provided:', password)
+      console.error('[LOGIN] Hash in database:', storedPasswordHash)
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }

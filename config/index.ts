@@ -1,22 +1,19 @@
-// 读取和规范化环境变量
-const envDefaultLang = (process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE || "en").toLowerCase();
-export const DEFAULT_LANGUAGE: string = envDefaultLang === "zh" ? "zh" : "en";
+// 明确的部署区域标识
+const DEPLOYMENT_REGION = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION || "INTL";
 
-// 版本标识
-// 优先检查 FORCE_GLOBAL_DATABASE，如果设置为 true，则强制使用国际版（Supabase）
-export const IS_DOMESTIC_VERSION = process.env.FORCE_GLOBAL_DATABASE === "true"
-  ? false
-  : DEFAULT_LANGUAGE === "zh";
+export const IS_CN_DEPLOYMENT = DEPLOYMENT_REGION === "CN";
+export const IS_INTL_DEPLOYMENT = DEPLOYMENT_REGION === "INTL";
 
-// 地区标识 (兼容现有代码)
-export const DEFAULT_REGION: 'cn' | 'global' = IS_DOMESTIC_VERSION ? 'cn' : 'global';
+// 向后兼容
+export const IS_DOMESTIC_VERSION = IS_CN_DEPLOYMENT;
+export const DEFAULT_REGION: 'cn' | 'global' = IS_CN_DEPLOYMENT ? 'cn' : 'global';
+export const DEFAULT_LANGUAGE = IS_CN_DEPLOYMENT ? 'zh' : 'en';
 
 // 应用配置
 export const APP_CONFIG = {
   name: "Enterprise Chat",
-  description: IS_DOMESTIC_VERSION
-    ? "企业级通讯平台"
-    : "Enterprise Communication Platform",
+  description: IS_CN_DEPLOYMENT ? "企业级通讯平台" : "Enterprise Communication Platform",
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
 };
 
 // 数据库配置
@@ -24,14 +21,16 @@ export const DATABASE_CONFIG = {
   domestic: {
     provider: "cloudbase",
     region: "cn" as const,
+    enabled: IS_CN_DEPLOYMENT,
   },
   international: {
     provider: "supabase",
     region: "global" as const,
+    enabled: IS_INTL_DEPLOYMENT,
   },
 };
 
 // 获取当前数据库配置
 export const getCurrentDatabaseConfig = () => {
-  return IS_DOMESTIC_VERSION ? DATABASE_CONFIG.domestic : DATABASE_CONFIG.international;
+  return IS_CN_DEPLOYMENT ? DATABASE_CONFIG.domestic : DATABASE_CONFIG.international;
 };

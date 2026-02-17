@@ -32,8 +32,9 @@ const normalizeCloudBaseUser = (userData: any): User => ({
 
 /**
  * Get user by email from CloudBase
+ * @param includePasswordHash - If true, returns raw data with password_hash for authentication
  */
-export async function getUserByEmail(email: string): Promise<User | null> {
+export async function getUserByEmail(email: string, includePasswordHash: boolean = false): Promise<User | null> {
   try {
     const db = getCloudBaseDb()
     if (!db) {
@@ -47,7 +48,17 @@ export async function getUserByEmail(email: string): Promise<User | null> {
       .get()
 
     if (result.data && result.data.length > 0) {
-      return normalizeCloudBaseUser(result.data[0])
+      const userData = result.data[0]
+
+      // For authentication, return raw data with password_hash
+      if (includePasswordHash) {
+        return {
+          ...normalizeCloudBaseUser(userData),
+          password_hash: userData.password_hash
+        } as any
+      }
+
+      return normalizeCloudBaseUser(userData)
     }
 
     return null

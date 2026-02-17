@@ -142,14 +142,9 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
       }
 
       if (data.success && data.user) {
-        // 根据 requiresEmailConfirmation 决定流程
-        if (data.requiresEmailConfirmation) {
-          // 国际版：需要邮箱验证，显示确认对话框
-          setShowEmailConfirmDialog(true)
-        } else {
-          // 国内版：不需要邮箱验证，直接登录
-          onSuccess()
-        }
+        // 注册成功后，统一显示提示并跳转到登录页面
+        // 不再自动登录，要求用户手动输入账号密码登录
+        setShowEmailConfirmDialog(true)
       } else {
         throw new Error('Registration failed')
       }

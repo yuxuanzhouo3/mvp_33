@@ -75,6 +75,19 @@ export async function middleware(request: NextRequest) {
   }
 
   // ============================================================================
+  // 域名验证（防止错误部署）
+  // ============================================================================
+  const host = request.headers.get('host');
+  const expectedRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION;
+
+  if (expectedRegion === 'CN' && host && !host.includes('mornscience.top')) {
+    console.warn(`[DEPLOYMENT WARNING] CN build accessed via wrong domain: ${host}`);
+  }
+  if (expectedRegion === 'INTL' && host && !host.includes('mornscience.work')) {
+    console.warn(`[DEPLOYMENT WARNING] INTL build accessed via wrong domain: ${host}`);
+  }
+
+  // ============================================================================
   // IP 地理位置检测和屏蔽
   // ============================================================================
   try {

@@ -17,16 +17,17 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined)
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
+  // 初始语言从构建配置读取
   const [language, setLanguageState] = useState<Language>(DEFAULT_LANGUAGE as Language)
   const [theme, setThemeState] = useState<Theme>('light')
 
   // Apply theme based on user choice
   const applyTheme = (theme: Theme) => {
     if (typeof window === 'undefined') return
-    
+
     // Remove all theme classes first
     document.documentElement.classList.remove('dark', 'theme-monokai', 'theme-solarized-dark', 'theme-light-purple', 'theme-light-yellow')
-    
+
     // Apply theme class
     if (theme === 'dark') {
       document.documentElement.classList.add('dark')
@@ -44,10 +45,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   // Load settings from localStorage on mount
   useEffect(() => {
+    // 只在客户端读取用户偏好，但不影响环境
     const savedLanguage = localStorage.getItem('language') as Language
     const savedTheme = localStorage.getItem('theme') as Theme
-    
-    if (savedLanguage) setLanguageState(savedLanguage)
+
+    // 语言设置仅用于 UI 显示，不影响认证方式和数据库选择
+    if (savedLanguage && (savedLanguage === 'zh' || savedLanguage === 'en')) {
+      setLanguageState(savedLanguage)
+    }
+
     if (savedTheme) {
       setThemeState(savedTheme)
       applyTheme(savedTheme)
@@ -58,6 +64,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // 语言切换不触发环境切换
   const setLanguage = (newLanguage: Language) => {
     setLanguageState(newLanguage)
     localStorage.setItem('language', newLanguage)

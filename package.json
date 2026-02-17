@@ -5,6 +5,8 @@
   "scripts": {
     "admin:create": "tsx scripts/create-initial-admin.ts",
     "build": "next build",
+    "build:cn": "cross-env-shell \"cp .env.cn .env.local && next build\"",
+    "build:intl": "cross-env-shell \"cp .env.intl .env.local && next build\"",
     "dev": "cross-env TURBOPACK=0 next dev -p 3000",
     "lint": "eslint .",
     "start": "next start"
@@ -94,6 +96,7 @@
     "cross-env": "^10.1.0",
     "playwright": "^1.58.2",
     "postcss": "^8.5",
+    "shx": "^0.4.0",
     "tailwindcss": "^4.1.9",
     "tsx": "^4.21.0",
     "tw-animate-css": "1.3.3",

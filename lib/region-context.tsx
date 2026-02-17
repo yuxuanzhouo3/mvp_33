@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, ReactNode } from 'react';
-import { DEFAULT_REGION, IS_DOMESTIC_VERSION } from '@/config';
+import { DEFAULT_REGION, IS_CN_DEPLOYMENT } from '@/config';
 
 export type Region = 'cn' | 'global';
 
@@ -9,15 +9,9 @@ export interface RegionInfo {
   region: Region;
   isChina: boolean;
   label: string;
-  loading: boolean;
-  error: string | null;
 }
 
-interface RegionContextType extends RegionInfo {
-  refresh: () => Promise<void>;
-}
-
-const RegionContext = createContext<RegionContextType | undefined>(undefined);
+const RegionContext = createContext<RegionInfo | undefined>(undefined);
 
 interface RegionProviderProps {
   children: ReactNode;
@@ -25,16 +19,13 @@ interface RegionProviderProps {
 
 /**
  * Region Context Provider
- * Uses environment variable to determine region (no IP detection)
+ * 直接使用构建时确定的配置，无需动态检测
  */
 export const RegionProvider: React.FC<RegionProviderProps> = ({ children }) => {
-  const value: RegionContextType = {
+  const value: RegionInfo = {
     region: DEFAULT_REGION,
-    isChina: IS_DOMESTIC_VERSION,
-    label: IS_DOMESTIC_VERSION ? 'China' : 'Global',
-    loading: false,
-    error: null,
-    refresh: async () => {}, // Empty operation for API compatibility
+    isChina: IS_CN_DEPLOYMENT,
+    label: IS_CN_DEPLOYMENT ? 'China' : 'Global',
   };
 
   return (
@@ -52,14 +43,7 @@ export const useRegion = (): RegionInfo => {
   if (context === undefined) {
     throw new Error('useRegion must be used within a RegionProvider');
   }
-
-  return {
-    region: context.region,
-    isChina: context.isChina,
-    label: context.label,
-    loading: context.loading,
-    error: context.error,
-  };
+  return context;
 };
 
 
