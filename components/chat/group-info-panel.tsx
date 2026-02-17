@@ -12,7 +12,7 @@ import { GroupSettingsDialog } from './group-settings-dialog'
 import { AddMembersDialog } from './add-members-dialog'
 import { MemberActionsMenu } from './member-actions-menu'
 import { GroupMembersSection } from './group-members-section'
-import { GroupAnnouncementsDialog } from './group-announcements-dialog'
+import { AnnouncementDrawer } from './announcement-drawer'
 import { GroupFilesDialog } from './group-files-dialog'
 
 interface GroupInfoPanelProps {
@@ -91,7 +91,7 @@ export function GroupInfoPanel({
       <div
         className={cn(
           'border-l bg-background transition-all duration-300 ease-out',
-          isOpen ? 'w-72' : 'w-0 overflow-hidden'
+          isOpen ? 'w-64' : 'w-0 overflow-hidden'
         )}
       >
         {isOpen && (
@@ -275,7 +275,7 @@ export function GroupInfoPanel({
         onUpdate={onUpdate}
       />
 
-      <GroupAnnouncementsDialog
+      <AnnouncementDrawer
         open={showAnnouncements}
         onOpenChange={setShowAnnouncements}
         conversationId={conversation.id}

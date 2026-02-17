@@ -18,6 +18,12 @@ import { AppNavigation } from '@/components/layout/app-navigation'
 
 import { MessageList } from '@/components/chat/message-list'
 
+import { AnnouncementBanner } from '@/components/chat/announcement-banner'
+
+import { AnnouncementDrawer } from '@/components/chat/announcement-drawer'
+import { AnnouncementsView } from '@/components/chat/announcements-view'
+import { FilesView } from '@/components/chat/files-view'
+
 import { GroupInfoPanel } from '@/components/chat/group-info-panel'
 
 import { MessageInput } from '@/components/chat/message-input'
@@ -75,6 +81,7 @@ function ChatPageContent() {
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true) // Mobile sidebar state
   const [groupInfoOpen, setGroupInfoOpen] = useState(false) // Group info panel state
+  const [announcementDrawerOpen, setAnnouncementDrawerOpen] = useState(false) // Announcement drawer state
   const [activeTab, setActiveTab] = useState('messages') // Chat tabs state
   const isMobile = useIsMobile()
 
@@ -7683,10 +7690,10 @@ function ChatPageContent() {
             isMobile && !sidebarOpen && "-translate-x-[calc(100%-40px)]",
             isMobile && sidebarOpen && "translate-x-0"
           )}
-          style={{ 
-            width: isMobile 
-              ? '280px' 
-              : (sidebarExpanded ? '400px' : '320px')
+          style={{
+            width: isMobile
+              ? '280px'
+              : (sidebarExpanded ? '420px' : '340px')
           }}
         >
 
@@ -7842,35 +7849,67 @@ function ChatPageContent() {
                 />
               )}
 
-              <MessageList 
+              {displayConversation.type === 'group' && activeTab === 'messages' && (
+                <AnnouncementBanner
+                  conversationId={displayConversation.id}
+                  isAdmin={displayConversation.members?.some(
+                    m => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
+                  ) || false}
+                  onOpenDrawer={() => setAnnouncementDrawerOpen(true)}
+                />
+              )}
 
-                messages={messages} 
+              {activeTab === 'messages' && (
+                <>
+                  <MessageList
 
-                currentUser={currentUser}
+                    messages={messages}
 
-                isLoading={isLoadingMessages}
+                    currentUser={currentUser}
 
-                onEditMessage={handleEditMessage}
+                    isLoading={isLoadingMessages}
 
-                onDeleteMessage={handleDeleteMessage}
+                    onEditMessage={handleEditMessage}
 
-                onRecallMessage={handleRecallMessage}
+                    onDeleteMessage={handleDeleteMessage}
 
-                onHideMessage={handleHideMessage}
+                    onRecallMessage={handleRecallMessage}
 
-                onAddReaction={handleAddReaction}
+                    onHideMessage={handleHideMessage}
 
-                onRemoveReaction={handleRemoveReaction}
+                    onAddReaction={handleAddReaction}
 
-                onPinMessage={handlePinMessage}
+                    onRemoveReaction={handleRemoveReaction}
 
-                onUnpinMessage={handleUnpinMessage}
+                    onPinMessage={handlePinMessage}
 
-                onReplyMessage={handleReplyMessage}
+                    onUnpinMessage={handleUnpinMessage}
 
-              />
+                    onReplyMessage={handleReplyMessage}
 
-              <MessageInput onSendMessage={handleSendMessage} />
+                  />
+
+                  <MessageInput onSendMessage={handleSendMessage} />
+                </>
+              )}
+
+              {activeTab === 'announcements' && displayConversation.type === 'group' && (
+                <AnnouncementsView
+                  conversationId={displayConversation.id}
+                  isAdmin={displayConversation.members?.some(
+                    m => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
+                  ) || false}
+                />
+              )}
+
+              {activeTab === 'files' && displayConversation.type === 'group' && (
+                <FilesView
+                  conversationId={displayConversation.id}
+                  isAdmin={displayConversation.members?.some(
+                    m => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
+                  ) || false}
+                />
+              )}
 
             </>
 
@@ -7976,6 +8015,18 @@ function ChatPageContent() {
           callMessageId={incomingCallMessageId}
           isIncoming={true}
           autoAnswer={true}
+        />
+      )}
+
+      {/* Announcement drawer */}
+      {displayConversation?.type === 'group' && (
+        <AnnouncementDrawer
+          open={announcementDrawerOpen}
+          onOpenChange={setAnnouncementDrawerOpen}
+          conversationId={displayConversation.id}
+          isAdmin={displayConversation.members?.some(
+            m => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
+          ) || false}
         />
       )}
 
