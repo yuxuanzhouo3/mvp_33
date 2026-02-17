@@ -524,17 +524,7 @@ export function Sidebar({
       {/* Search header */}
       <div className="border-b p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">{t('messages')}</h2>
-            {totalUnreadCount > 0 && (
-              <Badge
-                variant="destructive"
-                className="h-5 px-2 flex items-center justify-center text-xs font-medium"
-              >
-                {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
-              </Badge>
-            )}
-          </div>
+          <h2 className="text-lg font-semibold">{t('messages')}</h2>
           <Button
             size="icon"
             variant="ghost"
