@@ -6,6 +6,8 @@ import { createCloudBaseSession, setCloudBaseSessionCookie } from '@/lib/cloudba
 import { User } from '@/lib/types'
 import { IS_DOMESTIC_VERSION } from '@/config'
 import { verifyPassword } from '@/lib/utils/password'
+import { recordDevice } from '@/lib/database/devices'
+import { parseDeviceInfo, getClientIP, getLocationFromIP } from '@/lib/utils/device-parser'
 
 export async function POST(request: NextRequest) {
   try {
@@ -367,6 +369,30 @@ export async function POST(request: NextRequest) {
     // Workspace creation can be done asynchronously after login
     // Don't block login for workspace creation
 
+    // Get device info
+    const userAgent = request.headers.get('user-agent') || ''
+    const deviceInfo = parseDeviceInfo(userAgent)
+    const ip = getClientIP(request)
+    const location = await getLocationFromIP(ip)
+
+    // Record device
+    try {
+      await recordDevice({
+        user_id: updatedUser.id,
+        device_name: deviceInfo.deviceName,
+        device_type: deviceInfo.deviceType,
+        browser: deviceInfo.browser,
+        os: deviceInfo.os,
+        ip_address: ip,
+        location: location,
+        session_token: token,
+      })
+      console.log('[LOGIN] Device recorded successfully')
+    } catch (error) {
+      console.error('[LOGIN] Failed to record device:', error)
+      // Don't fail login if device recording fails
+    }
+
     return NextResponse.json({
       success: true,
       user: updatedUser,
@@ -441,6 +467,30 @@ async function handleCloudBaseLogin(email: string, password: string) {
 
     // Create CloudBase session
     const token = createCloudBaseSession(user)
+
+    // Get device info
+    const userAgent = request.headers.get('user-agent') || ''
+    const deviceInfo = parseDeviceInfo(userAgent)
+    const ip = getClientIP(request)
+    const location = await getLocationFromIP(ip)
+
+    // Record device
+    try {
+      await recordDevice({
+        user_id: user.id,
+        device_name: deviceInfo.deviceName,
+        device_type: deviceInfo.deviceType,
+        browser: deviceInfo.browser,
+        os: deviceInfo.os,
+        ip_address: ip,
+        location: location,
+        session_token: token,
+      })
+      console.log('[LOGIN] Device recorded successfully')
+    } catch (error) {
+      console.error('[LOGIN] Failed to record device:', error)
+      // Don't fail login if device recording fails
+    }
 
     // Create response with session cookie
     const response = NextResponse.json({
