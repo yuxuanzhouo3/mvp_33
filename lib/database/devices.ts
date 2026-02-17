@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCloudBaseDB } from '@/lib/cloudbase/db'
+import { IS_DOMESTIC_VERSION } from '@/config'
 
 export interface DeviceData {
   user_id: string
@@ -97,4 +98,25 @@ async function deleteCloudBaseDevice(deviceId: string, userId: string): Promise<
   await db.collection('user_devices')
     .where({ _id: deviceId, user_id: userId })
     .remove()
+}
+
+export async function getDevices(userId: string): Promise<Device[]> {
+  if (IS_DOMESTIC_VERSION) {
+    return getCloudBaseDevices(userId)
+  }
+  return getSupabaseDevices(userId)
+}
+
+export async function recordDevice(data: DeviceData): Promise<Device> {
+  if (IS_DOMESTIC_VERSION) {
+    return recordCloudBaseDevice(data)
+  }
+  return recordSupabaseDevice(data)
+}
+
+export async function deleteDevice(deviceId: string, userId: string): Promise<void> {
+  if (IS_DOMESTIC_VERSION) {
+    return deleteCloudBaseDevice(deviceId, userId)
+  }
+  return deleteSupabaseDevice(deviceId, userId)
 }
