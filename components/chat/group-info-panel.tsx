@@ -6,7 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { ConversationWithDetails, User } from '@/lib/types'
-import { Users, Settings, UserPlus, LogOut, X, MoreVertical, Shield, Crown, Megaphone, FileIcon } from 'lucide-react'
+import { Users, Settings, UserPlus, LogOut, X, MoreVertical, Shield, Crown, Megaphone, FileIcon, Bell, BellOff, Pin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GroupSettingsDialog } from './group-settings-dialog'
 import { AddMembersDialog } from './add-members-dialog'
@@ -36,6 +36,8 @@ export function GroupInfoPanel({
   const [showFiles, setShowFiles] = useState(false)
   const [selectedMember, setSelectedMember] = useState<User | null>(null)
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null)
+  const [isMuted, setIsMuted] = useState(false)
+  const [isPinned, setIsPinned] = useState(false)
 
   // 获取当前用户在群聊中的角色
   const currentUserMember = conversation.members.find(m => m.id === currentUser.id)
@@ -181,61 +183,48 @@ export function GroupInfoPanel({
 
                 <Separator />
 
-                {/* Members List */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-semibold text-muted-foreground">
-                      成员列表
-                    </h4>
-                  </div>
-                  <div className="space-y-2">
-                    {conversation.members.map((member) => (
-                      <div
-                        key={member.id}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent cursor-pointer transition-colors duration-200"
-                        onContextMenu={(e) => isAdmin && handleMemberContextMenu(e, member)}
-                        onClick={(e) => {
-                          if (isAdmin) {
-                            handleMemberContextMenu(e, member)
-                          }
-                        }}
-                      >
-                        <div className="relative">
-                          <Avatar className="h-10 w-10 rounded-lg">
-                            <AvatarImage src={member.avatar_url || undefined} />
-                            <AvatarFallback className="text-sm">
-                              {member.full_name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className={cn(
-                            'absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background',
-                            getStatusColor(member.status)
-                          )} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1">
-                            <p className="text-sm font-medium truncate">{member.full_name}</p>
-                            {getMemberRoleIcon(member)}
-                          </div>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {member.title || member.username}
-                          </p>
-                        </div>
-                        {isAdmin && member.id !== currentUser.id && (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 opacity-0 group-hover:opacity-100"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleMemberContextMenu(e, member)
-                            }}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
+                {/* Settings */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors duration-200">
+                    <div className="flex items-center gap-2">
+                      {isMuted ? <BellOff className="h-4 w-4 text-muted-foreground" /> : <Bell className="h-4 w-4 text-muted-foreground" />}
+                      <span className="text-sm">消息免打扰</span>
+                    </div>
+                    <button
+                      onClick={() => setIsMuted(!isMuted)}
+                      className={cn(
+                        'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+                        isMuted ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                          isMuted ? 'translate-x-5' : 'translate-x-0.5'
                         )}
-                      </div>
-                    ))}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors duration-200">
+                    <div className="flex items-center gap-2">
+                      <Pin className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">置顶会话</span>
+                    </div>
+                    <button
+                      onClick={() => setIsPinned(!isPinned)}
+                      className={cn(
+                        'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+                        isPinned ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                          isPinned ? 'translate-x-5' : 'translate-x-0.5'
+                        )}
+                      />
+                    </button>
                   </div>
                 </div>
 

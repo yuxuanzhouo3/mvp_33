@@ -42,6 +42,11 @@ function AvatarImage({
     <AvatarPrimitive.Image
       data-slot="avatar-image"
       className={cn('aspect-square size-full object-cover', className)}
+      onError={(e) => {
+        // 当图片加载失败时,隐藏图片元素以显示 Fallback
+        const target = e.target as HTMLImageElement
+        target.style.display = 'none'
+      }}
       {...props}
     />
   )

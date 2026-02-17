@@ -35,7 +35,11 @@ export function GroupMembersSection({
       const data = await response.json()
       console.log('[GroupMembersSection] API 响应数据', data)
       if (data.success && data.members) {
-        console.log('[GroupMembersSection] 设置成员列表', { count: data.members.length })
+        console.log('[GroupMembersSection] 设置成员列表', {
+          count: data.members.length,
+          firstMember: data.members[0],
+          avatarUrls: data.members.map((m: any) => ({ id: m.id, name: m.full_name, avatar: m.avatar_url }))
+        })
         setMembers(data.members)
       } else {
         console.warn('[GroupMembersSection] API 返回失败或无成员数据', data)
@@ -82,7 +86,7 @@ export function GroupMembersSection({
 
           <div className="flex flex-row gap-2 items-center flex-wrap">
             {displayMembers.map((member) => (
-              <Avatar key={member.id} className="h-10 w-10" userId={member.id} showOnlineStatus={true}>
+              <Avatar key={member.id} className="h-10 w-10" userId={member.id}>
                 <AvatarImage src={member.avatar_url || undefined} />
                 <AvatarFallback className="text-xs">
                   {member.full_name.split(' ').map(n => n[0]).join('').toUpperCase()}
