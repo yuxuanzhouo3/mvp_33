@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Monitor, Smartphone, Tablet, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
+import { useDeviceListener } from '@/hooks/use-device-listener';
 
 interface Device {
   id: string;
@@ -48,6 +49,8 @@ export default function DevicesPage() {
     loadDevices();
     loadCurrentSession();
   }, []);
+
+  useDeviceListener(currentSessionId);
 
   const loadDevices = async () => {
     try {
