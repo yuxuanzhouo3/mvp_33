@@ -14,20 +14,35 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type') || 'received' // 'sent' or 'received'
     const status = searchParams.get('status') || 'pending' // 'pending', 'accepted', 'rejected', or 'all'
 
-    // Get current user
-    const supabase = await createClient()
-    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser()
+    const deploymentRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION
 
-    if (authError) {
-      console.error('Auth error in contact-requests API (GET):', authError)
-    }
+    let currentUser: any = null
 
-    if (!currentUser) {
-      console.error('No current user in contact-requests API (GET). Auth error:', authError)
-      return NextResponse.json(
-        { error: 'Unauthorized', details: authError?.message || 'No user found' },
-        { status: 401 }
-      )
+    // For China region, skip Supabase auth check
+    if (deploymentRegion === 'CN') {
+      const authHeader = request.headers.get('x-user-id')
+      if (authHeader) {
+        currentUser = { id: authHeader }
+      } else {
+        currentUser = { id: 'cn-user' }
+      }
+    } else {
+      // For international region, use Supabase auth
+      const supabase = await createClient()
+      const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
+
+      if (authError) {
+        console.error('Auth error in contact-requests API (GET):', authError)
+      }
+
+      if (!supabaseUser) {
+        console.error('No current user in contact-requests API (GET). Auth error:', authError)
+        return NextResponse.json(
+          { error: 'Unauthorized', details: authError?.message || 'No user found' },
+          { status: 401 }
+        )
+      }
+      currentUser = supabaseUser
     }
 
     console.log(`[Contact Requests API] Current user ID: ${currentUser.id}, Type: ${type}, Status: ${status}`)

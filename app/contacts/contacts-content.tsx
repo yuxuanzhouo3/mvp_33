@@ -202,36 +202,78 @@ function ContactsPageContent() {
     let isMounted = true
     
     const checkAuth = async () => {
-      // Check Supabase session first
-      const { hasValidSession } = await import('@/lib/supabase/auth-check')
-      const hasSession = await hasValidSession()
-      
-      if (!isMounted) return
-      
-      if (!hasSession) {
-        // No valid Supabase session - redirect to login
-        router.push('/login')
-        return
-      }
-      
-      // Check localStorage for user and workspace
-      const user = mockAuth.getCurrentUser()
-      const workspace = mockAuth.getCurrentWorkspace()
+      const deploymentRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION
 
-      if (!isMounted) return
+      console.log('🔍 [CONTACTS PAGE] checkAuth - Deployment region:', deploymentRegion)
 
-      if (!user || !workspace) {
-        router.push('/login')
-        return
-      }
+      // For China region, skip Supabase session check
+      if (deploymentRegion === 'CN') {
+        console.log('🔍 [CONTACTS PAGE] CN region - skipping Supabase session check')
+        // Check localStorage for user and workspace
+        const user = mockAuth.getCurrentUser()
+        const workspace = mockAuth.getCurrentWorkspace()
 
-      setCurrentUser(user)
-      setCurrentWorkspace(workspace)
-      
-      // Get userId from URL parameter
-      const userId = searchParams.get('userId')
-      if (userId) {
-        setInitialUserId(userId)
+        console.log('🔍 [CONTACTS PAGE] CN region - User and workspace check:', {
+          hasUser: !!user,
+          userId: user?.id,
+          hasWorkspace: !!workspace,
+          workspaceId: workspace?.id
+        })
+
+        if (!isMounted) return
+
+        if (!user || !workspace) {
+          console.error('❌ [CONTACTS PAGE] CN region - Missing user or workspace, redirecting to login')
+          router.push('/login')
+          return
+        }
+
+        console.log('✅ [CONTACTS PAGE] CN region - User and workspace verified')
+        setCurrentUser(user)
+        setCurrentWorkspace(workspace)
+
+        // Get userId from URL parameter
+        const userId = searchParams.get('userId')
+        if (userId) {
+          setInitialUserId(userId)
+        }
+      } else {
+        // For international region, check Supabase session
+        console.log('🔍 [CONTACTS PAGE] International region - checking Supabase session')
+        const { hasValidSession } = await import('@/lib/supabase/auth-check')
+        const hasSession = await hasValidSession()
+
+        if (!isMounted) return
+
+        if (!hasSession) {
+          console.error('❌ [CONTACTS PAGE] No valid Supabase session - redirecting to login')
+          router.push('/login')
+          return
+        }
+
+        console.log('✅ [CONTACTS PAGE] Valid Supabase session found')
+
+        // Check localStorage for user and workspace
+        const user = mockAuth.getCurrentUser()
+        const workspace = mockAuth.getCurrentWorkspace()
+
+        if (!isMounted) return
+
+        if (!user || !workspace) {
+          console.error('❌ [CONTACTS PAGE] Missing user or workspace, redirecting to login')
+          router.push('/login')
+          return
+        }
+
+        console.log('✅ [CONTACTS PAGE] User and workspace verified')
+        setCurrentUser(user)
+        setCurrentWorkspace(workspace)
+
+        // Get userId from URL parameter
+        const userId = searchParams.get('userId')
+        if (userId) {
+          setInitialUserId(userId)
+        }
       }
     }
     
