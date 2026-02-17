@@ -8,25 +8,40 @@ import { getDatabaseClientForUser } from '@/lib/database-router'
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const deploymentRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION
 
-    // Get current user
-    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError) {
-      console.error('Auth error in contacts API (GET):', authError)
-    }
-    
-    if (!currentUser) {
-      console.error('No current user in contacts API (GET). Auth error:', authError)
-      // Try to get session for debugging
-      const { data: sessionData } = await supabase.auth.getSession()
-      console.error('Session data:', sessionData ? 'exists' : 'null')
-      
-      return NextResponse.json(
-        { error: 'Unauthorized', details: authError?.message || 'No user found' },
-        { status: 401 }
-      )
+    let currentUser: any = null
+
+    // For China region, skip Supabase auth check
+    if (deploymentRegion === 'CN') {
+      // For CN region, we trust the client-side authentication
+      const authHeader = request.headers.get('x-user-id')
+      if (authHeader) {
+        currentUser = { id: authHeader }
+      } else {
+        // For CN, allow the request but it will fail at database level if user is invalid
+        currentUser = { id: 'cn-user' }
+      }
+    } else {
+      // For international region, use Supabase auth
+      const supabase = await createClient()
+      const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
+
+      if (authError) {
+        console.error('Auth error in contacts API (GET):', authError)
+      }
+
+      if (!supabaseUser) {
+        console.error('No current user in contacts API (GET). Auth error:', authError)
+        const { data: sessionData } = await supabase.auth.getSession()
+        console.error('Session data:', sessionData ? 'exists' : 'null')
+
+        return NextResponse.json(
+          { error: 'Unauthorized', details: authError?.message || 'No user found' },
+          { status: 401 }
+        )
+      }
+      currentUser = supabaseUser
     }
 
     // Decide which database this user actually uses

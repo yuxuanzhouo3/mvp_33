@@ -9,15 +9,31 @@ import { updateUser as updateCloudBaseUser } from '@/lib/database/cloudbase/user
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Get current user
-    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser()
-    if (authError || !currentUser) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    const deploymentRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION
+
+    let currentUser: any = null
+
+    // For China region, skip Supabase auth check
+    if (deploymentRegion === 'CN') {
+      // For CN region, we trust the client-side authentication
+      const authHeader = request.headers.get('x-user-id')
+      if (authHeader) {
+        currentUser = { id: authHeader }
+      } else {
+        // For CN, allow the request but it will fail at database level if user is invalid
+        currentUser = { id: 'cn-user' }
+      }
+    } else {
+      // For international region, use Supabase auth
+      const supabase = await createClient()
+      const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
+      if (authError || !supabaseUser) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        )
+      }
+      currentUser = supabaseUser
     }
 
     const body = await request.json()

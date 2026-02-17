@@ -2950,13 +2950,26 @@ function ChatPageContent() {
 
       const workspace = mockAuth.getCurrentWorkspace()
 
-      if (!user || !workspace) {
+      console.log('🔍 [CHAT PAGE] loadUserData - Checking user and workspace:', {
+        hasUser: !!user,
+        userId: user?.id,
+        hasWorkspace: !!workspace,
+        workspaceId: workspace?.id,
+        workspaceName: workspace?.name
+      })
 
+      if (!user || !workspace) {
+        console.error('❌ [CHAT PAGE] Missing user or workspace, redirecting to login:', {
+          hasUser: !!user,
+          hasWorkspace: !!workspace
+        })
         router.push('/login')
 
         return
 
       }
+
+      console.log('✅ [CHAT PAGE] User and workspace verified, continuing to load chat data')
 
       // Set user and workspace immediately so UI can render
 

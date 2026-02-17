@@ -17,6 +17,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const deploymentRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION
+
+    // For China region, CloudBase doesn't need workspace_members table
+    // Just return success since workspace selection is handled client-side
+    if (deploymentRegion === 'CN') {
+      return NextResponse.json({
+        success: true,
+        message: 'Workspace selected successfully (CloudBase)',
+      })
+    }
+
     const supabase = await createClient()
 
     // Get current user
