@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { cn } from '@/lib/utils'
-import { CheckCircle2, Loader2, Sparkles, ShieldCheck, Zap, Crown } from 'lucide-react'
+import { CheckCircle2, Loader2, Sparkles, ShieldCheck, Zap, Crown, ArrowLeft } from 'lucide-react'
 import { WechatPaymentDialog } from '@/components/payment/wechat-payment-dialog'
 import { AlipayPaymentDialog } from '@/components/payment/alipay-payment-dialog'
 import { StripePayment } from '@/components/payment/stripe-payment'
@@ -347,6 +347,15 @@ export default function PaymentPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl space-y-6">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => router.back()}
+        className="mb-4"
+      >
+        <ArrowLeft className="h-4 w-4 mr-2" />
+        {t('back')}
+      </Button>
       {subscription.type !== 'free' && subscription.isActive && (
         <Card className="border-border bg-card">
           <CardContent className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
