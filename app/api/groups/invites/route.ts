@@ -6,16 +6,28 @@ const isCloudBase = process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE === 'zh' && !proces
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { IS_DOMESTIC_VERSION } = await import('@/config')
+    let user: any = null
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (IS_DOMESTIC_VERSION) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (!cloudBaseUser) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      user = cloudBaseUser
+    } else {
+      const supabase = await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (!supabaseUser) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      user = supabaseUser
     }
 
     let invites = []
 
-    if (isCloudBase) {
+    if (IS_DOMESTIC_VERSION) {
       // CloudBase 实现
       const db = getCloudBaseDb()
       if (!db) {
@@ -52,6 +64,7 @@ export async function GET(request: Request) {
       }
     } else {
       // Supabase 实现
+      const supabase = await createClient()
       const { data, error } = await supabase
         .from('conversation_members')
         .select(`

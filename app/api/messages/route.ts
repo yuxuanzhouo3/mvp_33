@@ -18,23 +18,32 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify user is authenticated
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    const { IS_DOMESTIC_VERSION } = await import('@/config')
+    let user: any = null
+
+    if (IS_DOMESTIC_VERSION) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (!cloudBaseUser) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      user = cloudBaseUser
+    } else {
+      const supabase = await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (!supabaseUser) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      user = supabaseUser
     }
 
     const dbClient = await getDatabaseClientForUser(request)
     const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
 
     // CN users: read messages from CloudBase
-    if (dbClient.type === 'cloudbase' && userRegion === 'cn') {
+    if (dbClient.type === 'cloudbase' && userRegion === 'cn' && dbClient.cloudbase) {
       const allMessages = await getMessagesCN(conversationId)
-      
+
       // Filter out hidden messages for this user
       const db = dbClient.cloudbase
       const hiddenRes = await db.collection('hidden_messages')
@@ -43,15 +52,18 @@ export async function GET(request: NextRequest) {
           region: 'cn',
         })
         .get()
-      
+
       const hiddenMessageIds = new Set((hiddenRes.data || []).map((h: any) => h.message_id))
       const messages = allMessages.filter(msg => !hiddenMessageIds.has(msg.id))
-      
+
       return NextResponse.json({
         success: true,
         messages,
       })
     }
+
+    // If we reach here for CN users, need to create supabase client
+    const supabase = await createClient()
 
     // Verify user is a member of the conversation (must check before fetching messages)
     // CRITICAL: Only check memberships that are NOT deleted (deleted_at IS NULL)
@@ -116,13 +128,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify user is authenticated
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    const { IS_DOMESTIC_VERSION } = await import('@/config')
+    let user: any = null
+
+    if (IS_DOMESTIC_VERSION) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (!cloudBaseUser) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      user = cloudBaseUser
+    } else {
+      const supabase = await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (!supabaseUser) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      user = supabaseUser
     }
 
     const dbClient = await getDatabaseClientForUser(request)
@@ -188,6 +210,9 @@ export async function POST(request: NextRequest) {
         message,
       })
     }
+
+    // For Supabase users, create supabase client
+    const supabase = await createClient()
 
     // Verify user is a member of the conversation
     // CRITICAL: Only check memberships that are NOT deleted (deleted_at IS NULL)

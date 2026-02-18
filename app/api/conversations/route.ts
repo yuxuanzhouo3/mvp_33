@@ -366,16 +366,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const { IS_DOMESTIC_VERSION } = await import('@/config')
 
-    // Get current user (Supabase Auth is still the single auth system)
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    let currentUser: any = null
+
+    if (IS_DOMESTIC_VERSION) {
+      // CN版本：使用CloudBase认证
+      console.log('[POST /api/conversations] 使用CloudBase认证（CN版本）')
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+
+      if (!cloudBaseUser) {
+        console.error('[POST /api/conversations] CloudBase用户未认证')
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
+      console.log('[POST /api/conversations] CloudBase用户已认证:', cloudBaseUser.id)
+      currentUser = cloudBaseUser
+    } else {
+      // INTL版本：使用Supabase认证
+      console.log('[POST /api/conversations] 使用Supabase认证（INTL版本）')
+      const supabase = await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+
+      if (!supabaseUser) {
+        console.error('[POST /api/conversations] Supabase用户未认证')
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
+      console.log('[POST /api/conversations] Supabase用户已认证:', supabaseUser.id)
+      currentUser = supabaseUser
     }
+
+    const supabase = await createClient()
 
     // Determine which data store this user actually belongs to
     const dbClient = await getDatabaseClientForUser(request)
@@ -852,7 +875,9 @@ export async function POST(request: NextRequest) {
           email,
           full_name,
           username,
-          avatar_url
+          avatar_url,
+          title,
+          status
         )
       `)
       .eq('conversation_id', newConversation.id)
@@ -865,13 +890,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const members = membersWithDetails?.map((m: any) => m.users).filter(Boolean) || []
-    
+    console.log('📋 Raw members data from database:', {
+      conversationId: newConversation.id,
+      membersWithDetails: membersWithDetails,
+      count: membersWithDetails?.length || 0
+    })
+
+    const members = membersWithDetails?.map((m: any) => {
+      console.log('🔍 Processing member:', { user_id: m.user_id, users: m.users })
+      return m.users
+    }).filter(Boolean) || []
+
     console.log('✅ Conversation members fetched:', {
       conversationId: newConversation.id,
       memberCount: members.length,
-      memberIds: members.map((m: any) => m.id)
+      memberIds: members.map((m: any) => m.id),
+      hasEmptyMembers: members.length === 0
     })
+
+    // CRITICAL: If members are empty, log detailed error
+    if (members.length === 0) {
+      console.error('❌ CRITICAL: No members found after fetching!', {
+        conversationId: newConversation.id,
+        rawData: membersWithDetails,
+        expectedMemberIds: uniqueMemberIds
+      })
+    }
     
     // CRITICAL: Verify conversation exists in database before returning
     const { data: verifyConv, error: verifyError } = await supabase

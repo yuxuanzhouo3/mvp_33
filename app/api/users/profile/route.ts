@@ -9,29 +9,21 @@ import { updateUser as updateCloudBaseUser } from '@/lib/database/cloudbase/user
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const deploymentRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION
-
+    const { IS_DOMESTIC_VERSION } = await import('@/config')
     let currentUser: any = null
 
-    // For China region, skip Supabase auth check
-    if (deploymentRegion === 'CN') {
-      // For CN region, we trust the client-side authentication
-      const authHeader = request.headers.get('x-user-id')
-      if (authHeader) {
-        currentUser = { id: authHeader }
-      } else {
-        // For CN, allow the request but it will fail at database level if user is invalid
-        currentUser = { id: 'cn-user' }
+    if (IS_DOMESTIC_VERSION) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (!cloudBaseUser) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
+      currentUser = cloudBaseUser
     } else {
-      // For international region, use Supabase auth
       const supabase = await createClient()
       const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
       if (authError || !supabaseUser) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401 }
-        )
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
       currentUser = supabaseUser
     }
@@ -175,15 +167,23 @@ export async function PATCH(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Get current user
-    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser()
-    if (authError || !currentUser) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    const { IS_DOMESTIC_VERSION } = await import('@/config')
+    let currentUser: any = null
+
+    if (IS_DOMESTIC_VERSION) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (!cloudBaseUser) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      currentUser = cloudBaseUser
+    } else {
+      const supabase = await createClient()
+      const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
+      if (authError || !supabaseUser) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      currentUser = supabaseUser
     }
 
     // Get the correct database client based on user's registered region

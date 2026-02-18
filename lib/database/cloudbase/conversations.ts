@@ -25,7 +25,11 @@ export async function createConversation(input: CreateConversationInput): Promis
 
   const now = new Date().toISOString()
 
+  // Generate a unique ID for the conversation (UUID v4 format)
+  const convId = crypto.randomUUID()
+
   const convDoc: any = {
+    id: convId, // CRITICAL: Add id field to the document
     type: input.type,
     name: input.name || null,
     description: input.description || null,
@@ -37,8 +41,7 @@ export async function createConversation(input: CreateConversationInput): Promis
   }
 
   const convRes = await db.collection('conversations').add(convDoc)
-  const convId = convRes.id || convRes._id
-  if (!convId) throw new Error('Failed to create conversation in CloudBase')
+  if (!convRes.id && !convRes._id) throw new Error('Failed to create conversation in CloudBase')
 
   const memberDocs = input.memberIds.map(userId => ({
     conversation_id: convId,
@@ -52,6 +55,41 @@ export async function createConversation(input: CreateConversationInput): Promis
     await db.collection('conversation_members').add(memberDocs)
   }
 
+  // Fetch user details for members
+  const cmd = db.command
+  const usersRes = await db.collection('users')
+    .where({ id: cmd.in(input.memberIds) })
+    .get()
+
+  const usersById = new Map<string, User>()
+  ;(usersRes.data || []).forEach((u: any) => {
+    const uid = u.id || u._id
+    if (!uid) return
+    usersById.set(uid, {
+      id: uid,
+      email: u.email || '',
+      username: u.username || u.email?.split('@')[0] || '',
+      full_name: u.full_name || u.name || '',
+      avatar_url: u.avatar_url || null,
+      department: u.department || undefined,
+      title: u.title || undefined,
+      status: u.status || 'offline',
+      region: u.region || 'cn',
+    } as User)
+  })
+
+  const members: User[] = input.memberIds.map(uid =>
+    usersById.get(uid) || {
+      id: uid,
+      email: '',
+      username: '',
+      full_name: '',
+      avatar_url: null,
+      status: 'offline',
+      region: 'cn',
+    } as User
+  )
+
   return {
     id: convId,
     workspace_id: null,
@@ -62,7 +100,7 @@ export async function createConversation(input: CreateConversationInput): Promis
     created_by: input.createdBy,
     created_at: now,
     last_message_at: now,
-    members: [], // filled by API when needed
+    members: members,
     unread_count: 0,
     last_message: undefined,
   } as ConversationWithDetails
@@ -206,7 +244,9 @@ export async function getUserConversations(userId: string): Promise<Conversation
   }
 
   const result: ConversationWithDetails[] = convs.map((c: any) => {
-    const memberEntries = membersByConv.get(c._id) || []
+    // CRITICAL: Use c.id (not c._id) to lookup members, because conversation_members.conversation_id stores the id field
+    const convId = c.id || c._id
+    const memberEntries = membersByConv.get(convId) || []
     const members: User[] = memberEntries.map((m: any) => {
       const uid = m.user_id
       const user = uid ? usersById.get(uid) : undefined
@@ -226,25 +266,25 @@ export async function getUserConversations(userId: string): Promise<Conversation
       ) as User
     })
 
-    const lastMessageDoc = lastMessageByConv.get(c._id)
+    const lastMessageDoc = lastMessageByConv.get(convId)
 
     // If this is a direct conversation and the other user is not in contacts, skip it
     if (c.type === 'direct') {
       const other = memberEntries.find((m: any) => m.user_id !== userId)
       const otherUserId = other?.user_id
       if (otherUserId && !contactUserIds.has(otherUserId)) {
-        console.log(`🧹 CloudBase API: filtering direct conversation ${c._id} because user ${otherUserId} not in contacts of ${userId}`)
+        console.log(`🧹 CloudBase API: filtering direct conversation ${convId} because user ${otherUserId} not in contacts of ${userId}`)
         return null
       }
     }
 
     // Get current user's membership info for this conversation (for is_pinned and pinned_at)
-    const currentUserMembership = currentUserMembershipByConv.get(c._id)
+    const currentUserMembership = currentUserMembershipByConv.get(convId)
     const isPinned = currentUserMembership ? Boolean(currentUserMembership.is_pinned) : false
     const pinnedAt = currentUserMembership?.pinned_at || null
 
     return {
-      id: c._id,
+      id: convId,
       workspace_id: null,
       type: c.type,
       name: c.name || null,

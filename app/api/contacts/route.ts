@@ -403,42 +403,55 @@ export async function DELETE(request: NextRequest) {
         let deletedConversationId: string | null = null
 
         // Delete bidirectional contact relationships
+        console.log('[CloudBase] 开始删除双向好友关系:', {
+          currentUserId: currentUser.id,
+          contactUserId: contact_user_id
+        })
+
         // 1. Delete current user -> contact user relationship
-        const deleteRes1 = await db
+        console.log('[CloudBase] 删除方向1: currentUser -> contactUser')
+        const contacts1 = await db
           .collection('contacts')
           .where({
             user_id: currentUser.id,
             contact_user_id: contact_user_id,
           })
-          .remove()
-        // 1b. Fallback for legacy docs lacking region
-        if (!deleteRes1?.deleted || deleteRes1.deleted === 0) {
-          await db
-            .collection('contacts')
-            .where({
-              user_id: currentUser.id,
-              contact_user_id: contact_user_id,
-            })
-            .remove()
+          .get()
+
+        console.log('[CloudBase] 找到的联系人记录(方向1):', contacts1?.data?.length || 0)
+
+        if (contacts1?.data && contacts1.data.length > 0) {
+          for (const contact of contacts1.data) {
+            const docId = contact._id
+            console.log('[CloudBase] 删除文档ID:', docId)
+            await db.collection('contacts').doc(docId).remove()
+          }
+          console.log('[CloudBase] ✅ 方向1删除完成')
+        } else {
+          console.log('[CloudBase] ⚠️ 方向1没有找到记录')
         }
 
         // 2. Delete contact user -> current user relationship (if exists)
-        const deleteRes2 = await db
+        console.log('[CloudBase] 删除方向2: contactUser -> currentUser')
+        const contacts2 = await db
           .collection('contacts')
           .where({
             user_id: contact_user_id,
             contact_user_id: currentUser.id,
           })
-          .remove()
-        // 2b. Fallback for legacy docs lacking region
-        if (!deleteRes2?.deleted || deleteRes2.deleted === 0) {
-          await db
-            .collection('contacts')
-            .where({
-              user_id: contact_user_id,
-              contact_user_id: currentUser.id,
-            })
-            .remove()
+          .get()
+
+        console.log('[CloudBase] 找到的联系人记录(方向2):', contacts2?.data?.length || 0)
+
+        if (contacts2?.data && contacts2.data.length > 0) {
+          for (const contact of contacts2.data) {
+            const docId = contact._id
+            console.log('[CloudBase] 删除文档ID:', docId)
+            await db.collection('contacts').doc(docId).remove()
+          }
+          console.log('[CloudBase] ✅ 方向2删除完成')
+        } else {
+          console.log('[CloudBase] ⚠️ 方向2没有找到记录')
         }
 
         // 3. Find and delete direct conversation between the two users

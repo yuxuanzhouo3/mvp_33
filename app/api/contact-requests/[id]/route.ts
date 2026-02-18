@@ -216,7 +216,7 @@ export async function PATCH(
 
           // Create conversation
           console.log('[CloudBase] 正在创建conversations记录...')
-          await db.collection('conversations').add({
+          const convResult = await db.collection('conversations').add({
             id: conversationId,
             type: 'direct',
             name: null,
@@ -224,7 +224,7 @@ export async function PATCH(
             updated_at: now,
             region: 'cn',
           })
-          console.log('[CloudBase] conversations记录创建成功')
+          console.log('[CloudBase] conversations记录创建成功:', convResult)
 
           // Create conversation members for both users
           console.log('[CloudBase] 正在创建conversation_members记录...')
@@ -244,14 +244,14 @@ export async function PATCH(
               region: 'cn',
             },
           ]
-          await db.collection('conversation_members').add(members)
-          console.log('[CloudBase] conversation_members记录创建成功，成员数量:', members.length)
+          const membersResult = await db.collection('conversation_members').add(members)
+          console.log('[CloudBase] conversation_members记录创建成功，成员数量:', members.length, '结果:', membersResult)
 
           // Send system welcome message
           console.log('[CloudBase] 正在创建系统欢迎消息...')
           const messageId = uuidv4()
           console.log('[CloudBase] 生成的消息ID:', messageId)
-          await db.collection('messages').add({
+          const messageResult = await db.collection('messages').add({
             id: messageId,
             conversation_id: conversationId,
             sender_id: null, // System message
@@ -261,12 +261,13 @@ export async function PATCH(
             updated_at: now,
             region: 'cn',
           })
-          console.log('[CloudBase] 系统欢迎消息创建成功')
+          console.log('[CloudBase] 系统欢迎消息创建成功:', messageResult)
 
-          console.log('[CloudBase] Created conversation and welcome message:', conversationId)
+          console.log('[CloudBase] ✅ Created conversation and welcome message:', conversationId)
         } catch (convError) {
-          console.error('[CloudBase] 创建对话或消息时出错:', convError)
+          console.error('[CloudBase] ❌ 创建对话或消息时出错:', convError)
           console.error('[CloudBase] 错误详情:', JSON.stringify(convError, null, 2))
+          console.error('[CloudBase] 错误堆栈:', (convError as any)?.stack)
           // Don't fail the request if conversation creation fails
         }
 

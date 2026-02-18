@@ -9,7 +9,14 @@
       "Bash(npm run build:*)",
       "mcp__cloudbase__readNoSqlDatabaseStructure",
       "mcp__cloudbase__writeNoSqlDatabaseStructure",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "mcp__cloudbase__readNoSqlDatabaseContent",
+      "Bash(taskkill:*)",
+      "Bash(npx playwright:*)",
+      "Bash(node test-screenshot.js:*)",
+      "Bash(node test-messages.js:*)",
+      "Bash(node test-with-login.js:*)",
+      "Bash(node test-auto.js:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
