@@ -3,7 +3,7 @@ import { Inter } from 'next/font/google';
 import "./globals.css";
 import { SettingsProvider } from '@/lib/settings-context';
 import { RegionProvider } from '@/lib/region-context';
-import { ToastProvider, ToastViewport } from '@/components/ui/toast';
+import { Toaster } from '@/components/ui/toaster';
 import { DEFAULT_LANGUAGE } from '@/config';
 
 const inter = Inter({
@@ -30,10 +30,8 @@ export default function RootLayout({
       >
         <RegionProvider>
           <SettingsProvider>
-            <ToastProvider>
-              {children}
-              <ToastViewport />
-            </ToastProvider>
+            {children}
+            <Toaster />
           </SettingsProvider>
         </RegionProvider>
       </body>

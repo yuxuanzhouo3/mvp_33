@@ -205,6 +205,7 @@ export function ScanQRDialog({ open, onOpenChange, onAddContact }: ScanQRDialogP
 
   const handleAddContact = () => {
     if (scannedUser) {
+      console.log('[扫码] 准备发送好友请求:', scannedUser.id)
       onAddContact(scannedUser.id)
       handleClose()
     }

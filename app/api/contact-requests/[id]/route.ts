@@ -32,16 +32,39 @@ export async function PATCH(
       )
     }
 
-    const supabase = await createClient()
+    const { IS_DOMESTIC_VERSION } = await import('@/config')
 
-    // Get current user
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    let currentUser: any = null
+
+    if (IS_DOMESTIC_VERSION) {
+      // CN版本：只使用CloudBase认证
+      console.log('[PATCH /api/contact-requests/[id]] 使用CloudBase认证（CN版本）')
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+
+      if (!cloudBaseUser) {
+        console.error('[PATCH /api/contact-requests/[id]] CloudBase用户未认证')
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
+      console.log('[PATCH /api/contact-requests/[id]] CloudBase用户已认证:', cloudBaseUser.id)
+      currentUser = cloudBaseUser
+    } else {
+      // INTL版本：只使用Supabase认证
+      console.log('[PATCH /api/contact-requests/[id]] 使用Supabase认证（INTL版本）')
+      const supabase = await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+
+      if (!supabaseUser) {
+        console.error('[PATCH /api/contact-requests/[id]] Supabase用户未认证')
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
+      console.log('[PATCH /api/contact-requests/[id]] Supabase用户已认证:', supabaseUser.id)
+      currentUser = supabaseUser
     }
+
+    const supabase = await createClient()
 
     // Decide which database this user actually uses
     const dbClient = await getDatabaseClientForUser(request)
@@ -182,6 +205,69 @@ export async function PATCH(
             },
             { status: 500 }
           )
+        }
+
+        // Create direct conversation and send welcome message
+        try {
+          console.log('[CloudBase] 开始创建对话和欢迎消息')
+          const { v4: uuidv4 } = await import('uuid')
+          const conversationId = uuidv4()
+          console.log('[CloudBase] 生成的对话ID:', conversationId)
+
+          // Create conversation
+          console.log('[CloudBase] 正在创建conversations记录...')
+          await db.collection('conversations').add({
+            id: conversationId,
+            type: 'direct',
+            name: null,
+            created_at: now,
+            updated_at: now,
+            region: 'cn',
+          })
+          console.log('[CloudBase] conversations记录创建成功')
+
+          // Create conversation members for both users
+          console.log('[CloudBase] 正在创建conversation_members记录...')
+          const members = [
+            {
+              conversation_id: conversationId,
+              user_id: requesterId,
+              joined_at: now,
+              role: 'member',
+              region: 'cn',
+            },
+            {
+              conversation_id: conversationId,
+              user_id: normalizedRecipientId,
+              joined_at: now,
+              role: 'member',
+              region: 'cn',
+            },
+          ]
+          await db.collection('conversation_members').add(members)
+          console.log('[CloudBase] conversation_members记录创建成功，成员数量:', members.length)
+
+          // Send system welcome message
+          console.log('[CloudBase] 正在创建系统欢迎消息...')
+          const messageId = uuidv4()
+          console.log('[CloudBase] 生成的消息ID:', messageId)
+          await db.collection('messages').add({
+            id: messageId,
+            conversation_id: conversationId,
+            sender_id: null, // System message
+            content: '我们已经是好友了，开始聊天吧',
+            message_type: 'system',
+            created_at: now,
+            updated_at: now,
+            region: 'cn',
+          })
+          console.log('[CloudBase] 系统欢迎消息创建成功')
+
+          console.log('[CloudBase] Created conversation and welcome message:', conversationId)
+        } catch (convError) {
+          console.error('[CloudBase] 创建对话或消息时出错:', convError)
+          console.error('[CloudBase] 错误详情:', JSON.stringify(convError, null, 2))
+          // Don't fail the request if conversation creation fails
         }
 
         // Update request status
@@ -361,13 +447,80 @@ export async function PATCH(
         } else {
           // Real error creating contacts - don't update request status
           return NextResponse.json(
-            { 
-              error: 'Failed to create contacts', 
-              details: insertError.message 
+            {
+              error: 'Failed to create contacts',
+              details: insertError.message
             },
             { status: 500 }
           )
         }
+      }
+
+      // Create direct conversation and send welcome message
+      try {
+        const { v4: uuidv4 } = await import('uuid')
+        const conversationId = uuidv4()
+        const now = new Date().toISOString()
+
+        // Create conversation
+        const { error: convError } = await supabase
+          .from('conversations')
+          .insert({
+            id: conversationId,
+            type: 'direct',
+            name: null,
+            created_at: now,
+            updated_at: now,
+          })
+
+        if (convError) {
+          console.error('Create conversation error:', convError)
+        } else {
+          // Create conversation members for both users
+          const { error: membersError } = await supabase
+            .from('conversation_members')
+            .insert([
+              {
+                conversation_id: conversationId,
+                user_id: requestData.requester_id,
+                joined_at: now,
+                role: 'member',
+              },
+              {
+                conversation_id: conversationId,
+                user_id: requestData.recipient_id,
+                joined_at: now,
+                role: 'member',
+              },
+            ])
+
+          if (membersError) {
+            console.error('Create conversation members error:', membersError)
+          } else {
+            // Send system welcome message
+            const messageId = uuidv4()
+            const { error: msgError } = await supabase
+              .from('messages')
+              .insert({
+                id: messageId,
+                conversation_id: conversationId,
+                sender_id: null, // System message
+                content: 'We are now friends, start chatting!',
+                message_type: 'system',
+                created_at: now,
+                updated_at: now,
+              })
+
+            if (msgError) {
+              console.error('Create welcome message error:', msgError)
+            } else {
+              console.log('[Supabase] Created conversation and welcome message:', conversationId)
+            }
+          }
+        }
+      } catch (convError) {
+        console.error('Supabase create conversation error:', convError)
+        // Don't fail the request if conversation creation fails
       }
 
       // Only update request status AFTER contacts are successfully created

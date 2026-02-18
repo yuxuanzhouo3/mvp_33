@@ -8,22 +8,26 @@ import { getDatabaseClientForUser } from '@/lib/database-router'
  */
 export async function GET(request: NextRequest) {
   try {
-    const deploymentRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION
+    const { IS_DOMESTIC_VERSION } = await import('@/config')
 
     let currentUser: any = null
 
-    // For China region, skip Supabase auth check
-    if (deploymentRegion === 'CN') {
-      // For CN region, we trust the client-side authentication
-      const authHeader = request.headers.get('x-user-id')
-      if (authHeader) {
-        currentUser = { id: authHeader }
-      } else {
-        // For CN, allow the request but it will fail at database level if user is invalid
-        currentUser = { id: 'cn-user' }
+    if (IS_DOMESTIC_VERSION) {
+      // CN版本：只使用CloudBase认证
+      console.log('[GET /api/contacts] 使用CloudBase认证（CN版本）')
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+
+      if (!cloudBaseUser) {
+        console.error('[GET /api/contacts] CloudBase用户未认证')
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
+
+      console.log('[GET /api/contacts] CloudBase用户已认证:', cloudBaseUser.id)
+      currentUser = cloudBaseUser
     } else {
-      // For international region, use Supabase auth
+      // INTL版本：只使用Supabase认证
+      console.log('[GET /api/contacts] 使用Supabase认证（INTL版本）')
       const supabase = await createClient()
       const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
 
@@ -33,16 +37,17 @@ export async function GET(request: NextRequest) {
 
       if (!supabaseUser) {
         console.error('No current user in contacts API (GET). Auth error:', authError)
-        const { data: sessionData } = await supabase.auth.getSession()
-        console.error('Session data:', sessionData ? 'exists' : 'null')
-
         return NextResponse.json(
           { error: 'Unauthorized', details: authError?.message || 'No user found' },
           { status: 401 }
         )
       }
+
+      console.log('[GET /api/contacts] Supabase用户已认证:', supabaseUser.id)
       currentUser = supabaseUser
     }
+
+    const supabase = await createClient()
 
     // Decide which database this user actually uses
     const dbClient = await getDatabaseClientForUser(request)
@@ -332,17 +337,40 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const { IS_DOMESTIC_VERSION } = await import('@/config')
 
-    // Get current user
-    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !currentUser) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    let currentUser: any = null
+
+    if (IS_DOMESTIC_VERSION) {
+      // CN版本：只使用CloudBase认证
+      console.log('[DELETE /api/contacts] 使用CloudBase认证（CN版本）')
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+
+      if (!cloudBaseUser) {
+        console.error('[DELETE /api/contacts] CloudBase用户未认证')
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
+      console.log('[DELETE /api/contacts] CloudBase用户已认证:', cloudBaseUser.id)
+      currentUser = cloudBaseUser
+    } else {
+      // INTL版本：只使用Supabase认证
+      console.log('[DELETE /api/contacts] 使用Supabase认证（INTL版本）')
+      const supabase = await createClient()
+      const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
+
+      if (authError || !supabaseUser) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        )
+      }
+
+      currentUser = supabaseUser
     }
+
+    const supabase = await createClient()
 
     // Get contact_user_id from query params
     const { searchParams } = new URL(request.url)

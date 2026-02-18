@@ -14,20 +14,26 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type') || 'received' // 'sent' or 'received'
     const status = searchParams.get('status') || 'pending' // 'pending', 'accepted', 'rejected', or 'all'
 
-    const deploymentRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION
+    const { IS_DOMESTIC_VERSION } = await import('@/config')
 
     let currentUser: any = null
 
-    // For China region, skip Supabase auth check
-    if (deploymentRegion === 'CN') {
-      const authHeader = request.headers.get('x-user-id')
-      if (authHeader) {
-        currentUser = { id: authHeader }
-      } else {
-        currentUser = { id: 'cn-user' }
+    if (IS_DOMESTIC_VERSION) {
+      // CN版本：只使用CloudBase认证
+      console.log('[GET /api/contact-requests] 使用CloudBase认证（CN版本）')
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+
+      if (!cloudBaseUser) {
+        console.error('[GET /api/contact-requests] CloudBase用户未认证')
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
+
+      console.log('[GET /api/contact-requests] CloudBase用户已认证:', cloudBaseUser.id)
+      currentUser = cloudBaseUser
     } else {
-      // For international region, use Supabase auth
+      // INTL版本：只使用Supabase认证
+      console.log('[GET /api/contact-requests] 使用Supabase认证（INTL版本）')
       const supabase = await createClient()
       const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
 
@@ -42,6 +48,8 @@ export async function GET(request: NextRequest) {
           { status: 401 }
         )
       }
+
+      console.log('[GET /api/contact-requests] Supabase用户已认证:', supabaseUser.id)
       currentUser = supabaseUser
     }
 
@@ -237,31 +245,69 @@ export async function GET(request: NextRequest) {
  * POST /api/contact-requests
  */
 export async function POST(request: NextRequest) {
+  console.log('[POST /api/contact-requests] 开始处理请求')
+
   try {
     const body = await request.json()
     const { recipient_id, message } = body
 
+    console.log('[POST /api/contact-requests] 请求参数:', { recipient_id, message })
+
     if (!recipient_id) {
+      console.error('[POST /api/contact-requests] 缺少 recipient_id')
       return NextResponse.json(
         { error: 'recipient_id is required' },
         { status: 400 }
       )
     }
 
-    const supabase = await createClient()
+    const { IS_DOMESTIC_VERSION } = await import('@/config')
 
-    // Get current user (Supabase Auth is still the single auth system)
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    let currentUser: any = null
+
+    if (IS_DOMESTIC_VERSION) {
+      // CN版本：只使用CloudBase认证
+      console.log('[POST /api/contact-requests] 使用CloudBase认证（CN版本）')
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+
+      if (!cloudBaseUser) {
+        console.error('[POST /api/contact-requests] CloudBase用户未认证')
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        )
+      }
+
+      console.log('[POST /api/contact-requests] CloudBase用户已认证:', cloudBaseUser.id)
+      currentUser = cloudBaseUser
+    } else {
+      // INTL版本：只使用Supabase认证
+      console.log('[POST /api/contact-requests] 使用Supabase认证（INTL版本）')
+      const supabase = await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+
+      if (!supabaseUser) {
+        console.error('[POST /api/contact-requests] Supabase用户未认证')
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        )
+      }
+
+      console.log('[POST /api/contact-requests] Supabase用户已认证:', supabaseUser.id)
+      currentUser = supabaseUser
     }
+
+    console.log('[POST /api/contact-requests] 当前用户:', currentUser.id)
+
+    const supabase = await createClient()
 
     // Decide which database this user actually uses
     const dbClient = await getDatabaseClientForUser(request)
     const currentRegion = dbClient.region === 'cn' ? 'cn' : 'global'
+
+    console.log('[POST /api/contact-requests] 数据库区域:', currentRegion)
 
     // Check if trying to send to self
     if (recipient_id === currentUser.id) {
@@ -401,6 +447,14 @@ export async function POST(request: NextRequest) {
       })
 
       const requestId = insertRes.id || insertRes._id
+
+      console.log('[POST /api/contact-requests] 数据库写入成功:', {
+        requestId,
+        requester_id: currentUser.id,
+        recipient_id,
+        status: 'pending',
+        region: 'cn'
+      })
 
       return NextResponse.json({
         success: true,
