@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { recordDevice } from '@/lib/database/devices'
+import { parseDeviceInfo, getClientIP, getLocationFromIP } from '@/lib/utils/device-parser'
 
 /**
  * Handle Google OAuth callback from Supabase
@@ -119,6 +121,30 @@ export async function GET(request: NextRequest) {
 
     // Store session token
     const token = session.access_token
+
+    // Get device info and record device
+    const userAgent = request.headers.get('user-agent') || ''
+    const deviceInfo = parseDeviceInfo(userAgent)
+    const ip = getClientIP(request)
+    const location = await getLocationFromIP(ip)
+
+    // Record device
+    try {
+      await recordDevice({
+        user_id: userData.id,
+        device_name: deviceInfo.deviceName,
+        device_type: deviceInfo.deviceType,
+        browser: deviceInfo.browser,
+        os: deviceInfo.os,
+        ip_address: ip,
+        location: location,
+        session_token: token,
+      })
+      console.log('[GOOGLE OAUTH] Device recorded successfully')
+    } catch (error) {
+      console.error('[GOOGLE OAUTH] Failed to record device:', error)
+      // Don't fail OAuth if device recording fails
+    }
 
     // Redirect to frontend with user data (optimized: direct redirect, no extra processing)
     const redirectUrl = new URL(`${origin}/login`)

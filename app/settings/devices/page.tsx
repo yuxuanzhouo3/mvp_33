@@ -10,11 +10,13 @@ import { useDeviceListener } from '@/hooks/use-device-listener';
 
 interface Device {
   id: string;
-  name: string;
-  type: 'desktop' | 'mobile' | 'tablet';
-  lastActive: string;
-  ip: string;
+  device_name: string;
+  device_type: 'ios' | 'android' | 'web' | 'desktop';
+  last_active_at: string;
+  ip_address: string;
   location: string;
+  browser?: string;
+  os?: string;
 }
 
 const getDeviceIcon = (type: string) => {
@@ -57,7 +59,7 @@ export default function DevicesPage() {
       const response = await fetch('/api/devices');
       if (response.ok) {
         const data = await response.json();
-        setDevices(data);
+        setDevices(data.devices || []);
       }
     } catch (error) {
       toast.error('加载设备列表失败');
@@ -124,11 +126,11 @@ export default function DevicesPage() {
               <div className="flex items-start justify-between">
                 <div className="flex items-start space-x-4">
                   <div className="p-3 bg-blue-50 rounded-lg text-blue-600">
-                    {getDeviceIcon(device.type)}
+                    {getDeviceIcon(device.device_type)}
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center space-x-2">
-                      <h3 className="font-medium text-gray-900">{device.name}</h3>
+                      <h3 className="font-medium text-gray-900">{device.device_name}</h3>
                       {device.id === currentSessionId && (
                         <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-200">
                           当前设备
@@ -136,8 +138,8 @@ export default function DevicesPage() {
                       )}
                     </div>
                     <div className="mt-2 space-y-1 text-sm text-gray-500">
-                      <p>最后活跃: {formatTime(device.lastActive)}</p>
-                      <p>IP 地址: {device.ip}</p>
+                      <p>最后活跃: {formatTime(device.last_active_at)}</p>
+                      <p>IP 地址: {device.ip_address}</p>
                       <p>位置: {device.location}</p>
                     </div>
                   </div>

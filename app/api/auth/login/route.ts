@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     // Route to appropriate authentication based on environment variable
     if (IS_DOMESTIC_VERSION) {
       console.log('[LOGIN] Using domestic version (CloudBase)')
-      return handleCloudBaseLogin(email, password)
+      return handleCloudBaseLogin(request, email, password)
     }
 
     // International version: use Supabase
@@ -410,7 +410,7 @@ export async function POST(request: NextRequest) {
 /**
  * Handle CloudBase login (for domestic version)
  */
-async function handleCloudBaseLogin(email: string, password: string) {
+async function handleCloudBaseLogin(request: NextRequest, email: string, password: string) {
   try {
     console.log('[LOGIN] ========== CloudBase Login Started ==========')
     console.log('[LOGIN] CloudBase authentication for:', email)

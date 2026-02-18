@@ -159,3 +159,14 @@ export function clearCloudBaseSessionCookie(response: NextResponse) {
   })
 }
 
+export function getCloudBaseSessionToken(request: NextRequest): string | null {
+  const cookieToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
+  const headerToken = request.headers.get('x-cloudbase-session')
+  return cookieToken || headerToken || null
+}
+
+export async function verifyCloudBaseSession(request: NextRequest): Promise<User | null> {
+  const auth = await getCloudBaseAuthFromRequest(request)
+  return auth?.user || null
+}
+

@@ -1,4 +1,4 @@
-import UAParser from 'ua-parser-js'
+import { UAParser } from 'ua-parser-js'
 
 export function parseDeviceInfo(userAgent: string) {
   const parser = new UAParser(userAgent)
