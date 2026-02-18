@@ -47,6 +47,7 @@ import { useNotifications } from '@/hooks/use-notifications'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
+import { SessionValidator } from '@/components/auth/session-validator'
 
 type ConversationsApiResponse = {
 
@@ -7653,8 +7654,9 @@ function ChatPageContent() {
   const showChatInterface = selectedConversationId !== undefined && displayConversation !== null
 
   return (
-
-    <div className="flex h-screen flex-col">
+    <>
+      <SessionValidator />
+      <div className="flex h-screen flex-col">
 
       <WorkspaceHeader
         workspace={currentWorkspace}
@@ -8044,7 +8046,7 @@ function ChatPageContent() {
       )}
 
     </div>
-
+    </>
   )
 
 }

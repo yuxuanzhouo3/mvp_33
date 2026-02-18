@@ -6,9 +6,12 @@ import { IS_DOMESTIC_VERSION } from '@/config'
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
+    console.log('[DELETE DEVICE API] Device ID:', params.id)
+
     let userId: string | null = null
 
     if (IS_DOMESTIC_VERSION) {
@@ -24,12 +27,17 @@ export async function DELETE(
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
       userId = user.id
+      console.log('[DELETE DEVICE API] User ID:', userId)
     }
 
+    console.log('[DELETE DEVICE API] Calling deleteDevice...')
     await deleteDevice(params.id, userId)
+    console.log('[DELETE DEVICE API] Device deleted successfully')
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error('Delete device error:', error)
+    console.error('[DELETE DEVICE API] Delete device error:', error)
+    console.error('[DELETE DEVICE API] Error message:', error.message)
+    console.error('[DELETE DEVICE API] Error stack:', error.stack)
     return NextResponse.json(
       { error: error.message || 'Failed to delete device' },
       { status: 500 }

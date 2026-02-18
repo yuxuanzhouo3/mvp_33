@@ -45,14 +45,54 @@ async function recordSupabaseDevice(data: DeviceData): Promise<Device> {
 }
 
 async function deleteSupabaseDevice(deviceId: string, userId: string): Promise<void> {
-  const supabase = await createClient()
+  // Use admin client to bypass RLS policies
+  const supabase = await createAdminClient()
+
+  console.log('[DELETE DEVICE] Deleting device:', deviceId, 'for user:', userId)
+
+  // First, get the device's session token
+  const { data: device, error: fetchError } = await supabase
+    .from('user_devices')
+    .select('session_token')
+    .eq('id', deviceId)
+    .eq('user_id', userId)
+    .single()
+
+  if (fetchError) {
+    console.error('[DELETE DEVICE] Failed to fetch device:', fetchError)
+    throw fetchError
+  }
+
+  if (!device) {
+    throw new Error('Device not found')
+  }
+
+  console.log('[DELETE DEVICE] Found device with session token')
+
+  // Revoke the session using the session token
+  // This will invalidate the user's session on that device
+  try {
+    // Use admin client to revoke the session by JWT
+    await supabase.auth.admin.signOut(device.session_token)
+    console.log('[DELETE DEVICE] Session revoked successfully')
+  } catch (revokeError: any) {
+    console.error('[DELETE DEVICE] Failed to revoke session:', revokeError)
+    // Continue with device deletion even if session revocation fails
+  }
+
+  // Delete the device record
   const { error } = await supabase
     .from('user_devices')
     .delete()
     .eq('id', deviceId)
     .eq('user_id', userId)
 
-  if (error) throw error
+  if (error) {
+    console.error('[DELETE DEVICE] Delete error:', error)
+    throw error
+  }
+
+  console.log('[DELETE DEVICE] Device deleted successfully')
 }
 
 async function getCloudBaseDevices(userId: string): Promise<Device[]> {

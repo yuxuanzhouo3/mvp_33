@@ -103,7 +103,31 @@ export default function LoginPageClient({ initialStep = 'login' }: LoginPageClie
           localStorage.setItem('chat_app_current_user', JSON.stringify(user))
           localStorage.setItem('chat_app_token', token)
         }
-        
+
+        // Record device information (async IIFE to avoid making useEffect callback async)
+        console.log('📱 Recording device information...')
+        ;(async () => {
+          try {
+            const deviceResponse = await fetch('/api/devices/record', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            })
+
+            if (deviceResponse.ok) {
+              const deviceData = await deviceResponse.json()
+              console.log('✅ Device recorded successfully:', deviceData)
+            } else {
+              const errorText = await deviceResponse.text()
+              console.error('⚠️ Failed to record device:', errorText)
+            }
+          } catch (deviceError) {
+            console.error('⚠️ Device recording error:', deviceError)
+            // Don't fail login if device recording fails
+          }
+        })()
+
         // Check if user already has a workspace
         const existingWorkspace = mockAuth.getCurrentWorkspace()
         if (existingWorkspace) {
@@ -114,7 +138,7 @@ export default function LoginPageClient({ initialStep = 'login' }: LoginPageClie
           console.log('✅ User logged in, showing workspace selector...')
           setStep('workspace')
         }
-        
+
         return // Exit early to prevent further processing
       } catch (err) {
         console.error('Failed to parse OAuth user data:', err)
