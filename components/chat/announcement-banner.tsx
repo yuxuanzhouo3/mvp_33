@@ -37,6 +37,7 @@ export function AnnouncementBanner({
 
   const loadLatestAnnouncement = async () => {
     setIsLoading(true)
+    setAnnouncement(null)
     try {
       const response = await fetch(`/api/groups/${conversationId}/announcements`)
       if (response.ok) {

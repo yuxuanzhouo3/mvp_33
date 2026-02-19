@@ -49,6 +49,7 @@ export function AnnouncementDrawer({
 
   const loadAnnouncements = async () => {
     setIsLoading(true)
+    setAnnouncements([])
     try {
       const response = await fetch(`/api/groups/${conversationId}/announcements`)
       if (response.ok) {

@@ -45,7 +45,10 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [verificationCode, setVerificationCode] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isSendingCode, setIsSendingCode] = useState(false)
+  const [countdown, setCountdown] = useState(0)
   const [error, setError] = useState('')
   const [showEmailConfirmDialog, setShowEmailConfirmDialog] = useState(false)
   const { language } = useSettings()
@@ -72,6 +75,12 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
         alreadyHaveAccount: 'Already have an account?',
         checkEmailTitle: 'Check your email',
         checkEmailDescription: 'We have sent a confirmation link to your inbox. Please confirm your email, then go to the login page and sign in with your email and password.',
+        verificationCode: 'Verification Code',
+        verificationCodePlaceholder: 'Enter 6-digit code',
+        getCode: 'Get Code',
+        sendingCode: 'Sending...',
+        codeSent: 'Code sent!',
+        codeFailed: 'Failed to send code',
       },
       zh: {
         register: '注册账号',
@@ -93,9 +102,66 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
         alreadyHaveAccount: '已有账号？',
         checkEmailTitle: '请检查邮箱',
         checkEmailDescription: '我们已经向您的邮箱发送了一封确认邮件。请先点击邮件中的链接完成验证，然后到登录页用邮箱和密码登录。',
+        verificationCode: '验证码',
+        verificationCodePlaceholder: '输入6位验证码',
+        getCode: '获取验证码',
+        sendingCode: '发送中...',
+        codeSent: '验证码已发送！',
+        codeFailed: '发送失败',
       }
     }
     return translations[language]?.[key] || translations.en[key]
+  }
+
+  const handleSendCode = async () => {
+    if (!email) {
+      setError(t('emailPlaceholder'))
+      return
+    }
+
+    // Simple email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      setError(language === 'zh' ? '请输入有效的邮箱地址' : 'Please enter a valid email address')
+      return
+    }
+
+    setIsSendingCode(true)
+    setError('')
+
+    try {
+      const response = await fetch('/api/auth/send-register-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || t('codeFailed'))
+      }
+
+      // Start countdown
+      setCountdown(60)
+      const timer = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer)
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    } catch (err) {
+      console.error('Send code error:', err)
+      const errorMessage = err instanceof Error ? err.message : t('codeFailed')
+      setError(errorMessage)
+    } finally {
+      setIsSendingCode(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -116,17 +182,18 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          email, 
-          password, 
+        body: JSON.stringify({
+          email,
+          password,
           name,
+          verificationCode,
         }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        // Show specific error message if email already registered, otherwise generic error (always in English)
+        // Show specific error message from server
         const errorMsg = data?.error || 'Registration failed'
         console.error('[REGISTER FORM] Registration failed:', {
           status: response.status,
@@ -134,17 +201,38 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
           details: data?.details,
           code: data?.code,
         })
-        // If error is "Email already registered", show it directly
-        if (errorMsg.toLowerCase().includes('already registered') || errorMsg.toLowerCase().includes('already exists')) {
-          throw new Error('Email already registered')
+
+        // Map server error messages to user-friendly messages
+        let userErrorMsg = errorMsg
+
+        // 国内版错误消息映射
+        if (IS_DOMESTIC_VERSION) {
+          if (errorMsg.includes('验证码')) {
+            userErrorMsg = errorMsg // 直接显示服务器返回的验证码错误信息
+          } else if (errorMsg.toLowerCase().includes('already registered') || errorMsg.toLowerCase().includes('already exists') || errorMsg.includes('已注册')) {
+            userErrorMsg = language === 'zh' ? '该邮箱已被注册' : 'Email already registered'
+          } else if (errorMsg.includes('密码')) {
+            userErrorMsg = errorMsg
+          }
+        } else {
+          // 国际版
+          if (errorMsg.toLowerCase().includes('already registered') || errorMsg.toLowerCase().includes('already exists')) {
+            userErrorMsg = 'Email already registered'
+          }
         }
-        throw new Error('Registration failed')
+
+        throw new Error(userErrorMsg)
       }
 
       if (data.success && data.user) {
-        // 注册成功后，统一显示提示并跳转到登录页面
-        // 不再自动登录，要求用户手动输入账号密码登录
-        setShowEmailConfirmDialog(true)
+        // 国内版：验证码注册成功后直接跳转登录页
+        // 国际版：显示邮箱确认提示
+        if (IS_DOMESTIC_VERSION) {
+          // 直接回到登录页，让用户用账号密码登录
+          onBack()
+        } else {
+          setShowEmailConfirmDialog(true)
+        }
       } else {
         throw new Error('Registration failed')
       }
@@ -258,6 +346,45 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
                 disabled={isLoading}
               />
             </div>
+            {/* 国内版：显示验证码输入框 */}
+            {IS_DOMESTIC_VERSION && (
+              <div className="space-y-2">
+                <Label htmlFor="verificationCode">{t('verificationCode')}</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="verificationCode"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    placeholder={t('verificationCodePlaceholder')}
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                    required
+                    disabled={isLoading}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSendCode}
+                    disabled={isSendingCode || countdown > 0}
+                    className="whitespace-nowrap"
+                  >
+                    {isSendingCode ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {t('sendingCode')}
+                      </>
+                    ) : countdown > 0 ? (
+                      `${countdown}s`
+                    ) : (
+                      t('getCode')
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="password">{t('password')}</Label>
               <Input

@@ -8,6 +8,7 @@ import { User } from '@/lib/types'
 import { v4 as uuidv4 } from 'uuid'
 import { hashPassword } from '@/lib/utils/password'
 import { IS_DOMESTIC_VERSION } from '@/config'
+import { verificationCodeService } from '@/lib/email/verification-code-service'
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,8 +21,8 @@ export async function POST(request: NextRequest) {
     })
 
     const body = await request.json()
-    const { email, password, name } = body
-    console.log('[REGISTER] Request data:', { email, name, passwordLength: password?.length })
+    const { email, password, name, verificationCode } = body
+    console.log('[REGISTER] Request data:', { email, name, passwordLength: password?.length, hasVerificationCode: !!verificationCode })
 
     // Validate input
     if (!email || !password || !name) {
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     console.log('[REGISTER] Checking version:', { IS_DOMESTIC_VERSION })
     if (IS_DOMESTIC_VERSION) {
       console.log('[REGISTER] ✓ Using CloudBase (domestic version)')
-      return handleCloudBaseRegister(email, password, name)
+      return handleCloudBaseRegister(email, password, name, verificationCode)
     } else {
       console.log('[REGISTER] ✓ Using Supabase (global version)')
     }
@@ -266,16 +267,43 @@ export async function POST(request: NextRequest) {
 
 /**
  * Handle CloudBase registration (for domestic version)
- * Skips email verification - user can login immediately
+ * Requires email verification code
  */
 async function handleCloudBaseRegister(
   email: string,
   password: string,
-  name: string
+  name: string,
+  verificationCode?: string
 ): Promise<NextResponse> {
   try {
     console.log('[REGISTER] ===== CloudBase registration started =====')
     console.log('[REGISTER] CloudBase registration for:', email)
+
+    // Validate verification code for domestic version
+    if (!verificationCode || verificationCode.length !== 6) {
+      console.error('[REGISTER] 验证码格式错误:', verificationCode);
+      return NextResponse.json(
+        { error: '请输入6位验证码' },
+        { status: 400 }
+      );
+    }
+
+    console.log('[REGISTER] 开始验证验证码');
+    const verifyResult = await verificationCodeService.verifyCode(
+      email,
+      verificationCode,
+      'register'
+    );
+
+    if (!verifyResult.success) {
+      console.error('[REGISTER] 验证码验证失败:', verifyResult.error);
+      return NextResponse.json(
+        { error: verifyResult.error || '验证码验证失败' },
+        { status: 400 }
+      );
+    }
+
+    console.log('[REGISTER] 验证码验证成功');
 
     // Check if user already exists
     console.log('[REGISTER] Checking if user already exists...')

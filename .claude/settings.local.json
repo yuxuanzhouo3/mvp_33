@@ -16,7 +16,9 @@
       "Bash(node test-screenshot.js:*)",
       "Bash(node test-messages.js:*)",
       "Bash(node test-with-login.js:*)",
-      "Bash(node test-auto.js:*)"
+      "Bash(node test-auto.js:*)",
+      "WebSearch",
+      "Bash(npx tsc --noEmit)"
     ]
   },
   "enableAllProjectMcpServers": true,
