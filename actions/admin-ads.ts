@@ -7,17 +7,18 @@ export async function listAds(filters: AdFilters = {}) {
   try {
     console.log('[Actions] 获取广告列表:', filters);
     const adapter = getDatabaseAdapter();
-    const result = await adapter.listAds(filters);
+    const ads = await adapter.listAds(filters);
+    const total = await adapter.countAds(filters);
 
     const pageSize = filters.limit || 20;
     const page = filters.offset ? Math.floor(filters.offset / pageSize) + 1 : 1;
 
     const paginatedResult: PaginatedResult<Advertisement> = {
-      items: result.items,
-      total: result.total,
+      items: ads,
+      total: total,
       page,
       pageSize,
-      totalPages: Math.ceil(result.total / pageSize),
+      totalPages: Math.ceil(total / pageSize),
     };
 
     return { success: true, data: paginatedResult };

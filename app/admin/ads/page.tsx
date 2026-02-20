@@ -155,8 +155,8 @@ export default function AdsManagementPage() {
       });
 
       if (result.success && result.data) {
-        setAds(result.data.items);
-        setTotal(result.data.total);
+        setAds(result.data.items || []);
+        setTotal(result.data.total || 0);
       } else {
         setError(result.error || "加载失败");
       }

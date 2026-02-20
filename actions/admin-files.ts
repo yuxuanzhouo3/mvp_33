@@ -1,25 +1,34 @@
 'use server';
 
 import { getDatabaseAdapter } from '@/lib/admin/database';
-import type { StorageFile } from '@/lib/admin/types';
 import { getSupabaseAdmin } from '@/lib/integrations/supabase-admin';
 import { CloudBaseConnector } from '@/lib/cloudbase/connector';
 import { RegionConfig } from '@/lib/config/region';
 import { requireAdminSession } from '@/lib/admin/session';
 
 // ============================================================
-// 类型定义
+// 类型定义 - 直接定义避免导入问题
 // ============================================================
 
-export type { StorageFile };
+type FileSource = 'cloudbase' | 'supabase';
 
-export interface ReleaseFile extends StorageFile {
+interface StorageFile {
+  name: string;
+  url: string;
+  size?: number;
+  lastModified?: string;
+  source: FileSource;
+  fileId?: string;
+  adId?: string;
+}
+
+interface ReleaseFile extends StorageFile {
   platform?: string;
   version?: string;
   releaseId?: string;
 }
 
-export interface SocialLinkFile extends StorageFile {
+interface SocialLinkFile extends StorageFile {
   linkId?: string;
 }
 
@@ -29,12 +38,20 @@ export interface SocialLinkFile extends StorageFile {
 
 export async function listStorageFiles() {
   try {
-    console.log('[Actions] 获取存储文件列表');
+    console.log('[Actions] 获取存储文件列表 - 开始');
     const adapter = getDatabaseAdapter();
+    console.log('[Actions] 获取存储文件列表 - adapter:', adapter?.constructor?.name);
     const files = await adapter.listStorageFiles();
+    console.log('[Actions] 获取存储文件列表 - 成功, 文件数:', files?.length);
     return { success: true, files };
-  } catch (error) {
-    console.error('[Actions] 获取文件列表失败:', error);
+  } catch (error: any) {
+    console.error('[Actions] 获取文件列表失败 - 错误:', {
+      message: error?.message,
+      stack: error?.stack,
+      code: error?.code,
+      cause: error?.cause,
+      fullError: error ? JSON.stringify(error, Object.getOwnPropertyNames(error)) : 'null'
+    });
     return { success: false, error: error instanceof Error ? error.message : '获取失败' };
   }
 }
@@ -262,13 +279,20 @@ export async function listReleaseFiles() {
         const db = connector.getClient();
         const app = connector.getApp();
 
-        const { data } = await db.collection('releases').get();
+        let releasesData: any[] = [];
+        try {
+          const { data } = await db.collection('releases').get();
+          releasesData = data || [];
+        } catch (releasesErr) {
+          console.warn('CloudBase releases query failed (may need permissions):', releasesErr);
+          // 继续尝试，即使 releases 查询失败
+        }
 
-        if (data && Array.isArray(data)) {
+        if (releasesData && Array.isArray(releasesData)) {
           const fileIdList: string[] = [];
           const releaseMap: Map<string, { release: any; fileName: string }> = new Map();
 
-          for (const release of data) {
+          for (const release of releasesData) {
             if (release.file_url) {
               let fileId: string | null = null;
               let fileName: string;
@@ -577,13 +601,20 @@ export async function listSocialLinkFiles() {
         const db = connector.getClient();
         const app = connector.getApp();
 
-        const { data } = await db.collection('social_links').get();
+        let socialLinksData: any[] = [];
+        try {
+          const { data } = await db.collection('social_links').get();
+          socialLinksData = data || [];
+        } catch (socialErr) {
+          console.warn('CloudBase social_links query failed (may need permissions):', socialErr);
+          // 继续尝试，即使查询失败
+        }
 
-        if (data && Array.isArray(data)) {
+        if (socialLinksData && Array.isArray(socialLinksData)) {
           const fileIdList: string[] = [];
           const linkMap: Map<string, { link: any; fileName: string }> = new Map();
 
-          for (const link of data) {
+          for (const link of socialLinksData) {
             if (link.icon_url) {
               let fileId: string | null = null;
               let fileName: string;

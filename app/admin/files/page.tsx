@@ -6,8 +6,35 @@ import {
   deleteStorageFile,
   renameStorageFile,
   downloadStorageFile,
-  type StorageFile,
+  listReleaseFiles,
+  deleteReleaseFile,
+  downloadReleaseFile,
+  listSocialLinkFiles,
+  deleteSocialLinkFile,
+  getCloudBaseFileUrl,
+  renameCloudBaseFile,
 } from "@/actions/admin-files";
+
+// 定义存储文件类型（避免从 server action 导入类型）
+interface StorageFile {
+  name: string;
+  url: string;
+  size?: number;
+  lastModified?: string;
+  source: 'cloudbase' | 'supabase';
+  fileId?: string;
+  adId?: string;
+}
+
+interface ReleaseFile extends StorageFile {
+  platform?: string;
+  version?: string;
+  releaseId?: string;
+}
+
+interface SocialLinkFile extends StorageFile {
+  linkId?: string;
+}
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

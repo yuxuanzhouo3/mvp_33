@@ -20,7 +20,10 @@
       "WebSearch",
       "Bash(npx tsc --noEmit)",
       "Bash(npx tsc:*)",
-      "mcp__cloudbase__executeReadOnlySQL"
+      "mcp__cloudbase__executeReadOnlySQL",
+      "Bash(node -e \"const bcrypt = require\\(''bcrypt''\\); bcrypt.hash\\(''admin123456'', 10\\).then\\(hash => console.log\\(hash\\)\\);\")",
+      "mcp__cloudbase__writeNoSqlDatabaseContent",
+      "Bash(node -e:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

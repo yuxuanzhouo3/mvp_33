@@ -1804,26 +1804,46 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
    * 获取存储文件列表
    */
   async listStorageFiles(): Promise<Array<{ name: string; url: string; size?: number; lastModified?: string; source: string }>> {
-    console.log('[CloudBaseAdapter] 获取存储文件列表');
+    console.log('[CloudBaseAdapter] 获取存储文件列表 - 开始');
     try {
       await this.ensureInitialized();
+      console.log('[CloudBaseAdapter] 已初始化');
       const app = this.connector.getApp();
+      console.log('[CloudBaseAdapter] app:', app?.constructor?.name);
 
       // CloudBase Storage API 列出文件
-      const result = await app.listFiles({
-        prefix: '',
-        maxKeys: 1000,
-      });
+      let files: Array<{ name: string; url: string; size?: number; lastModified?: string; source: string }> = [];
+      try {
+        console.log('[CloudBaseAdapter] 开始调用 listFiles API');
+        const result = await app.listFiles({
+          prefix: '',
+          maxKeys: 1000,
+        });
+        console.log('[CloudBaseAdapter] listFiles 返回结果:', {
+          hasResult: !!result,
+          resultKeys: result ? Object.keys(result) : [],
+          fileListLength: result?.fileList?.length
+        });
 
-      const files = (result.fileList || []).map((file: any) => ({
-        name: file.Key,
-        url: file.DownloadUrl || '',
-        size: file.Size,
-        lastModified: file.LastModified,
-        source: 'cloudbase' as const,
-      }));
+        files = (result.fileList || []).map((file: any) => ({
+          name: file.Key,
+          url: file.DownloadUrl || '',
+          size: file.Size,
+          lastModified: file.LastModified,
+          source: 'cloudbase' as const,
+        }));
 
-      console.log('[CloudBaseAdapter] 获取到', files.length, '个文件');
+        console.log('[CloudBaseAdapter] 获取到', files.length, '个文件');
+      } catch (storageErr: any) {
+        // CloudBase Storage 可能未配置或没有权限，返回空数组
+        console.error('[CloudBaseAdapter] CloudBase Storage 列出文件失败:', {
+          message: storageErr?.message,
+          code: storageErr?.code,
+          error: storageErr
+        });
+        files = [];
+      }
+
       return files;
     } catch (error: any) {
       console.error('[CloudBaseAdapter] 获取文件列表失败:', error);
