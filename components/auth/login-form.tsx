@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { mockAuth } from '@/lib/mock-auth'
-import { Loader2, Mail } from 'lucide-react'
+import { Loader2, Mail, CheckCircle } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
 import { IS_DOMESTIC_VERSION } from '@/config'
 
@@ -14,6 +15,7 @@ interface LoginFormProps {
   onSuccess: () => void
   onForgotPassword?: () => void
   onRegister?: () => void
+  successMessage?: string
 }
 
 function WeChatIcon({ className }: { className?: string }) {
@@ -35,13 +37,14 @@ function GoogleIcon({ className }: { className?: string }) {
   )
 }
 
-export function LoginForm({ onSuccess, onForgotPassword, onRegister }: LoginFormProps) {
+export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMessage }: LoginFormProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const { language } = useSettings()
 
+  // 显示重置成功的提示
   const t = (key: string) => {
     const translations: Record<string, Record<string, string>> = {
       en: {
@@ -259,6 +262,14 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister }: LoginForm
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Success message from password reset */}
+        {successMessage && (
+          <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            <AlertDescription className="text-green-600">{successMessage}</AlertDescription>
+          </Alert>
+        )}
+
         {/* OAuth Login Buttons - Dynamic based on region */}
         <div className="grid grid-cols-1 gap-3">
           {IS_DOMESTIC_VERSION ? (

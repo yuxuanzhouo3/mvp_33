@@ -18,7 +18,9 @@
       "Bash(node test-with-login.js:*)",
       "Bash(node test-auto.js:*)",
       "WebSearch",
-      "Bash(npx tsc --noEmit)"
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx tsc:*)",
+      "mcp__cloudbase__executeReadOnlySQL"
     ]
   },
   "enableAllProjectMcpServers": true,

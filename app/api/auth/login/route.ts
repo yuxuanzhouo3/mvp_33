@@ -371,7 +371,9 @@ export async function POST(request: NextRequest) {
 
     // Get device info
     const userAgent = request.headers.get('user-agent') || ''
-    const deviceInfo = parseDeviceInfo(userAgent)
+    const deviceModel = body?.deviceModel
+    const deviceBrand = body?.deviceBrand
+    const deviceInfo = parseDeviceInfo(userAgent, deviceModel, deviceBrand)
     const ip = getClientIP(request)
     const location = await getLocationFromIP(ip)
 
@@ -417,6 +419,12 @@ async function handleCloudBaseLogin(request: NextRequest, email: string, passwor
     console.log('[LOGIN] Password length:', password.length)
     console.log('[LOGIN] Password first 2 chars:', password.substring(0, 2))
     console.log('[LOGIN] Password last 2 chars:', password.substring(password.length - 2))
+
+    // Parse body for device info
+    let body: any = {}
+    try {
+      body = await request.json()
+    } catch {}
 
     // Get user from CloudBase (with password hash for authentication)
     const user = await getCloudBaseUserByEmail(email, true)
@@ -470,7 +478,9 @@ async function handleCloudBaseLogin(request: NextRequest, email: string, passwor
 
     // Get device info
     const userAgent = request.headers.get('user-agent') || ''
-    const deviceInfo = parseDeviceInfo(userAgent)
+    const deviceModel = body?.deviceModel
+    const deviceBrand = body?.deviceBrand
+    const deviceInfo = parseDeviceInfo(userAgent, deviceModel, deviceBrand)
     const ip = getClientIP(request)
     const location = await getLocationFromIP(ip)
 

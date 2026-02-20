@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, useRef, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { LoginForm } from '@/components/auth/login-form'
 import { RegisterForm } from '@/components/auth/register-form'
 import { ResetPasswordForm } from '@/components/auth/reset-password-form'
@@ -20,10 +20,23 @@ interface LoginPageClientProps {
 
 export default function LoginPageClient({ initialStep = 'login' }: LoginPageClientProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [step, setStep] = useState<'login' | 'register' | 'reset-password' | 'workspace'>(initialStep)
+  const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null)
   const { language, setLanguage } = useSettings()
   const oauthProcessedRef = useRef(false) // Prevent duplicate OAuth processing
   const initialStepSetRef = useRef(initialStep === 'workspace') // Track if initial step has been set
+
+  // 处理密码重置成功的提示
+  useEffect(() => {
+    const resetParam = searchParams?.get('reset')
+    if (resetParam === 'success') {
+      setResetSuccessMessage(language === 'zh' ? '密码重置成功！请使用新密码登录。' : 'Password reset successfully! Please login with your new password.')
+      // 清除URL参数
+      router.replace('/login')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   useEffect(() => {
     // CRITICAL: Set initial step on client side only (after hydration)
@@ -108,11 +121,43 @@ export default function LoginPageClient({ initialStep = 'login' }: LoginPageClie
         console.log('📱 Recording device information...')
         ;(async () => {
           try {
+            // Try to get device model from WebView (Android)
+            let deviceModel: string | undefined
+            let deviceBrand: string | undefined
+
+            if (typeof window !== 'undefined') {
+              // Check if running in Android WebView
+              if ((window as any).Android !== undefined) {
+                try {
+                  deviceModel = (window as any).Android.getDeviceModel()
+                  deviceBrand = (window as any).Android.getDeviceBrand()
+                  console.log('📱 Android device info:', deviceBrand, deviceModel)
+                } catch (e) {
+                  console.log('📱 Android device info not available')
+                }
+              }
+              // Check for iOS
+              else if ((window as any).webkit?.messageHandlers?.deviceInfo) {
+                try {
+                  const info = await (window as any).webkit.messageHandlers.deviceInfo.postMessage({})
+                  deviceModel = info?.model
+                  deviceBrand = info?.brand
+                  console.log('📱 iOS device info:', deviceBrand, deviceModel)
+                } catch (e) {
+                  console.log('📱 iOS device info not available')
+                }
+              }
+            }
+
             const deviceResponse = await fetch('/api/devices/record', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
               },
+              body: JSON.stringify({
+                deviceModel: deviceModel || null,
+                deviceBrand: deviceBrand || null,
+              }),
             })
 
             if (deviceResponse.ok) {
@@ -304,10 +349,11 @@ export default function LoginPageClient({ initialStep = 'login' }: LoginPageClie
 
       <div className="w-full max-w-md space-y-4">
         {step === 'login' && (
-          <LoginForm 
+          <LoginForm
             onSuccess={handleLoginSuccess}
             onForgotPassword={() => setStep('reset-password')}
             onRegister={() => setStep('register')}
+            successMessage={resetSuccessMessage || undefined}
           />
         )}
         {step === 'register' && (

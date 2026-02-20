@@ -34,6 +34,36 @@ async function getSupabaseDevices(userId: string): Promise<Device[]> {
 
 async function recordSupabaseDevice(data: DeviceData): Promise<Device> {
   const supabase = await createAdminClient()
+
+  // First try to find existing device with same session_token
+  const { data: existingDevice } = await supabase
+    .from('user_devices')
+    .select('id')
+    .eq('session_token', data.session_token)
+    .single()
+
+  if (existingDevice) {
+    // Update existing device's last_active_at
+    const { data: device, error } = await supabase
+      .from('user_devices')
+      .update({
+        device_name: data.device_name,
+        device_type: data.device_type,
+        browser: data.browser,
+        os: data.os,
+        ip_address: data.ip_address,
+        location: data.location,
+        last_active_at: new Date().toISOString(),
+      })
+      .eq('id', existingDevice.id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return device
+  }
+
+  // Insert new device if not exists
   const { data: device, error } = await supabase
     .from('user_devices')
     .insert(data)
@@ -119,17 +149,48 @@ async function getCloudBaseDevices(userId: string): Promise<Device[]> {
 
 async function recordCloudBaseDevice(data: DeviceData): Promise<Device> {
   const db = getCloudBaseDB()
+  const now = new Date().toISOString()
+
+  // First try to find existing device with same session_token
+  const existing = await db.collection('user_devices')
+    .where({ session_token: data.session_token })
+    .get()
+
+  if (existing.data && existing.data.length > 0) {
+    // Update existing device
+    const existingId = existing.data[0]._id
+    await db.collection('user_devices')
+      .doc(existingId)
+      .update({
+        device_name: data.device_name,
+        device_type: data.device_type,
+        browser: data.browser,
+        os: data.os,
+        ip_address: data.ip_address,
+        location: data.location,
+        last_active_at: now,
+      })
+
+    return {
+      id: existingId,
+      ...data,
+      last_active_at: now,
+      created_at: existing.data[0].created_at,
+    }
+  }
+
+  // Insert new device if not exists
   const res = await db.collection('user_devices').add({
     ...data,
-    last_active_at: new Date().toISOString(),
-    created_at: new Date().toISOString(),
+    last_active_at: now,
+    created_at: now,
   })
 
   return {
     id: res.id,
     ...data,
-    last_active_at: new Date().toISOString(),
-    created_at: new Date().toISOString(),
+    last_active_at: now,
+    created_at: now,
   }
 }
 

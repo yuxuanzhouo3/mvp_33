@@ -42,7 +42,19 @@ export async function POST(request: NextRequest) {
     const userAgent = request.headers.get('user-agent') || ''
     console.log('[DEVICE RECORD] User-Agent:', userAgent)
 
-    const deviceInfo = parseDeviceInfo(userAgent)
+    // Get device model from request body (passed from app)
+    let deviceModel: string | undefined
+    let deviceBrand: string | undefined
+    try {
+      const body = await request.json()
+      deviceModel = body.deviceModel
+      deviceBrand = body.deviceBrand
+      console.log('[DEVICE RECORD] Device model from app:', deviceModel, deviceBrand)
+    } catch {
+      // If no body or parsing fails, continue without device model
+    }
+
+    const deviceInfo = parseDeviceInfo(userAgent, deviceModel, deviceBrand)
     console.log('[DEVICE RECORD] Device info:', JSON.stringify(deviceInfo, null, 2))
 
     const ip = getClientIP(request)
