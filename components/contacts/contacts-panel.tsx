@@ -8,15 +8,15 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { User } from '@/lib/types'
-import { Search, UserPlus, Users, Star, Building2, MessageSquare, Phone, Video, ChevronUp, ChevronDown, Trash2, QrCode, Scan } from 'lucide-react'
+import { Search, UserPlus, Users, Star, Building2, MessageSquare, Phone, Video, ChevronUp, ChevronDown, Trash2, Ban, Flag } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
 import { AddContactDialog } from './add-contact-dialog'
 import { ContactRequestsPanel } from './contact-requests-panel'
 import { ContactSkeleton } from './contact-skeleton'
-import { QRCodeDialog } from './qr-code-dialog'
-import { ScanQRDialog } from './scan-qr-dialog'
+import { BlockUserDialog } from './block-user-dialog'
+import { ReportUserDialog } from './report-user-dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -100,8 +100,8 @@ export function ContactsPanel({
     }
   }, [initialUserId, users, selectedUser])
   const [showAddContactDialog, setShowAddContactDialog] = useState(false)
-  const [showQRCodeDialog, setShowQRCodeDialog] = useState(false)
-  const [showScanQRDialog, setShowScanQRDialog] = useState(false)
+  const [showBlockDialog, setShowBlockDialog] = useState(false)
+  const [showReportDialog, setShowReportDialog] = useState(false)
   const [showScrollDownButton, setShowScrollDownButton] = useState(false)
   const [showScrollUpButton, setShowScrollUpButton] = useState(false)
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0)
@@ -377,22 +377,6 @@ export function ContactsPanel({
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">{t('contacts')}</h2>
             <div className="flex items-center gap-1">
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => setShowQRCodeDialog(true)}
-                title={t('myQRCode')}
-              >
-                <QrCode className="h-5 w-5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => setShowScanQRDialog(true)}
-                title={t('scanQRCode')}
-              >
-                <Scan className="h-5 w-5" />
-              </Button>
               {(onAddContact || onAddManualContact) && (
                 <Button
                   size="icon"
@@ -660,7 +644,7 @@ export function ContactsPanel({
                   {t('video')}
                 </Button>
                 {onDeleteContact && selectedUser.id !== currentUser.id && (
-                  <Button 
+                  <Button
                     variant="outline"
                     className="text-foreground border-border hover:bg-muted hover:text-foreground"
                     onClick={() => {
@@ -671,6 +655,27 @@ export function ContactsPanel({
                     <Trash2 className="h-4 w-4 mr-2" />
                     Delete
                   </Button>
+                )}
+                {/* Slack Mode: Block and Report buttons */}
+                {selectedUser.id !== currentUser.id && (
+                  <>
+                    <Button
+                      variant="outline"
+                      className="text-foreground border-border hover:bg-muted hover:text-foreground"
+                      onClick={() => setShowBlockDialog(true)}
+                    >
+                      <Ban className="h-4 w-4 mr-2" />
+                      {t('blockUser')}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="text-foreground border-border hover:bg-muted hover:text-foreground"
+                      onClick={() => setShowReportDialog(true)}
+                    >
+                      <Flag className="h-4 w-4 mr-2" />
+                      {t('reportUser')}
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
@@ -746,22 +751,6 @@ export function ContactsPanel({
         />
       )}
 
-      <QRCodeDialog
-        open={showQRCodeDialog}
-        onOpenChange={setShowQRCodeDialog}
-        currentUser={currentUser}
-      />
-
-      <ScanQRDialog
-        open={showScanQRDialog}
-        onOpenChange={setShowScanQRDialog}
-        onAddContact={(userId) => {
-          if (onAddContact) {
-            onAddContact(userId)
-          }
-        }}
-      />
-
       {/* Delete contact confirmation dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
@@ -794,6 +783,34 @@ export function ContactsPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Slack Mode: Block User Dialog */}
+      {selectedUser && (
+        <BlockUserDialog
+          open={showBlockDialog}
+          onOpenChange={setShowBlockDialog}
+          userId={selectedUser.id}
+          userName={selectedUser.full_name || selectedUser.username || 'User'}
+          onBlocked={() => {
+            setShowBlockDialog(false)
+            // Optionally refresh or update UI
+          }}
+        />
+      )}
+
+      {/* Slack Mode: Report User Dialog */}
+      {selectedUser && (
+        <ReportUserDialog
+          open={showReportDialog}
+          onOpenChange={setShowReportDialog}
+          userId={selectedUser.id}
+          userName={selectedUser.full_name || selectedUser.username || 'User'}
+          onReported={() => {
+            setShowReportDialog(false)
+            // Optionally refresh or update UI
+          }}
+        />
+      )}
     </div>
   )
 }

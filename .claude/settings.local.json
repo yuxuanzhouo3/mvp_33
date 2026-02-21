@@ -23,7 +23,12 @@
       "mcp__cloudbase__executeReadOnlySQL",
       "Bash(node -e \"const bcrypt = require\\(''bcrypt''\\); bcrypt.hash\\(''admin123456'', 10\\).then\\(hash => console.log\\(hash\\)\\);\")",
       "mcp__cloudbase__writeNoSqlDatabaseContent",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "mcp__tavily__tavily_search",
+      "Bash(curl:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(cmd //c \"taskkill /PID 105000 /F\")"
     ]
   },
   "enableAllProjectMcpServers": true,
@@ -33,6 +38,7 @@
     "sequential-thinking",
     "supabase-db",
     "chrome-devtools",
+    "tavily",
     "context"
   ],
   "disabledMcpjsonServers": [

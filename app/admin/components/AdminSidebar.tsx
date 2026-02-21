@@ -21,6 +21,7 @@ import {
   User,
   Package,
   Link as LinkIcon,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +43,11 @@ const navItems = [
     href: "/admin/payments",
     label: "支付记录",
     icon: CreditCard,
+  },
+  {
+    href: "/admin/reports",
+    label: "举报管理",
+    icon: AlertTriangle,
   },
   {
     href: "/admin/ads",

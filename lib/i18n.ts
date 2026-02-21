@@ -202,21 +202,6 @@ export const translations = {
     deleteContact: 'Delete Contact',
     deleteContactDescription: 'Are you sure you want to remove {name} from your contacts? You will need to send a new friend request to add them back.',
 
-    // QR Code
-    myQRCode: 'My QR Code',
-    scanQRCode: 'Scan QR Code',
-    scanToAddFriend: 'Scan this QR code to add me as a friend',
-    cameraPermissionDenied: 'Camera permission is required to scan QR codes',
-    invalidQRCode: 'This is not a valid OrbitChat QR code',
-    userNotFound: 'User not found or has been deactivated',
-    alreadyFriend: 'This user is already your friend',
-    crossRegionNotAllowed: 'Cannot add users from different regions',
-    networkError: 'Network error, please try again',
-    cameraError: 'Failed to access camera',
-    scanningQRCode: 'Scanning QR code...',
-    retry: 'Retry',
-    loading: 'Loading...',
-
     // File preview
     filePreview: 'File Preview',
     previewNotAvailable: 'Preview not available for this file type',
@@ -254,6 +239,35 @@ export const translations = {
     chooseWorkspace: 'Choose a workspace to continue',
     createNewWorkspace: 'Create New Workspace',
     workspaceName: 'Workspace Name',
+
+    // Slack Mode - Block & Report
+    blockUser: 'Block User',
+    unblockUser: 'Unblock User',
+    blockUserDescription: 'Are you sure you want to block {name}? After blocking, neither of you will be able to send messages to each other.',
+    blockReason: 'Reason (optional)',
+    blockReasonPlaceholder: 'Enter reason...',
+    confirmBlock: 'Block',
+    blocked: 'Blocked',
+    blockedUsers: 'Blocked Users',
+    noBlockedUsers: 'No blocked users',
+
+    reportUser: 'Report User',
+    reportUserDescription: 'You are reporting {name}',
+    reportType: 'Report Type',
+    reportSpam: 'Spam',
+    reportHarassment: 'Harassment',
+    reportInappropriate: 'Inappropriate Content',
+    reportOther: 'Other',
+    reportDescription: 'Description (optional)',
+    reportDescriptionPlaceholder: 'Please describe the issue in detail...',
+    submitReport: 'Submit Report',
+    reportSubmitted: 'Report submitted successfully',
+
+    // Privacy Settings
+    privacySettings: 'Privacy Settings',
+    allowNonFriendMessages: 'Allow Non-Friend Messages',
+    allowNonFriendMessagesDescription: 'When disabled, only your friends can send you direct messages',
+    privacySettingsUpdated: 'Privacy settings updated',
   },
   zh: {
     // Navigation
@@ -459,28 +473,42 @@ export const translations = {
     chooseWorkspace: '选择一个工作区以继续',
     createNewWorkspace: '创建新工作区',
     workspaceName: '工作区名称',
-    
+
+    // Slack Mode - Block & Report
+    blockUser: '屏蔽用户',
+    unblockUser: '取消屏蔽',
+    blockUserDescription: '确定要屏蔽 {name} 吗？屏蔽后，双方将无法互相发送消息。',
+    blockReason: '屏蔽原因（可选）',
+    blockReasonPlaceholder: '请输入屏蔽原因...',
+    confirmBlock: '确认屏蔽',
+    blocked: '已屏蔽',
+    blockedUsers: '已屏蔽的用户',
+    noBlockedUsers: '暂无已屏蔽的用户',
+
+    reportUser: '举报用户',
+    reportUserDescription: '您正在举报 {name}',
+    reportType: '举报类型',
+    reportSpam: '垃圾信息',
+    reportHarassment: '骚扰',
+    reportInappropriate: '不当内容',
+    reportOther: '其他',
+    reportDescription: '详细描述（可选）',
+    reportDescriptionPlaceholder: '请详细描述您要举报的问题...',
+    submitReport: '提交举报',
+    reportSubmitted: '举报提交成功',
+
+    // Privacy Settings
+    privacySettings: '隐私设置',
+    allowNonFriendMessages: '允许非好友发消息',
+    allowNonFriendMessagesDescription: '关闭后，只有您的好友才能直接向您发送消息',
+    privacySettingsUpdated: '隐私设置已更新',
+
     // Conversation list
     noConversationsYet: '暂无会话',
     startNewConversation: '开始新会话',
     loadingConversations: '加载会话中...',
     refreshing: '刷新中...',
     requests: '请求',
-
-    // QR Code
-    myQRCode: '我的二维码',
-    scanQRCode: '扫一扫',
-    scanToAddFriend: '扫描此二维码添加我为好友',
-    cameraPermissionDenied: '需要摄像头权限才能扫描二维码',
-    invalidQRCode: '这不是有效的OrbitChat二维码',
-    userNotFound: '该用户不存在或已注销',
-    alreadyFriend: '该用户已经是您的好友',
-    crossRegionNotAllowed: '无法添加不同区域的用户',
-    networkError: '网络错误，请稍后重试',
-    cameraError: '无法访问摄像头',
-    scanningQRCode: '正在扫描二维码...',
-    retry: '重试',
-    loading: '加载中...',
 
     // Delete contact
     deleteContact: '删除联系人',

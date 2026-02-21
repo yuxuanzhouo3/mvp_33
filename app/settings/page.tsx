@@ -117,7 +117,15 @@ export default function SettingsPage() {
           <CardTitle>Account Security & Management</CardTitle>
           <CardDescription>Manage your devices and security settings</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-2">
+          <Button
+            onClick={() => router.push('/settings/preferences')}
+            variant="outline"
+            className="w-full justify-between"
+          >
+            <span>Preferences & Privacy</span>
+            <ArrowRight className="h-4 w-4" />
+          </Button>
           <Button
             onClick={() => router.push('/settings/devices')}
             variant="outline"

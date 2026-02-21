@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Languages, Sun, Moon, Code, Sparkles, Sunset, Star } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
+import { PrivacySettings } from '@/components/settings/privacy-settings'
+import { BlockedUsersList } from '@/components/settings/blocked-users-list'
 
 export default function PreferencesPage() {
   const { language, theme, setLanguage, setTheme, t } = useSettings()
@@ -15,6 +17,34 @@ export default function PreferencesPage() {
         <h1 className="text-3xl font-bold mb-2">{t('preferences')}</h1>
         <p className="text-muted-foreground">{t('customizeAppLanguage')}</p>
       </div>
+
+      {/* Privacy Settings Card - Slack Mode */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>{language === 'zh' ? '隐私设置' : 'Privacy Settings'}</CardTitle>
+          <CardDescription>
+            {language === 'zh' ? '管理您的隐私偏好' : 'Manage your privacy preferences'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PrivacySettings />
+        </CardContent>
+      </Card>
+
+      {/* Blocked Users Card */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>{language === 'zh' ? '已屏蔽用户' : 'Blocked Users'}</CardTitle>
+          <CardDescription>
+            {language === 'zh'
+              ? '管理您已屏蔽的用户，解除屏蔽后可恢复正常聊天'
+              : 'Manage blocked users. Unblock to resume normal communication.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <BlockedUsersList />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

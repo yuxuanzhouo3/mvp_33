@@ -5,6 +5,8 @@ import { getDatabaseClientForUser } from '@/lib/database-router'
 /**
  * Search users by username or email
  * GET /api/users/search?q=search_query
+ *
+ * SLACK MODE: 只返回同 Workspace 的成员
  */
 export async function GET(request: NextRequest) {
   try {
@@ -27,7 +29,97 @@ export async function GET(request: NextRequest) {
       const db = dbClient.cloudbase
 
       try {
-        // CloudBase 正确的模糊匹配语法：使用 db.RegExp，而不是 command.regex
+        // SLACK MODE: 获取当前用户的 Workspace 成员关系
+        // 使用默认 workspace（techcorp）
+        const DEFAULT_WORKSPACE_ID = 'techcorp'
+
+        // 获取当前用户 ID（从认证信息中获取）
+        const authHeader = request.headers.get('x-user-id')
+        const currentUserId = authHeader
+
+        if (currentUserId) {
+          // 检查当前用户是否在默认 workspace 中
+          const currentMemberResult = await db
+            .collection('workspace_members')
+            .where({ user_id: currentUserId, workspace_id: DEFAULT_WORKSPACE_ID })
+            .limit(1)
+            .get()
+
+          if (!currentMemberResult.data || currentMemberResult.data.length === 0) {
+            console.log('[CN Search] Current user not in default workspace, returning empty results')
+            return NextResponse.json({
+              success: true,
+              users: [],
+            })
+          }
+
+          // 获取同一 workspace 的所有成员 ID
+          const workspaceMembersResult = await db
+            .collection('workspace_members')
+            .where({ workspace_id: DEFAULT_WORKSPACE_ID })
+            .get()
+
+          const workspaceMemberIds = new Set(
+            workspaceMembersResult.data?.map((m: any) => m.user_id) || []
+          )
+
+          console.log('[CN Search] Workspace members count:', workspaceMemberIds.size)
+
+          // CloudBase 正确的模糊匹配语法：使用 db.RegExp，而不是 command.regex
+          const cmd = db.command
+          const reg = db.RegExp({
+            regexp: query,
+            options: 'i',
+          })
+
+          const result = await db
+            .collection('users')
+            .where(
+              cmd.and([
+                // 只查国内用户
+                { region: 'cn' },
+                cmd.or([
+                  { email: reg },
+                  { username: reg },
+                  { full_name: reg },
+                  { name: reg },
+                ]),
+              ])
+            )
+            .limit(50) // 获取更多结果，然后过滤
+            .get()
+
+          const rawUsers = result?.data || []
+
+          // 过滤：只返回同一 workspace 的成员
+          const users = rawUsers
+            .filter((user: any) => {
+              const userId = user.id || user._id
+              return workspaceMemberIds.has(userId) && userId !== currentUserId
+            })
+            .slice(0, 20) // 限制返回数量
+            .map((user: any) => ({
+              // 这里优先返回 CloudBase 里保存的 Supabase Auth ID（id 字段），保证和 CloudBase 好友系统兼容
+              id: user.id || user._id,
+              email: user.email,
+              username: user.username || user.email?.split('@')[0] || '',
+              full_name: user.full_name || user.name || '',
+              avatar_url: user.avatar_url || null,
+              department: user.department || undefined,
+              title: user.title || undefined,
+              status: user.status || 'offline',
+              region: user.region || 'cn',
+            }))
+
+          console.log('[CN Search] Filtered users count:', users.length)
+
+          return NextResponse.json({
+            success: true,
+            users,
+          })
+        }
+
+        // 如果没有当前用户信息，执行原有逻辑（向后兼容）
         const cmd = db.command
         const reg = db.RegExp({
           regexp: query,
@@ -54,7 +146,6 @@ export async function GET(request: NextRequest) {
         const rawUsers = result?.data || []
 
         const users = rawUsers.map((user: any) => ({
-          // 这里优先返回 CloudBase 里保存的 Supabase Auth ID（id 字段），保证和 CloudBase 好友系统兼容
           id: user.id || user._id,
           email: user.email,
           username: user.username || user.email?.split('@')[0] || '',
@@ -94,6 +185,35 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // SLACK MODE: 获取当前用户的 Workspace 列表
+    const { data: userWorkspaces } = await supabase
+      .from('workspace_members')
+      .select('workspace_id')
+      .eq('user_id', currentUser.id)
+
+    if (!userWorkspaces || userWorkspaces.length === 0) {
+      console.log('[INTL Search] User has no workspace, returning empty results')
+      return NextResponse.json({
+        success: true,
+        users: [],
+      })
+    }
+
+    const workspaceIds = userWorkspaces.map((w) => w.workspace_id)
+    console.log('[INTL Search] User workspaces:', workspaceIds)
+
+    // 获取同一 workspace 的所有成员 ID
+    const { data: workspaceMembers } = await supabase
+      .from('workspace_members')
+      .select('user_id')
+      .in('workspace_id', workspaceIds)
+
+    const workspaceMemberIds = new Set(
+      (workspaceMembers || []).map((m) => m.user_id).filter((id) => id !== currentUser.id)
+    )
+
+    console.log('[INTL Search] Workspace members count:', workspaceMemberIds.size)
+
     // CRITICAL: Supabase users should only search for global region users
     // Force region to 'global' to ensure isolation from CloudBase users
     const searchRegion = 'global'
@@ -109,7 +229,7 @@ export async function GET(request: NextRequest) {
       .or(`username.ilike.${searchPattern},email.ilike.${searchPattern},full_name.ilike.${searchPattern}`)
       .neq('id', currentUser.id)
       .eq('region', searchRegion) // Force to 'global' only
-      .limit(20)
+      .limit(50) // 获取更多结果，然后过滤
 
     if (orError) {
       console.error('Search users .or() error (supabase):', orError)
@@ -120,21 +240,21 @@ export async function GET(request: NextRequest) {
           .ilike('username', searchPattern)
           .neq('id', currentUser.id)
           .eq('region', searchRegion) // Force to 'global' only
-          .limit(20),
+          .limit(50),
         supabase
           .from('users')
           .select('id, email, username, full_name, avatar_url, department, title, status, region')
           .ilike('email', searchPattern)
           .neq('id', currentUser.id)
           .eq('region', searchRegion) // Force to 'global' only
-          .limit(20),
+          .limit(50),
         supabase
           .from('users')
           .select('id, email, username, full_name, avatar_url, department, title, status, region')
           .ilike('full_name', searchPattern)
           .neq('id', currentUser.id)
           .eq('region', searchRegion) // Force to 'global' only
-          .limit(20),
+          .limit(50),
       ])
 
       const allResults = [
@@ -147,7 +267,7 @@ export async function GET(request: NextRequest) {
         new Map(allResults.map(user => [user.id, user])).values()
       )
 
-      users = uniqueUsers.slice(0, 20)
+      users = uniqueUsers
       error = usernameResult.error || emailResult.error || fullNameResult.error
     } else {
       users = orUsers || []
@@ -163,20 +283,24 @@ export async function GET(request: NextRequest) {
     }
 
     // Double-check: filter to ensure only global region users (extra safety)
-    const regionFilteredUsers = (users || []).filter(user => {
+    // AND filter to ensure only same workspace members
+    const regionAndWorkspaceFilteredUsers = (users || []).filter(user => {
       const region = (user as any)?.region || 'global'
-      return region === searchRegion // Only 'global' region
-    })
-    
+      const isCorrectRegion = region === searchRegion
+      const isSameWorkspace = workspaceMemberIds.has(user.id)
+      return isCorrectRegion && isSameWorkspace
+    }).slice(0, 20) // 限制返回数量
+
     console.log('🔍 Supabase search results:', {
       totalFound: users.length,
-      afterRegionFilter: regionFilteredUsers.length,
+      afterRegionFilter: (users || []).filter(u => (u as any)?.region === searchRegion).length,
+      afterWorkspaceFilter: regionAndWorkspaceFilteredUsers.length,
       searchRegion: searchRegion
     })
 
     return NextResponse.json({
       success: true,
-      users: regionFilteredUsers,
+      users: regionAndWorkspaceFilteredUsers,
     })
 
     // 下面的 CloudBase 专用搜索逻辑暂时不再使用，避免返回 CloudBase 自己的 _id 导致联系人系统 ID 不一致。

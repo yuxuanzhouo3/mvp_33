@@ -408,6 +408,75 @@ export async function POST(request: NextRequest) {
     // - Global users (Supabase) → keep existing Supabase conversations/workspaces logic.
     // - China users (CloudBase) → create conversations in CloudBase collections (no Supabase workspaces).
     if (dbClient.type === 'cloudbase' && userRegion === 'cn') {
+      // ============================================================
+      // SLACK MODE (CN): 权限检查
+      // 聊天核心逻辑从"强好友关系"转变为"基于 Workspace 的开放社交"
+      // ============================================================
+
+      // 对于私聊，进行权限检查
+      if (type === 'direct' && member_ids.length === 1) {
+        const otherUserId = member_ids[0]
+        const { getUserService, getChatService } = await import('@/lib/services')
+        const userService = getUserService()
+        const chatService = getChatService()
+
+        // 1. 检查拉黑关系（双向）
+        console.log('[CN] Checking block relation:', {
+          currentUserId: currentUser.id,
+          otherUserId: otherUserId,
+        })
+        const isBlocked = await userService.checkBlockRelation(currentUser.id, otherUserId)
+        console.log('[CN] Block relation result:', isBlocked)
+        if (isBlocked) {
+          console.log('[CN] Blocked! Cannot send message')
+          return NextResponse.json(
+            { error: 'Cannot send message due to block relationship', code: 'BLOCKED' },
+            { status: 403 }
+          )
+        }
+
+        // 2. 检查隐私设置（仅当 skip_contact_check 为 false 时）
+        if (!skip_contact_check) {
+          const privacySettings = await userService.getPrivacySettings(otherUserId)
+
+          // 如果目标用户不允许非好友发消息，检查是否为好友
+          if (!privacySettings.allow_non_friend_messages) {
+            const isFriend = await userService.checkFriendRelation(currentUser.id, otherUserId)
+            if (!isFriend) {
+              return NextResponse.json(
+                { error: 'User only accepts messages from friends', code: 'PRIVACY_RESTRICTED' },
+                { status: 403 }
+              )
+            }
+          }
+        }
+
+        // 3. 检查 Workspace 成员关系
+        // 获取默认 workspace（techcorp）
+        const DEFAULT_WORKSPACE_ID = 'techcorp'
+        const senderInWorkspace = await chatService.checkWorkspaceMembership(currentUser.id, DEFAULT_WORKSPACE_ID)
+        const targetInWorkspace = await chatService.checkWorkspaceMembership(otherUserId, DEFAULT_WORKSPACE_ID)
+
+        if (!senderInWorkspace || !targetInWorkspace) {
+          console.log('[CN] Workspace membership check failed:', {
+            senderId: currentUser.id,
+            targetId: otherUserId,
+            senderInWorkspace,
+            targetInWorkspace,
+          })
+          return NextResponse.json(
+            { error: 'Both users must be members of the same workspace', code: 'WORKSPACE_MISMATCH' },
+            { status: 403 }
+          )
+        }
+
+        console.log('[CN] Slack mode check passed:', {
+          currentUserId: currentUser.id,
+          targetUserId: otherUserId,
+          skipContactCheck: skip_contact_check,
+        })
+      }
+
       const allMemberIds = Array.from(new Set([currentUser.id, ...member_ids]))
       const conv = await createConversationCN({
         type,
@@ -424,47 +493,136 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // ============================================================
+    // SLACK MODE: 权限检查
+    // 聊天核心逻辑从"强好友关系"转变为"基于 Workspace 的开放社交"
+    // ============================================================
+
+    // 对于私聊，进行拉黑检查和隐私设置检查
+    if (type === 'direct' && member_ids.length === 1) {
+      const otherUserId = member_ids[0]
+      const { getUserService, getChatService } = await import('@/lib/services')
+      const userService = getUserService()
+      const chatService = getChatService()
+
+      // 1. 检查拉黑关系（双向）
+      console.log('[INTL] Checking block relation:', {
+        currentUserId: currentUser.id,
+        otherUserId: otherUserId,
+      })
+      const isBlocked = await userService.checkBlockRelation(currentUser.id, otherUserId)
+      console.log('[INTL] Block relation result:', isBlocked)
+      if (isBlocked) {
+        console.log('[INTL] Blocked! Cannot send message')
+        return NextResponse.json(
+          { error: 'Cannot send message due to block relationship', code: 'BLOCKED' },
+          { status: 403 }
+        )
+      }
+
+      // 2. 检查隐私设置（仅当 skip_contact_check 为 false 时）
+      if (!skip_contact_check) {
+        const privacySettings = await userService.getPrivacySettings(otherUserId)
+
+        // 如果目标用户不允许非好友发消息，检查是否为好友
+        if (!privacySettings.allow_non_friend_messages) {
+          const isFriend = await userService.checkFriendRelation(currentUser.id, otherUserId)
+          if (!isFriend) {
+            return NextResponse.json(
+              { error: 'User only accepts messages from friends', code: 'PRIVACY_RESTRICTED' },
+              { status: 403 }
+            )
+          }
+        }
+      }
+
+      // 3. 检查 Workspace 成员关系
+      // 获取发送者和接收者的 Workspace 列表，检查是否有交集
+      const senderWorkspaces = await chatService.getUserWorkspaces(currentUser.id)
+      const targetWorkspaces = await chatService.getUserWorkspaces(otherUserId)
+
+      console.log('[INTL] Workspace check:', {
+        senderId: currentUser.id,
+        targetId: otherUserId,
+        senderWorkspaces,
+        targetWorkspaces,
+      })
+
+      // 找到共同的 Workspace
+      const commonWorkspaces = senderWorkspaces.filter((ws: string) => targetWorkspaces.includes(ws))
+
+      if (commonWorkspaces.length === 0) {
+        console.log('[INTL] Workspace membership check failed - no common workspace:', {
+          senderId: currentUser.id,
+          targetId: otherUserId,
+          senderWorkspaces,
+          targetWorkspaces,
+        })
+
+        // 如果目标用户没有 workspace，尝试将其添加到发送者的 workspace
+        if (targetWorkspaces.length === 0 && senderWorkspaces.length > 0) {
+          console.log('[INTL] Target user has no workspace, adding to sender workspace:', senderWorkspaces[0])
+          const supabase = await createClient()
+          const { error: addError } = await supabase
+            .from('workspace_members')
+            .insert({
+              workspace_id: senderWorkspaces[0],
+              user_id: otherUserId,
+              role: 'member',
+            })
+
+          if (addError) {
+            console.error('[INTL] Failed to add target user to workspace:', addError)
+          } else {
+            console.log('[INTL] Successfully added target user to workspace')
+            // 重新获取 workspace 列表
+            const updatedTargetWorkspaces = await chatService.getUserWorkspaces(otherUserId)
+            const updatedCommonWorkspaces = senderWorkspaces.filter((ws: string) => updatedTargetWorkspaces.includes(ws))
+            if (updatedCommonWorkspaces.length > 0) {
+              console.log('[INTL] Now have common workspace after adding:', updatedCommonWorkspaces)
+            } else {
+              return NextResponse.json(
+                { error: 'Both users must be members of the same workspace', code: 'WORKSPACE_MISMATCH' },
+                { status: 403 }
+              )
+            }
+          }
+        } else {
+          return NextResponse.json(
+            { error: 'Both users must be members of the same workspace', code: 'WORKSPACE_MISMATCH' },
+            { status: 403 }
+          )
+        }
+      }
+
+      console.log('[POST /api/conversations] Slack mode check passed:', {
+        currentUserId: currentUser.id,
+        targetUserId: otherUserId,
+        skipContactCheck: skip_contact_check,
+        commonWorkspaces,
+      })
+    }
+
     // OPTIMIZED: Get workspace (skip contact check if requested, e.g., from contacts page)
     let workspaces: any[] | null = null
 
     if (type === 'direct' && member_ids.length === 1 && !skip_contact_check) {
       // Only check contacts if not skipped (e.g., when called from other places)
+      // NOTE: In Slack mode, we still allow messaging even if not in contacts
+      // The Slack mode check above already handled the permission logic
       const otherUserId = member_ids[0]
-      
-      // OPTIMIZED: Check contacts and workspace in parallel
-      const [contactResults, workspaceResult] = await Promise.all([
-        Promise.all([
-          supabase
-            .from('contacts')
-            .select('id')
-            .eq('user_id', currentUser.id)
-            .eq('contact_user_id', otherUserId)
-            .eq('is_blocked', false)
-            .maybeSingle(),
-          supabase
-            .from('contacts')
-            .select('id')
-            .eq('user_id', otherUserId)
-            .eq('contact_user_id', currentUser.id)
-            .eq('is_blocked', false)
-            .maybeSingle()
-        ]),
-        supabase
-          .from('workspace_members')
-          .select('workspace_id')
-          .eq('user_id', currentUser.id)
-          .limit(1)
-      ])
 
-      const [{ data: contact }, { data: reverseContact }] = contactResults
+      // OPTIMIZED: Check workspace in parallel
+      const workspaceResult = await supabase
+        .from('workspace_members')
+        .select('workspace_id')
+        .eq('user_id', currentUser.id)
+        .limit(1)
+
       workspaces = workspaceResult.data
 
-      if (!contact && !reverseContact) {
-        return NextResponse.json(
-          { error: 'You can only message users who are in your contacts. Please add them as a contact first.' },
-          { status: 403 }
-        )
-      }
+      // NOTE: Removed contact check - Slack mode allows non-contacts to message
+      // Old code that enforced contact relationship has been removed
     } else {
       // Skip contact check (from contacts page) or not a direct message
       const workspaceStartTime = Date.now()

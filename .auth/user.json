@@ -1,0 +1,33 @@
+{
+  "cookies": [
+    {
+      "name": "cb_session",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjZjdiOGU3Mi00ZGVhLTQ4NWYtODI0My0wMGVmMjlhNzg4ZTYiLCJyZWdpb24iOiJjbiIsImVtYWlsIjoiMzEzOTMwNzYxNEBxcS5jb20iLCJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJfaWQiOiIzMTM5MzA3NjE0QHFxLmNvbSIsImlhdCI6MTc3MTY0NzUzOCwiZXhwIjoxNzcyMjUyMzM4fQ.Z470sybYZNLVmfkFbxe0q_QDV1A2wAahn0NBHvpaSA0",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1772252338.811362,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "http://localhost:3000",
+      "localStorage": [
+        {
+          "name": "chat_app_current_workspace",
+          "value": "{\"id\":\"7746c6e86994694300e707d4734fa1ad\",\"_id\":\"7746c6e86994694300e707d4734fa1ad\",\"name\":\"默认工作区\",\"domain\":\"default\",\"description\":\"系统默认工作区\",\"logo_url\":null,\"created_at\":\"2026-02-17T00:00:00.000Z\",\"updated_at\":\"2026-02-17T00:00:00.000Z\"}"
+        },
+        {
+          "name": "chat_app_current_user",
+          "value": "{\"id\":\"cf7b8e72-4dea-485f-8243-00ef29a788e6\",\"email\":\"3139307614@qq.com\",\"username\":\"3139307614\",\"full_name\":\"hui\",\"avatar_url\":null,\"auth_email\":null,\"provider\":\"email\",\"provider_id\":\"3139307614@qq.com\",\"wechat_openid\":null,\"wechat_unionid\":null,\"status\":\"online\",\"region\":\"cn\",\"country\":\"CN\",\"subscription_type\":null,\"subscription_expires_at\":null,\"created_at\":\"2026-02-18T05:00:07.615Z\",\"updated_at\":\"2026-02-18T05:00:07.615Z\",\"password_hash\":\"$2b$10$BPlHG.0YrlbKJZyy4LTTjeBtVTtf9jz988R2U32y1WDRkL0bMWBVC\"}"
+        },
+        {
+          "name": "chat_app_token",
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjZjdiOGU3Mi00ZGVhLTQ4NWYtODI0My0wMGVmMjlhNzg4ZTYiLCJyZWdpb24iOiJjbiIsImVtYWlsIjoiMzEzOTMwNzYxNEBxcS5jb20iLCJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJfaWQiOiIzMTM5MzA3NjE0QHFxLmNvbSIsImlhdCI6MTc3MTY0NzUzOCwiZXhwIjoxNzcyMjUyMzM4fQ.Z470sybYZNLVmfkFbxe0q_QDV1A2wAahn0NBHvpaSA0"
+        }
+      ]
+    }
+  ]
+}
