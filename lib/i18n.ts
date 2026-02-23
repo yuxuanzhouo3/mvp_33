@@ -268,6 +268,14 @@ export const translations = {
     allowNonFriendMessages: 'Allow Non-Friend Messages',
     allowNonFriendMessagesDescription: 'When disabled, only your friends can send you direct messages',
     privacySettingsUpdated: 'Privacy settings updated',
+
+    // Global Announcement & Blind Zone
+    globalAnnouncement: 'Global Announcement',
+    blindZone: 'Blind Zone',
+    blindZoneDesc: 'Anonymous chat',
+    officialChannels: 'Official Channels',
+    typeAnonymousMessage: 'Speak anonymously...',
+    live: 'Live',
   },
   zh: {
     // Navigation
@@ -502,6 +510,14 @@ export const translations = {
     allowNonFriendMessages: '允许非好友发消息',
     allowNonFriendMessagesDescription: '关闭后，只有您的好友才能直接向您发送消息',
     privacySettingsUpdated: '隐私设置已更新',
+
+    // Global Announcement & Blind Zone
+    globalAnnouncement: '全员公告',
+    blindZone: '盲区动态',
+    blindZoneDesc: '极速交流/高活',
+    officialChannels: '官方频道',
+    typeAnonymousMessage: '匿名发言，快速点击...',
+    live: '实时',
 
     // Conversation list
     noConversationsYet: '暂无会话',

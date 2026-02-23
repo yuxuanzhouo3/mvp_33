@@ -12,6 +12,7 @@ export interface Workspace {
   domain: string
   description?: string
   logo_url?: string
+  invite_code?: string
   created_at?: string
   updated_at?: string
 }
@@ -23,6 +24,7 @@ const normalizeCloudBaseWorkspace = (workspaceData: any): Workspace => ({
   domain: workspaceData.domain,
   description: workspaceData.description || '',
   logo_url: workspaceData.logo_url || null,
+  invite_code: workspaceData.invite_code || null,
   created_at: workspaceData.created_at || new Date().toISOString(),
   updated_at: workspaceData.updated_at || new Date().toISOString(),
 })
@@ -87,6 +89,8 @@ export async function createWorkspace(
     domain: string
     description?: string
     logo_url?: string
+    owner_id?: string
+    invite_code?: string
   }
 ): Promise<Workspace> {
   try {
@@ -101,6 +105,8 @@ export async function createWorkspace(
       domain: workspaceData.domain,
       description: workspaceData.description || '',
       logo_url: workspaceData.logo_url || null,
+      owner_id: workspaceData.owner_id || null,
+      invite_code: workspaceData.invite_code || null,
       created_at: now,
       updated_at: now,
     }
@@ -119,5 +125,33 @@ export async function createWorkspace(
   } catch (error: any) {
     console.error('CloudBase createWorkspace error:', error)
     throw error
+  }
+}
+
+/**
+ * Get workspace by invite code from CloudBase
+ */
+export async function getWorkspaceByInviteCode(inviteCode: string): Promise<Workspace | null> {
+  try {
+    const db = getCloudBaseDb()
+    if (!db) {
+      return null
+    }
+
+    const result = await db.collection('workspaces')
+      .where({
+        invite_code: inviteCode.toUpperCase()
+      })
+      .limit(1)
+      .get()
+
+    if (result.data && result.data.length > 0) {
+      return normalizeCloudBaseWorkspace(result.data[0])
+    }
+
+    return null
+  } catch (error) {
+    console.error('CloudBase getWorkspaceByInviteCode error:', error)
+    return null
   }
 }

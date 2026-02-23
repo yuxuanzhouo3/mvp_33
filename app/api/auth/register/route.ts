@@ -250,6 +250,35 @@ export async function POST(request: NextRequest) {
       token = session.access_token
     }
 
+    // 新用户自动加入 TechCorp 总组 (Supabase/国际版)
+    console.log('[REGISTER] Adding user to TechCorp workspace (Supabase)...')
+    try {
+      // 先查询 TechCorp 工作区是否存在
+      const { data: workspaces } = await supabase
+        .from('workspaces')
+        .select('id')
+        .eq('domain', 'techcorp')
+        .limit(1)
+
+      if (workspaces && workspaces.length > 0) {
+        const workspaceId = workspaces[0].id
+        // 添加用户到工作区
+        await supabase
+          .from('workspace_members')
+          .upsert({
+            workspace_id: workspaceId,
+            user_id: user.id,
+            role: 'member',
+          }, { onConflict: 'workspace_id,user_id' })
+        console.log('[REGISTER] ✓ User added to TechCorp workspace')
+      } else {
+        console.log('[REGISTER] TechCorp workspace not found, skipping workspace join')
+      }
+    } catch (workspaceError) {
+      console.error('[REGISTER] Failed to add user to workspace:', workspaceError)
+      // 不阻塞注册流程
+    }
+
     return NextResponse.json({
       success: true,
       user,
@@ -367,6 +396,22 @@ async function handleCloudBaseRegister(
     console.log('[REGISTER] CloudBase write result:', result)
 
     console.log('[REGISTER] ✓ CloudBase user created:', userId)
+
+    // 新用户自动加入 TechCorp 总组
+    console.log('[REGISTER] Adding user to TechCorp workspace...')
+    try {
+      const workspaceId = '7746c6e86994694300e707d4734fa1ad' // TechCorp 总组 ID
+      await db.collection('workspace_members').add({
+        workspace_id: workspaceId,
+        user_id: userId,
+        role: 'member',
+        joined_at: new Date().toISOString(),
+      })
+      console.log('[REGISTER] ✓ User added to TechCorp workspace')
+    } catch (workspaceError) {
+      console.error('[REGISTER] Failed to add user to workspace:', workspaceError)
+      // 不阻塞注册流程，只是记录错误
+    }
 
     // Create user object for response (without password_hash)
     console.log('[REGISTER] Creating user object for response...')

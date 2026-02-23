@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { ConversationWithDetails, User } from '@/lib/types'
-import { Hash, Lock, Users, Search, Plus, MessageSquare, ChevronUp, ChevronDown, ChevronRight, ChevronLeft, Pin, PinOff, EyeOff, Trash2, Loader2 } from 'lucide-react'
+import { Hash, Lock, Users, Search, Plus, MessageSquare, ChevronUp, ChevronDown, ChevronRight, ChevronLeft, Pin, PinOff, EyeOff, Trash2, Loader2, Bell } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
@@ -241,6 +241,9 @@ interface SidebarProps {
   onDeleteConversation?: (id: string) => void
   contacts?: User[]
   workspaceId?: string
+  activeChannel?: 'none' | 'announcement' | 'blind'
+  onSelectAnnouncement?: () => void
+  onSelectBlindZone?: () => void
 }
 
 export function Sidebar({
@@ -261,7 +264,10 @@ export function Sidebar({
   onHideConversation,
   onDeleteConversation,
   contacts = [],
-  workspaceId = ''
+  workspaceId = '',
+  activeChannel = 'none',
+  onSelectAnnouncement,
+  onSelectBlindZone
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false)
@@ -542,6 +548,37 @@ export function Sidebar({
             className="pl-9"
           />
         </div>
+
+        {/* Official Channels - Global Announcement & Blind Zone */}
+        {(onSelectAnnouncement || onSelectBlindZone) && (
+          <div className="px-2 py-3 space-y-1 border-b">
+            <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+              {t('officialChannels')}
+            </div>
+            <Button
+              variant="ghost"
+              className={cn(
+                "w-full justify-start rounded-lg text-sm",
+                activeChannel === 'announcement' && "bg-primary text-primary-foreground"
+              )}
+              onClick={onSelectAnnouncement}
+            >
+              <Bell className="mr-2 h-4 w-4" />
+              {t('globalAnnouncement')}
+            </Button>
+            <Button
+              variant="ghost"
+              className={cn(
+                "w-full justify-start rounded-lg text-sm",
+                activeChannel === 'blind' && "bg-primary text-primary-foreground"
+              )}
+              onClick={onSelectBlindZone}
+            >
+              <EyeOff className="mr-2 h-4 w-4" />
+              {t('blindZone')}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Refresh indicator (small loading bar at top) - Hidden for silent refresh */}

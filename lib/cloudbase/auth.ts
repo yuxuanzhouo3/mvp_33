@@ -170,3 +170,10 @@ export async function verifyCloudBaseSession(request: NextRequest): Promise<User
   return auth?.user || null
 }
 
+/**
+ * Get current user from CloudBase session (for API routes)
+ */
+export async function getCloudBaseUser(request: NextRequest): Promise<User | null> {
+  return await verifyCloudBaseSession(request)
+}
+

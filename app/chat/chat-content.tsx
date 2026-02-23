@@ -26,6 +26,10 @@ import { FilesView } from '@/components/chat/files-view'
 
 import { GroupInfoPanel } from '@/components/chat/group-info-panel'
 
+import { BlindZoneChat } from '@/components/chat/blind-zone-chat'
+
+import { GlobalAnnouncement } from '@/components/chat/global-announcement'
+
 import { MessageInput } from '@/components/chat/message-input'
 
 import { NewConversationDialog } from '@/components/contacts/new-conversation-dialog'
@@ -84,6 +88,7 @@ function ChatPageContent() {
   const [groupInfoOpen, setGroupInfoOpen] = useState(false) // Group info panel state
   const [announcementDrawerOpen, setAnnouncementDrawerOpen] = useState(false) // Announcement drawer state
   const [activeTab, setActiveTab] = useState('messages') // Chat tabs state
+  const [activeChannel, setActiveChannel] = useState<'none' | 'announcement' | 'blind'>('none') // Global announcement & blind zone state
   const isMobile = useIsMobile()
 
   const [showLimitAlert, setShowLimitAlert] = useState<string | null>(null)
@@ -7837,6 +7842,13 @@ function ChatPageContent() {
 
             contacts={availableUsers}
             workspaceId={currentWorkspace?.id || ''}
+            activeChannel={activeChannel}
+            onSelectAnnouncement={() => {
+              setActiveChannel(activeChannel === 'announcement' ? 'none' : 'announcement')
+            }}
+            onSelectBlindZone={() => {
+              setActiveChannel(activeChannel === 'blind' ? 'none' : 'blind')
+            }}
 
           />
 
@@ -7963,6 +7975,21 @@ function ChatPageContent() {
               </div>
 
             </div>
+
+          ) : activeChannel !== 'none' ? (
+
+            // Global Announcement or Blind Zone channel
+            activeChannel === 'blind' ? (
+              <BlindZoneChat
+                isOpen={activeChannel === 'blind'}
+                onClose={() => setActiveChannel('none')}
+              />
+            ) : (
+              <GlobalAnnouncement
+                isOpen={activeChannel === 'announcement'}
+                onClose={() => setActiveChannel('none')}
+              />
+            )
 
           ) : (
 
