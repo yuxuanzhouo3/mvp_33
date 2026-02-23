@@ -301,8 +301,6 @@ export async function POST(request: NextRequest) {
 
     console.log('[POST /api/contact-requests] 当前用户:', currentUser.id)
 
-    const supabase = await createClient()
-
     // Decide which database this user actually uses
     const dbClient = await getDatabaseClientForUser(request)
     const currentRegion = dbClient.region === 'cn' ? 'cn' : 'global'

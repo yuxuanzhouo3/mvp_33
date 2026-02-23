@@ -47,8 +47,6 @@ export async function GET(request: NextRequest) {
       currentUser = supabaseUser
     }
 
-    const supabase = await createClient()
-
     // Decide which database this user actually uses
     const dbClient = await getDatabaseClientForUser(request)
     const currentRegion = dbClient.region === 'cn' ? 'cn' : 'global'
@@ -204,50 +202,44 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const { IS_DOMESTIC_VERSION } = await import('@/config')
+
+    let currentUser: any = null
+
+    if (IS_DOMESTIC_VERSION) {
+      // CN版本：只使用CloudBase认证
+      console.log('[POST /api/contacts] 使用CloudBase认证（CN版本）')
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+
+      if (!cloudBaseUser) {
+        console.error('[POST /api/contacts] CloudBase用户未认证')
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
+      console.log('[POST /api/contacts] CloudBase用户已认证:', cloudBaseUser.id)
+      currentUser = cloudBaseUser
+    } else {
+      // INTL版本：只使用Supabase认证
+      console.log('[POST /api/contacts] 使用Supabase认证（INTL版本）')
+      const supabase = await createClient()
+      const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
+
+      if (authError || !supabaseUser) {
+        console.error('[POST /api/contacts] Supabase用户未认证:', authError)
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
+      console.log('[POST /api/contacts] Supabase用户已认证:', supabaseUser.id)
+      currentUser = supabaseUser
+    }
+
     const body = await request.json()
     const { contact_user_id, nickname, tags, is_favorite } = body
 
     if (!contact_user_id) {
       return NextResponse.json(
         { error: 'contact_user_id is required' },
-        { status: 400 }
-      )
-    }
-
-    const supabase = await createClient()
-
-    // Get current user
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from('users')
-      .select('region')
-      .eq('id', currentUser.id)
-      .maybeSingle()
-
-    if (profileError) {
-      console.error('Failed to load current user region in contacts API (POST):', profileError)
-    }
-
-    const currentRegion = profile?.region === 'cn' ? 'cn' : 'global'
-
-    // Check if contact already exists
-    const { data: existingContact } = await supabase
-      .from('contacts')
-      .select('id')
-      .eq('user_id', currentUser.id)
-      .eq('contact_user_id', contact_user_id)
-      .single()
-
-    if (existingContact) {
-      return NextResponse.json(
-        { error: 'Contact already exists' },
         { status: 400 }
       )
     }
@@ -260,68 +252,166 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify contact user exists
-    const { data: contactUser } = await supabase
-      .from('users')
-      .select('id, region')
-      .eq('id', contact_user_id)
-      .single()
+    // Decide which database this user actually uses
+    const dbClient = await getDatabaseClientForUser(request)
+    const currentRegion = dbClient.region === 'cn' ? 'cn' : 'global'
 
-    if (!contactUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
-    }
+    // CN users → CloudBase contacts
+    if (dbClient.type === 'cloudbase' && currentRegion === 'cn' && dbClient.cloudbase) {
+      const db = dbClient.cloudbase
 
-    if ((contactUser.region || 'global') !== currentRegion) {
-      return NextResponse.json(
-        { error: 'Cross-region contacts are not allowed' },
-        { status: 400 }
-      )
-    }
+      // Check if contact already exists
+      const existingRes = await db
+        .collection('contacts')
+        .where({
+          user_id: currentUser.id,
+          contact_user_id: contact_user_id,
+        })
+        .get()
 
-    // Add contact
-    const { data: newContact, error: insertError } = await supabase
-      .from('contacts')
-      .insert({
+      if (existingRes.data && existingRes.data.length > 0) {
+        return NextResponse.json(
+          { error: 'Contact already exists' },
+          { status: 400 }
+        )
+      }
+
+      // Verify contact user exists in CloudBase
+      const userRes = await db
+        .collection('users')
+        .where({
+          _id: contact_user_id,
+        })
+        .get()
+
+      if (!userRes.data || userRes.data.length === 0) {
+        return NextResponse.json(
+          { error: 'User not found' },
+          { status: 404 }
+        )
+      }
+
+      // Add contact in CloudBase
+      const now = new Date().toISOString()
+      const contactData = {
         user_id: currentUser.id,
-        contact_user_id,
+        contact_user_id: contact_user_id,
         nickname: nickname || null,
         tags: tags || [],
         is_favorite: is_favorite || false,
         is_blocked: false,
+        region: 'cn',
+        added_at: now,
+        created_at: now,
+        updated_at: now,
+      }
+
+      const addRes = await db
+        .collection('contacts')
+        .add(contactData)
+
+      console.log('[POST /api/contacts] CloudBase添加联系人成功:', addRes.id)
+
+      const contactUser = userRes.data[0]
+      return NextResponse.json({
+        success: true,
+        contact: {
+          id: addRes.id,
+          ...contactData,
+          user: {
+            id: contactUser._id || contactUser.id,
+            email: contactUser.email,
+            username: contactUser.username,
+            full_name: contactUser.full_name,
+            avatar_url: contactUser.avatar_url,
+            department: contactUser.department,
+            title: contactUser.title,
+            status: contactUser.status,
+          },
+        },
       })
-      .select(`
-        *,
-        users!contacts_contact_user_id_fkey (
-          id,
-          email,
-          username,
-          full_name,
-          avatar_url,
-          department,
-          title,
-          status
+    } else {
+      // INTL users → Supabase contacts
+      const supabase = await createClient()
+
+      // Check if contact already exists
+      const { data: existingContact } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('user_id', currentUser.id)
+        .eq('contact_user_id', contact_user_id)
+        .single()
+
+      if (existingContact) {
+        return NextResponse.json(
+          { error: 'Contact already exists' },
+          { status: 400 }
         )
-      `)
-      .single()
+      }
 
-    if (insertError) {
-      console.error('Add contact error:', insertError)
-      return NextResponse.json(
-        { error: insertError.message || 'Failed to add contact' },
-        { status: 500 }
-      )
+      // Verify contact user exists
+      const { data: contactUser } = await supabase
+        .from('users')
+        .select('id, region')
+        .eq('id', contact_user_id)
+        .single()
+
+      if (!contactUser) {
+        return NextResponse.json(
+          { error: 'User not found' },
+          { status: 404 }
+        )
+      }
+
+      if ((contactUser.region || 'global') !== currentRegion) {
+        return NextResponse.json(
+          { error: 'Cross-region contacts are not allowed' },
+          { status: 400 }
+        )
+      }
+
+      // Add contact
+      const { data: newContact, error: insertError } = await supabase
+        .from('contacts')
+        .insert({
+          user_id: currentUser.id,
+          contact_user_id,
+          nickname: nickname || null,
+          tags: tags || [],
+          is_favorite: is_favorite || false,
+          is_blocked: false,
+        })
+        .select(`
+          *,
+          users!contacts_contact_user_id_fkey (
+            id,
+            email,
+            username,
+            full_name,
+            avatar_url,
+            department,
+            title,
+            status
+          )
+        `)
+        .single()
+
+      if (insertError) {
+        console.error('Add contact error:', insertError)
+        return NextResponse.json(
+          { error: insertError.message || 'Failed to add contact' },
+          { status: 500 }
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        contact: {
+          ...newContact,
+          user: (newContact as any).users,
+        },
+      })
     }
-
-    return NextResponse.json({
-      success: true,
-      contact: {
-        ...newContact,
-        user: (newContact as any).users,
-      },
-    })
   } catch (error: any) {
     console.error('Add contact error:', error)
     return NextResponse.json(
@@ -369,8 +459,6 @@ export async function DELETE(request: NextRequest) {
 
       currentUser = supabaseUser
     }
-
-    const supabase = await createClient()
 
     // Get contact_user_id from query params
     const { searchParams } = new URL(request.url)
@@ -722,14 +810,36 @@ export async function DELETE(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    const { IS_DOMESTIC_VERSION } = await import('@/config')
+
+    let currentUser: any = null
+
+    if (IS_DOMESTIC_VERSION) {
+      // CN版本：只使用CloudBase认证
+      console.log('[PATCH /api/contacts] 使用CloudBase认证（CN版本）')
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+
+      if (!cloudBaseUser) {
+        console.error('[PATCH /api/contacts] CloudBase用户未认证')
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
+      console.log('[PATCH /api/contacts] CloudBase用户已认证:', cloudBaseUser.id)
+      currentUser = cloudBaseUser
+    } else {
+      // INTL版本：只使用Supabase认证
+      console.log('[PATCH /api/contacts] 使用Supabase认证（INTL版本）')
+      const supabase = await createClient()
+      const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
+
+      if (authError || !supabaseUser) {
+        console.error('[PATCH /api/contacts] Supabase用户未认证:', authError)
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
+      console.log('[PATCH /api/contacts] Supabase用户已认证:', supabaseUser.id)
+      currentUser = supabaseUser
     }
 
     const { searchParams } = new URL(request.url)
@@ -751,50 +861,101 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    // Update contact
-    const { data: updatedContact, error: updateError } = await supabase
-      .from('contacts')
-      .update({ is_favorite })
-      .eq('user_id', currentUser.id)
-      .eq('contact_user_id', contactUserId)
-      .select(`
-        *,
-        users!contacts_contact_user_id_fkey (
-          id,
-          email,
-          username,
-          full_name,
-          avatar_url,
-          department,
-          title,
-          status,
-          status_message,
-          phone,
-          created_at,
-          updated_at
+    // Decide which database this user actually uses
+    const dbClient = await getDatabaseClientForUser(request)
+    const currentRegion = dbClient.region === 'cn' ? 'cn' : 'global'
+
+    // CN users → CloudBase contacts
+    if (dbClient.type === 'cloudbase' && currentRegion === 'cn' && dbClient.cloudbase) {
+      const db = dbClient.cloudbase
+
+      // Find and update contact in CloudBase
+      const res = await db
+        .collection('contacts')
+        .where({
+          user_id: currentUser.id,
+          contact_user_id: contactUserId,
+        })
+        .get()
+
+      if (!res.data || res.data.length === 0) {
+        return NextResponse.json(
+          { error: 'Contact not found' },
+          { status: 404 }
         )
-      `)
-      .single()
+      }
 
-    if (updateError) {
-      console.error('Update contact favorite error:', updateError)
-      return NextResponse.json(
-        { error: 'Failed to update contact favorite status' },
-        { status: 500 }
-      )
+      const contactDoc = res.data[0]
+      const docId = contactDoc._id
+
+      // Update contact
+      await db
+        .collection('contacts')
+        .doc(docId)
+        .update({
+          is_favorite: is_favorite,
+          updated_at: new Date().toISOString(),
+        })
+
+      console.log('[PATCH /api/contacts] CloudBase更新联系人成功:', docId)
+
+      return NextResponse.json({
+        success: true,
+        contact: {
+          id: docId,
+          ...contactDoc,
+          is_favorite,
+        },
+      })
+    } else {
+      // INTL users → Supabase contacts
+      const supabase = await createClient()
+
+      // Update contact
+      const { data: updatedContact, error: updateError } = await supabase
+        .from('contacts')
+        .update({ is_favorite })
+        .eq('user_id', currentUser.id)
+        .eq('contact_user_id', contactUserId)
+        .select(`
+          *,
+          users!contacts_contact_user_id_fkey (
+            id,
+            email,
+            username,
+            full_name,
+            avatar_url,
+            department,
+            title,
+            status,
+            status_message,
+            phone,
+            created_at,
+            updated_at
+          )
+        `)
+        .single()
+
+      if (updateError) {
+        console.error('Update contact favorite error:', updateError)
+        return NextResponse.json(
+          { error: 'Failed to update contact favorite status' },
+          { status: 500 }
+        )
+      }
+
+      if (!updatedContact) {
+        return NextResponse.json(
+          { error: 'Contact not found' },
+          { status: 404 }
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        contact: updatedContact,
+      })
     }
-
-    if (!updatedContact) {
-      return NextResponse.json(
-        { error: 'Contact not found' },
-        { status: 404 }
-      )
-    }
-
-    return NextResponse.json({
-      success: true,
-      contact: updatedContact,
-    })
   } catch (error: any) {
     console.error('Update contact favorite error:', error)
     return NextResponse.json(

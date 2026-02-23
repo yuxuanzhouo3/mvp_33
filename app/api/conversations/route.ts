@@ -398,8 +398,6 @@ export async function POST(request: NextRequest) {
       currentUser = supabaseUser
     }
 
-    const supabase = await createClient()
-
     // Determine which data store this user actually belongs to
     const dbClient = await getDatabaseClientForUser(request)
     const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'

@@ -64,10 +64,8 @@ export async function PATCH(
       currentUser = supabaseUser
     }
 
-    const supabase = await createClient()
-
     // Decide which database this user actually uses
-    const dbClient = await getDatabaseClientForUser(request)
+    const dbClient = await getDatabaseClientForUser()
     const currentRegion = dbClient.region === 'cn' ? 'cn' : 'global'
     console.log('[ContactRequests PATCH] Current user:', currentUser.id, 'Region:', currentRegion, 'DB type:', dbClient.type)
 
@@ -321,7 +319,8 @@ export async function PATCH(
     }
 
     // Global / Supabase users → keep existing Supabase logic
-      const { data: recipientProfile, error: recipientProfileError } = await supabase
+    const supabase = await createClient()
+    const { data: recipientProfile, error: recipientProfileError } = await supabase
       .from('users')
       .select('region')
       .eq('id', currentUser.id)
@@ -334,7 +333,7 @@ export async function PATCH(
     const currentRegionSupabase = recipientProfile?.region === 'cn' ? 'cn' : 'global'
 
     // Get the request
-      const { data: requestData, error: fetchError } = await supabase
+    const { data: requestData, error: fetchError } = await supabase
       .from('contact_requests')
       .select('*')
       .eq('id', requestId)
