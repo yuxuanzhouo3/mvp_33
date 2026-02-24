@@ -188,11 +188,14 @@ export async function POST(request: NextRequest) {
             .get()
           
           if (!contactRes?.data || contactRes.data.length === 0) {
-            console.warn(`❌ User ${user.id} tried to send message to deleted contact ${otherUserId} in conversation ${conversationId}`)
-            return NextResponse.json(
-              { error: 'Cannot send message: Contact has been deleted' },
-              { status: 403 }
-            )
+            // SLACK MODE: 在 Slack 模式下，工作区成员之间可以互相聊天
+            // 不需要是联系人关系，所以允许发送消息给非联系人
+            console.log(`📤 [SLACK MODE CN] User ${user.id} sending message to workspace member ${otherUserId} (not in contacts)`)
+            // console.warn(`❌ User ${user.id} tried to send message to deleted contact ${otherUserId} in conversation ${conversationId}`)
+            // return NextResponse.json(
+            //   { error: 'Cannot send message: Contact has been deleted' },
+            //   { status: 403 }
+            // )
           }
         }
       }
@@ -261,11 +264,14 @@ export async function POST(request: NextRequest) {
           .maybeSingle()
 
         if (!contact) {
-          console.warn(`❌ User ${user.id} tried to send message to deleted contact ${otherUserId} in conversation ${conversationId}`)
-          return NextResponse.json(
-            { error: 'Cannot send message: Contact has been deleted' },
-            { status: 403 }
-          )
+          // SLACK MODE: 在 Slack 模式下，工作区成员之间可以互相聊天
+          // 不需要是联系人关系，所以允许发送消息给非联系人
+          console.log(`📤 [SLACK MODE] User ${user.id} sending message to workspace member ${otherUserId} (not in contacts)`)
+          // console.warn(`❌ User ${user.id} tried to send message to deleted contact ${otherUserId} in conversation ${conversationId}`)
+          // return NextResponse.json(
+          //   { error: 'Cannot send message: Contact has been deleted' },
+          //   { status: 403 }
+          // )
         }
       }
     }

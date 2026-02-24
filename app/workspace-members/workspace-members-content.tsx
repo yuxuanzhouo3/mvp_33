@@ -6,7 +6,6 @@ import { mockAuth } from '@/lib/mock-auth'
 import { WorkspaceHeader } from '@/components/chat/workspace-header'
 import { AppNavigation } from '@/components/layout/app-navigation'
 import { WorkspaceMembersPanel } from '@/components/chat/workspace-members-panel'
-import { useToast } from '@/components/ui/use-toast'
 import { User, Workspace } from '@/lib/types'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { Loader2 } from 'lucide-react'
@@ -17,7 +16,6 @@ function WorkspaceMembersPageContent() {
   const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [totalUnreadCount, setTotalUnreadCount] = useState(0)
-  const { toast } = useToast()
   const isMobile = useIsMobile()
 
   // Load current user and workspace
@@ -50,40 +48,46 @@ function WorkspaceMembersPageContent() {
   }, [router])
 
   // Start a chat with a workspace member
+  // 采用与联系人页面相同的异步跳转策略：先查缓存，找不到就直接跳转让聊天页创建会话
   const handleStartChat = useCallback(async (userId: string) => {
-    if (!currentUser) return
+    if (!currentUser || !currentWorkspace) return
 
     try {
-      const response = await fetch('/api/conversations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'direct',
-          member_ids: [userId],
-          skip_contact_check: true // Skip friend check for same workspace
-        })
-      })
+      // 1. 先查缓存有没有现成的 direct 会话
+      const cacheKey = `conversations_${currentUser.id}_${currentWorkspace.id}`
+      const cachedData = typeof window !== 'undefined' ? localStorage.getItem(cacheKey) : null
 
-      const data = await response.json()
+      if (cachedData) {
+        try {
+          const cachedConversations = JSON.parse(cachedData)
+          // Find existing direct conversation with this user
+          const existingConv = cachedConversations.find((conv: any) => {
+            if (conv.type !== 'direct' || !conv.members) return false
+            const memberIds = conv.members.map((m: any) => m.id || m)
+            return memberIds.includes(currentUser.id) && memberIds.includes(userId)
+          })
 
-      if (data.success) {
-        router.push(`/chat?conversation=${data.conversation.id}`)
-      } else {
-        toast({
-          title: 'Error',
-          description: data.error || 'Failed to start conversation',
-          variant: 'destructive'
-        })
+          if (existingConv) {
+            // Conversation exists - jump immediately
+            console.log('[WorkspaceMembers] Found conversation in cache, jumping:', existingConv.id)
+            sessionStorage.setItem('pending_conversation', JSON.stringify(existingConv))
+            router.push(`/chat?conversation=${existingConv.id}`)
+            return
+          }
+        } catch (error) {
+          console.error('[WorkspaceMembers] Error reading cache:', error)
+        }
       }
+
+      // 2. Conversation doesn't exist - jump immediately, let chat page create it
+      console.log('[WorkspaceMembers] Jumping to chat page, will create conversation there for userId:', userId)
+
+      // Jump immediately - chat page will handle conversation creation
+      router.push(`/chat?userId=${userId}`)
     } catch (error) {
-      console.error('Failed to start chat:', error)
-      toast({
-        title: 'Error',
-        description: 'Failed to start conversation',
-        variant: 'destructive'
-      })
+      console.error('[WorkspaceMembers] Error in handleStartChat:', error)
     }
-  }, [currentUser, router, toast])
+  }, [currentUser, currentWorkspace, router])
 
   if (isLoading) {
     return (

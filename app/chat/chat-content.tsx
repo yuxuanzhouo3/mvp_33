@@ -4059,6 +4059,13 @@ function ChatPageContent() {
 
             const data = await response.json()
 
+            // DEBUG: Log API response
+            console.log('🔄 [POLL] API response:', {
+              success: data.success,
+              conversationsCount: data.conversations?.length,
+              conversationIds: data.conversations?.map((c: any) => c.id)
+            })
+
             if (data.success && data.conversations) {
 
               // Filter out deleted conversations
@@ -4071,20 +4078,29 @@ function ChatPageContent() {
 
                 : []
 
-              
+              // DEBUG: Log deleted conversations
+              console.log('🗑️ [POLL] Deleted conversations from localStorage:', deletedConversations)
+
 
               // Filter and deduplicate conversations (same logic as loadConversations)
               let directAndGroups = (data.conversations || []).filter(
 
-                (c: ConversationWithDetails) => 
+                (c: ConversationWithDetails) =>
 
-                  c && 
+                  c &&
 
                   (c.type === 'direct' || c.type === 'group') &&
 
                   !deletedConversations.includes(c.id)
 
               )
+
+              // DEBUG: Log after deleted filter
+              console.log('📊 [POLL] After deleted filter:', {
+                beforeCount: data.conversations?.length,
+                afterCount: directAndGroups.length,
+                filteredIds: data.conversations?.filter((c: any) => deletedConversations.includes(c.id)).map((c: any) => c.id)
+              })
 
               // Deduplicate direct conversations by member pair
               const frontendDirectConversationsByPair = new Map<string, ConversationWithDetails[]>()
@@ -4155,8 +4171,20 @@ function ChatPageContent() {
               // Combine deduplicated direct conversations with other conversations
               const finalConversations = [...frontendDeduplicatedDirect, ...frontendOtherConversations]
 
+              // DEBUG: Log final conversations before ordering
+              console.log('📋 [POLL] Final conversations before ordering:', {
+                count: finalConversations.length,
+                ids: finalConversations.map(c => c.id)
+              })
+
               // 统一走 applyPinnedOrdering，保证轮询刷新时顺序也按同一套规则（置顶 + 时间）
               const ordered = applyPinnedOrdering(finalConversations.map(enrichConversation))
+
+              // DEBUG: Log after ordering
+              console.log('📋 [POLL] Ordered conversations:', {
+                count: ordered.length,
+                ids: ordered.map(c => c.id)
+              })
 
               // Only update if the list actually changed to prevent flickering
               setConversations(prev => {
@@ -4165,11 +4193,21 @@ function ChatPageContent() {
 
                 const newIds = new Set(ordered.map(c => c.id))
 
+                // DEBUG: Log comparison
+                console.log('🔍 [POLL] Comparing conversations:', {
+                  prevCount: prev.length,
+                  newCount: ordered.length,
+                  prevIds: Array.from(prevIds),
+                  newIds: Array.from(newIds),
+                  removed: Array.from(prevIds).filter(id => !newIds.has(id)),
+                  added: Array.from(newIds).filter(id => !prevIds.has(id))
+                })
+
                 // CRITICAL: Preserve optimistic unread_count = 0 for currently selected conversation
                 // This prevents the red dot from flickering (disappearing → appearing → disappearing)
                 const currentConvId = pollingConversationRef.current
                 const prevCurrentConv = currentConvId ? prev.find(c => c.id === currentConvId) : null
-                
+
                 // If current conversation was optimistically marked as read (unread_count = 0),
                 // preserve that state even if backend still has unread_count > 0
                 const orderedWithPreservedRead = ordered.map(conv => {
@@ -4397,38 +4435,46 @@ function ChatPageContent() {
     // Poll every 5 seconds to check for deleted contacts (reduced from 30s for faster sync)
     const contactCheckInterval = setInterval(async () => {
       if (!currentUser || !currentWorkspace) return
-      
+
+      console.log('👥 [CONTACT-CHECK] Running contact check poll...')
+
       try {
         // Fetch current contacts list
         const contactsResponse = await fetch('/api/contacts')
         if (!contactsResponse.ok) return
-        
+
         const contactsData = await contactsResponse.json()
         if (!contactsData.success || !contactsData.contacts) return
-        
+
+        console.log('👥 [CONTACT-CHECK] Contacts fetched:', contactsData.contacts.length)
+
         const currentContactIds = new Set(
           contactsData.contacts.map((c: any) => c.contact_user_id || c.user?.id).filter(Boolean)
         )
-        
+
         // Check if any conversation's other user is no longer in contacts
         setConversations(prev => {
+          console.log('👥 [CONTACT-CHECK] Checking conversations:', prev.length)
+
           const conversationsToRemove: string[] = []
           const updated = prev.filter(conv => {
             if (conv.type === 'direct' && conv.members && conv.members.length === 2) {
               const memberIds = conv.members.map((m: any) => m.id || m).filter(Boolean)
               const otherUserId = memberIds.find((id: string) => id !== currentUser.id)
-              
+
               // CRITICAL: Allow self-conversations
               if (otherUserId === currentUser.id) {
                 return true
               }
-              
-              // If the other user is not in contacts, mark this conversation for removal
-              if (otherUserId && !currentContactIds.has(otherUserId)) {
-                conversationsToRemove.push(conv.id)
-                console.log(`🗑️ Marking conversation ${conv.id} for removal - user ${otherUserId} not in contacts`)
-                return false
-              }
+
+              // SLACK MODE: 在 Slack 模式下，工作区成员之间可以互相聊天
+              // 不需要是联系人关系，所以不过滤非联系人的会话
+              // 之前的逻辑会过滤掉非联系人的会话，这对于工作区成员聊天是不合适的
+              // if (otherUserId && !currentContactIds.has(otherUserId)) {
+              //   conversationsToRemove.push(conv.id)
+              //   console.log(`🗑️ Marking conversation ${conv.id} for removal - user ${otherUserId} not in contacts`)
+              //   return false
+              // }
             }
             return true
           })
@@ -7736,7 +7782,8 @@ function ChatPageContent() {
 
               console.log('User manually selected conversation:', conversationId)
 
-              
+              // Exit Blind Zone / Global Announcement channel when selecting a conversation
+              setActiveChannel('none')
 
               // Clear all refs to allow switching
 
@@ -7858,7 +7905,26 @@ function ChatPageContent() {
 
           <div className="flex-1 flex flex-col">
 
-          {showChatInterface && displayConversation ? (
+          {/* Global Announcement or Blind Zone channel - highest priority */}
+          {activeChannel !== 'none' ? (
+            activeChannel === 'blind' ? (
+              <BlindZoneChat
+                isOpen={activeChannel === 'blind'}
+                onClose={() => setActiveChannel('none')}
+                workspaceId={currentWorkspace?.id || ''}
+                isWorkspaceAdmin={(() => {
+                  // 检查当前用户是否是工作区管理员
+                  // 通过检查 currentWorkspace 的 owner_id 或者其他方式
+                  return currentWorkspace?.owner_id === currentUser?.id
+                })()}
+              />
+            ) : (
+              <GlobalAnnouncement
+                isOpen={activeChannel === 'announcement'}
+                onClose={() => setActiveChannel('none')}
+              />
+            )
+          ) : showChatInterface && displayConversation ? (
 
             <>
 
@@ -7950,17 +8016,19 @@ function ChatPageContent() {
 
                 <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-20 animate-pulse" />
 
-                <h3 className="text-lg font-semibold mb-2">Loading conversation...</h3>
+                <h3 className="text-lg font-semibold mb-2">{language === 'zh' ? '正在加载会话...' : 'Loading conversation...'}</h3>
 
-                <p>Please wait</p>
+                <p>{language === 'zh' ? '请稍候' : 'Please wait'}</p>
 
               </div>
 
             </div>
 
-          ) : isCreatingConversationFromUserId ? (
+          ) : isCreatingConversationFromUserId || (searchParams.get('userId') && !displayConversation) ? (
 
-            // 来自 /contacts?userId=xxx，正在后台创建 / 查找会话时，也显示 Loading UI
+            // 来自 /contacts?userId=xxx 或 /chat?userId=xxx，正在后台创建 / 查找会话时，显示 Loading UI
+            // 注意：即使 isCreatingConversationFromUserId 还没被设置（等待 currentUser/currentWorkspace 加载），
+            // 只要 URL 中有 userId 参数且 displayConversation 还没有，就显示加载动画
 
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
 
@@ -7968,34 +8036,13 @@ function ChatPageContent() {
 
                 <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-20 animate-pulse" />
 
-                <h3 className="text-lg font-semibold mb-2">Loading conversation...</h3>
+                <h3 className="text-lg font-semibold mb-2">{language === 'zh' ? '正在加载会话...' : 'Loading conversation...'}</h3>
 
-                <p>Please wait</p>
+                <p>{language === 'zh' ? '请稍候' : 'Please wait'}</p>
 
               </div>
 
             </div>
-
-          ) : activeChannel !== 'none' ? (
-
-            // Global Announcement or Blind Zone channel
-            activeChannel === 'blind' ? (
-              <BlindZoneChat
-                isOpen={activeChannel === 'blind'}
-                onClose={() => setActiveChannel('none')}
-                workspaceId={currentWorkspace?.id || ''}
-                isWorkspaceAdmin={(() => {
-                  // 检查当前用户是否是工作区管理员
-                  // 通过检查 currentWorkspace 的 owner_id 或者其他方式
-                  return currentWorkspace?.owner_id === currentUser?.id
-                })()}
-              />
-            ) : (
-              <GlobalAnnouncement
-                isOpen={activeChannel === 'announcement'}
-                onClose={() => setActiveChannel('none')}
-              />
-            )
 
           ) : (
 

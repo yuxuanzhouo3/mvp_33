@@ -19,6 +19,8 @@ export async function GET(request: NextRequest) {
 
     // For China region, get user from localStorage (client-side auth)
     let user: any = null
+    let supabase: any = null  // 在外部声明，供后续代码使用
+
     if (deploymentRegion === 'CN') {
       // For CN region, we trust the client-side authentication
       // The user info is passed via headers or we can skip auth check
@@ -33,7 +35,7 @@ export async function GET(request: NextRequest) {
       }
     } else {
       // For international region, use Supabase auth
-      const supabase = await createClient()
+      supabase = await createClient()
       const { data: { user: supabaseUser } } = await supabase.auth.getUser()
       if (!supabaseUser) {
         return NextResponse.json(
@@ -185,7 +187,14 @@ export async function GET(request: NextRequest) {
     console.log('🔍 [API] Fetching conversations for user:', user.id, 'workspace:', workspaceId)
     let conversations = await getUserConversations(user.id, workspaceId!)
     console.log('🔍 [API] getUserConversations returned:', conversations.length, 'conversations')
-    
+
+    // DEBUG: Log all conversation IDs and types
+    console.log('📋 [API] All conversations:', conversations.map(c => ({
+      id: c.id,
+      type: c.type,
+      members: c.members?.map((m: any) => m.id || m)
+    })))
+
     if (conversations.length === 0) {
       console.warn('⚠️ [API] No conversations returned! This might indicate:')
       console.warn('  1. User has no conversation_members records')
@@ -202,58 +211,62 @@ export async function GET(request: NextRequest) {
         .from('contacts')
         .select('contact_user_id')
         .eq('user_id', user.id)
-      
+
       if (contactsError) {
         console.error('❌ [API] Failed to fetch contacts for filtering:', contactsError)
       } else {
         const contactUserIds = new Set((contacts || []).map((c: any) => c.contact_user_id).filter(Boolean))
-        console.log('👥 [API] Contacts for filtering:', contactUserIds.size, 'contacts')
-        
+        console.log('👥 [API] Contacts for filtering:', contactUserIds.size, 'contacts', Array.from(contactUserIds))
+
         const beforeFilterCount = conversations.length
         conversations = conversations.filter(conv => {
           // Only filter direct conversations
           if (conv.type !== 'direct') {
+            console.log('✅ [API] Keeping non-direct conversation:', conv.id, 'type:', conv.type)
             return true
           }
-          
+
           // CRITICAL: Allow self-conversations (where members might be 1 or 2, but other user is same as current user)
           // Check if this is a self-conversation first
-          const isSelfConversation = conv.members && conv.members.length >= 1 && 
+          const isSelfConversation = conv.members && conv.members.length >= 1 &&
             conv.members.every((m: any) => (m.id || m) === user.id)
-          
+
           if (isSelfConversation) {
             console.log('✅ [API] Keeping self-conversation:', conv.id)
             return true // Keep self-conversations
           }
-          
+
           // If conversation has no members or invalid members, filter it out
           if (!conv.members || conv.members.length !== 2) {
-            console.log('🗑️ [API] Filtering out direct conversation with invalid members:', conv.id)
+            console.log('🗑️ [API] Filtering out direct conversation with invalid members:', conv.id, 'members count:', conv.members?.length)
             return false
           }
-          
+
           // Find the other user (not current user)
           const otherUser = conv.members.find((m: any) => m.id !== user.id)
           if (!otherUser || !otherUser.id) {
             console.log('🗑️ [API] Filtering out direct conversation without other user:', conv.id)
             return false
           }
-          
+
           // CRITICAL: Allow self-conversations (where otherUser is the same as current user)
           if (otherUser.id === user.id) {
             console.log('✅ [API] Keeping self-conversation:', conv.id)
             return true // Keep self-conversations
           }
-          
-          // If the other user is not in contacts, filter out this conversation
-          if (!contactUserIds.has(otherUser.id)) {
-            console.log('🗑️ [API] Filtering out direct conversation - user not in contacts:', {
-              conversationId: conv.id,
-              otherUserId: otherUser.id,
-            })
-            return false
-          }
-          
+
+          // SLACK MODE: 在 Slack 模式下，工作区成员之间可以互相聊天
+          // 不需要是联系人关系，所以不过滤非联系人的会话
+          // 之前的逻辑会过滤掉非联系人的会话，这对于工作区成员聊天是不合适的
+          // if (!contactUserIds.has(otherUser.id)) {
+          //   console.log('🗑️ [API] Filtering out direct conversation - user not in contacts:', {
+          //     conversationId: conv.id,
+          //     otherUserId: otherUser.id,
+          //   })
+          //   return false
+          // }
+
+          console.log('✅ [API] Keeping direct conversation:', conv.id, 'otherUser:', otherUser.id, 'isContact:', contactUserIds.has(otherUser.id))
           return true
         })
         
@@ -369,6 +382,7 @@ export async function POST(request: NextRequest) {
     const { IS_DOMESTIC_VERSION } = await import('@/config')
 
     let currentUser: any = null
+    let supabase: any = null  // 在外部声明，供后续代码使用
 
     if (IS_DOMESTIC_VERSION) {
       // CN版本：使用CloudBase认证
@@ -386,7 +400,7 @@ export async function POST(request: NextRequest) {
     } else {
       // INTL版本：使用Supabase认证
       console.log('[POST /api/conversations] 使用Supabase认证（INTL版本）')
-      const supabase = await createClient()
+      supabase = await createClient()
       const { data: { user: supabaseUser } } = await supabase.auth.getUser()
 
       if (!supabaseUser) {
@@ -603,6 +617,23 @@ export async function POST(request: NextRequest) {
 
     // OPTIMIZED: Get workspace (skip contact check if requested, e.g., from contacts page)
     let workspaces: any[] | null = null
+
+    // DEBUG: 验证 supabase 变量
+    console.log('[POST /api/conversations] Before workspace query:', {
+      hasSupabase: !!supabase,
+      IS_DOMESTIC_VERSION,
+      type,
+      member_ids,
+      skip_contact_check
+    })
+
+    if (!supabase) {
+      console.error('[POST /api/conversations] ERROR: supabase is not defined!')
+      return NextResponse.json(
+        { error: 'Database client not initialized', code: 'DB_INIT_ERROR' },
+        { status: 500 }
+      )
+    }
 
     if (type === 'direct' && member_ids.length === 1 && !skip_contact_check) {
       // Only check contacts if not skipped (e.g., when called from other places)

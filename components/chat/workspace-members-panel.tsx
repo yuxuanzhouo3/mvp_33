@@ -97,10 +97,9 @@ export function WorkspaceMembersPanel({
   }
 
   return (
-    <div className="flex h-full" style={{ border: '2px solid red' }}>
-      {/* DEBUG: 红色边框用于调试 */}
+    <div className="flex h-full">
       {/* Members list - left panel */}
-      <div className="w-[480px] border-r flex flex-col" style={{ border: '2px solid blue' }}>
+      <div className="w-[480px] border-r flex flex-col">
         <div className="border-b p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">{t('workspaceMembers')}</h2>
@@ -158,8 +157,8 @@ export function WorkspaceMembersPanel({
         </div>
       </div>
 
-      {/* Member details - right panel - DEBUG: 绿色边框 */}
-      <div className="flex-1 flex flex-col" style={{ border: '2px solid green', minHeight: '100%' }}>
+      {/* Member details - right panel */}
+      <div className="flex-1 flex flex-col" style={{ minHeight: '100%' }}>
         {selectedMember ? (
           <>
             <div className="border-b p-6">
