@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const { IS_DOMESTIC_VERSION } = await import('@/config')
 
     let currentUser: any = null
+    let supabase: any = null  // 在外部声明，避免作用域问题
 
     if (IS_DOMESTIC_VERSION) {
       // CN版本：只使用CloudBase认证
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     } else {
       // INTL版本：只使用Supabase认证
       console.log('[GET /api/contacts] 使用Supabase认证（INTL版本）')
-      const supabase = await createClient()
+      supabase = await createClient()  // 赋值而不是声明
       const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
 
       if (authError) {
@@ -430,6 +431,7 @@ export async function DELETE(request: NextRequest) {
     const { IS_DOMESTIC_VERSION } = await import('@/config')
 
     let currentUser: any = null
+    let supabase: any = null  // 在外部声明，避免作用域问题
 
     if (IS_DOMESTIC_VERSION) {
       // CN版本：只使用CloudBase认证
@@ -447,7 +449,7 @@ export async function DELETE(request: NextRequest) {
     } else {
       // INTL版本：只使用Supabase认证
       console.log('[DELETE /api/contacts] 使用Supabase认证（INTL版本）')
-      const supabase = await createClient()
+      supabase = await createClient()  // 赋值而不是声明
       const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
 
       if (authError || !supabaseUser) {

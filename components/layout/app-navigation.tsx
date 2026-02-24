@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { MessageSquare, Users, Hash, Settings } from 'lucide-react'
+import { MessageSquare, Users, Hash, Settings, Building2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
@@ -23,6 +23,11 @@ const navItems: NavItem[] = [
     href: '/contacts',
     icon: Users,
     label: '联系人',
+  },
+  {
+    href: '/workspace-members',
+    icon: Building2,
+    label: '工作区成员',
   },
   {
     href: '/channels',

@@ -148,6 +148,8 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // INTL users → Supabase contact_requests
+    const supabase = await createClient()
     let query = supabase
       .from('contact_requests')
       .select(`

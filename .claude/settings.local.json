@@ -28,7 +28,9 @@
       "Bash(curl:*)",
       "Bash(netstat:*)",
       "Bash(findstr:*)",
-      "Bash(cmd //c \"taskkill /PID 105000 /F\")"
+      "Bash(cmd //c \"taskkill /PID 105000 /F\")",
+      "Bash(git worktree:*)",
+      "Bash(cd D:\\\\newcode\\\\orbitchat\\\\mvp33\\\\mvp33:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

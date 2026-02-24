@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@cloudbase/node-sdk": "^3.14.2",
+    "@dicebear/collection": "^9.3.2",
+    "@dicebear/core": "^9.3.2",
     "@hookform/resolvers": "^3.10.0",
     "@paypal/checkout-server-sdk": "^1.0.3",
     "@paypal/react-paypal-js": "^8.1.3",

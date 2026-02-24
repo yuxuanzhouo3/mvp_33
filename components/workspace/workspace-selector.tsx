@@ -98,43 +98,33 @@ export function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) {
         // 保存邀请码，显示给用户
         setGeneratedInviteCode(newInviteCode.trim().toUpperCase())
 
-        const newWorkspace: Workspace = {
-          id: data.workspace?.id || newWorkspaceName.toLowerCase().replace(/\s+/g, '-'),
-          name: newWorkspaceName,
-          domain: newWorkspaceName.toLowerCase().replace(/\s+/g, '-'),
-          description: '',
+        // 使用 API 返回的工作区数据，不再创建 mock 工作区
+        if (data.workspace) {
+          const newWorkspace: Workspace = {
+            id: data.workspace.id,
+            name: data.workspace.name || newWorkspaceName,
+            domain: data.workspace.domain || newWorkspaceName.toLowerCase().replace(/\s+/g, '-'),
+            description: data.workspace.description || '',
+            logo_url: data.workspace.logo_url,
+            owner_id: data.workspace.owner_id,
+          }
+          setWorkspaces([...workspaces, newWorkspace])
         }
-        setWorkspaces([...workspaces, newWorkspace])
         setNewWorkspaceName('')
         setNewInviteCode('')
       } else {
-        // 即使 API 失败也显示邀请码
-        setGeneratedInviteCode(newInviteCode.trim().toUpperCase())
-
-        const newWorkspace: Workspace = {
-          id: newWorkspaceName.toLowerCase().replace(/\s+/g, '-'),
-          name: newWorkspaceName,
-          domain: newWorkspaceName.toLowerCase().replace(/\s+/g, '-'),
-          description: '',
-        }
-        setWorkspaces([...workspaces, newWorkspace])
-        setNewWorkspaceName('')
-        setNewInviteCode('')
+        // API 返回失败，不创建 mock 工作区，显示错误信息
+        console.error('Create workspace failed:', data.error)
+        alert(language === 'zh' ? `创建工作区失败: ${data.error || '请重试'}` : `Failed to create workspace: ${data.error || 'Please try again'}`)
+        setIsCreating(false)
+        return
       }
     } catch (error) {
       console.error('Create workspace error:', error)
-      // 即使 API 失败也显示邀请码
-      setGeneratedInviteCode(newInviteCode.trim().toUpperCase())
-
-      const newWorkspace: Workspace = {
-        id: newWorkspaceName.toLowerCase().replace(/\s+/g, '-'),
-        name: newWorkspaceName,
-        domain: newWorkspaceName.toLowerCase().replace(/\s+/g, '-'),
-        description: '',
-      }
-      setWorkspaces([...workspaces, newWorkspace])
-      setNewWorkspaceName('')
-      setNewInviteCode('')
+      // 不创建 mock 工作区，显示错误信息
+      alert(language === 'zh' ? '创建工作区失败，请检查网络连接后重试' : 'Failed to create workspace. Please check your connection and try again.')
+      setIsCreating(false)
+      return
     } finally {
       setIsCreating(false)
     }

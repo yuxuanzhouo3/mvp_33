@@ -6,6 +6,8 @@ export const translations = {
     messages: 'Messages',
     channels: 'Channels',
     contacts: 'Contacts',
+    workspaceMembers: 'Workspace Members',
+    noWorkspaceMembers: 'No other members in this workspace',
     
     // Workspace
     workspaceSettings: 'Workspace settings',
@@ -57,6 +59,7 @@ export const translations = {
     noFavoriteContacts: 'No Favorite Contacts',
     all: 'All',
     favorites: 'Favorites',
+    noFavorites: 'No Favorites',
     searchContacts: 'Search Contacts...',
     status: 'Status',
     online: 'Online',
@@ -91,13 +94,11 @@ export const translations = {
     channelNamePlaceholder: 'e.g. general, marketing, engineering',
     channelDescriptionPlaceholder: 'What is this channel about?',
     privateChannelDescription: 'Only invited members can view and join',
-    privateChannel: 'Private Channel',
     publicChannels: 'Public Channels',
     privateChannels: 'Private Channels',
     groups: 'Groups',
-    
+
     // New Conversation
-    newConversation: 'New Conversation',
     startDirectOrGroup: 'Start a direct message or create a group chat',
     directMessage: 'Direct Message',
     groupChat: 'Group Chat',
@@ -229,7 +230,6 @@ export const translations = {
     noAccount: 'Don\'t have an account?',
     createAccount: 'Create one',
     register: 'Register',
-    fullName: 'Full Name',
     confirmPassword: 'Confirm Password',
     alreadyHaveAccount: 'Already have an account?',
     signInHere: 'Sign in here',
@@ -276,12 +276,23 @@ export const translations = {
     officialChannels: 'Official Channels',
     typeAnonymousMessage: 'Speak anonymously...',
     live: 'Live',
+
+    // Blind Zone Chat
+    blindZoneTitle: 'Blind Zone',
+    blindZoneSubtitle: 'Anonymous chat within workspace',
+    anonymous: 'Anonymous',
+    noBlindZoneMessages: 'No messages yet. Be the first to speak anonymously!',
+    blindZoneMessageDeleted: 'This message has been deleted by admin',
+    blindZoneAdminDelete: 'Delete message',
+    blindZoneAdminOnly: 'Admin only',
   },
   zh: {
     // Navigation
     messages: '消息',
     channels: '频道',
     contacts: '通讯录',
+    workspaceMembers: '工作区成员',
+    noWorkspaceMembers: '此工作区暂无其他成员',
     
     // Workspace
     workspaceSettings: '工作区设置',
@@ -359,6 +370,7 @@ export const translations = {
     noFavoriteContacts: '暂无收藏联系人',
     all: '全部',
     favorites: '收藏',
+    noFavorites: '暂无收藏',
     searchContacts: '搜索联系人...',
     status: '状态',
     online: '在线',
@@ -393,13 +405,11 @@ export const translations = {
     channelNamePlaceholder: '例如：general, marketing, engineering',
     channelDescriptionPlaceholder: '这个频道是关于什么的？',
     privateChannelDescription: '只有被邀请的成员可以查看和加入',
-    privateChannel: '私密频道',
     publicChannels: '公开频道',
     privateChannels: '私密频道',
     groups: '群组',
-    
+
     // New Conversation
-    newConversation: '新建会话',
     startDirectOrGroup: '开始私聊或创建群聊',
     directMessage: '私聊',
     groupChat: '群聊',
@@ -471,7 +481,6 @@ export const translations = {
     noAccount: '没有账号？',
     createAccount: '立即注册',
     register: '注册',
-    fullName: '全名',
     confirmPassword: '确认密码',
     alreadyHaveAccount: '已有账号？',
     signInHere: '立即登录',
@@ -518,6 +527,15 @@ export const translations = {
     officialChannels: '官方频道',
     typeAnonymousMessage: '匿名发言，快速点击...',
     live: '实时',
+
+    // Blind Zone Chat
+    blindZoneTitle: '盲区交流',
+    blindZoneSubtitle: '工作区内匿名交流',
+    anonymous: '无名氏',
+    noBlindZoneMessages: '暂无消息，成为第一个匿名发言的人吧！',
+    blindZoneMessageDeleted: '此消息已被管理员删除',
+    blindZoneAdminDelete: '删除消息',
+    blindZoneAdminOnly: '仅管理员',
 
     // Conversation list
     noConversationsYet: '暂无会话',

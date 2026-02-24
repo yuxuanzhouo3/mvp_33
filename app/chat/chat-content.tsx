@@ -7983,6 +7983,12 @@ function ChatPageContent() {
               <BlindZoneChat
                 isOpen={activeChannel === 'blind'}
                 onClose={() => setActiveChannel('none')}
+                workspaceId={currentWorkspace?.id || ''}
+                isWorkspaceAdmin={(() => {
+                  // 检查当前用户是否是工作区管理员
+                  // 通过检查 currentWorkspace 的 owner_id 或者其他方式
+                  return currentWorkspace?.owner_id === currentUser?.id
+                })()}
               />
             ) : (
               <GlobalAnnouncement

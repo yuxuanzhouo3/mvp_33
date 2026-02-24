@@ -169,6 +169,40 @@ export interface UserWithGroupNickname extends User {
 export interface MessageWithSender extends Message {
   sender: User
   replied_message?: Message
-  // 前端乐观更新用：表示这条消息正在发送/上传中，可以在 UI 里显示一个“加载中”的状态
+  // 前端乐观更新用：表示这条消息正在发送/上传中，可以在 UI 里显示一个”加载中”的状态
   is_sending?: boolean
+}
+
+// 盲区消息类型
+export interface BlindZoneMessage {
+  id: string
+  workspace_id: string
+  sender_id: string  // 后端验证用，前端不显示
+  content: string
+  type: 'text' | 'image' | 'file'
+  metadata?: {
+    file_url?: string
+    file_name?: string
+    mime_type?: string
+  }
+  is_deleted: boolean
+  deleted_by?: string  // 管理员ID
+  created_at: string
+  updated_at: string
+}
+
+// 盲区消息前端显示类型（不包含sender_id）
+export interface BlindZoneMessageDisplay {
+  id: string
+  workspace_id: string
+  content: string
+  type: 'text' | 'image' | 'file'
+  metadata?: {
+    file_url?: string
+    file_name?: string
+    mime_type?: string
+  }
+  is_deleted: boolean
+  created_at: string
+  updated_at: string
 }
