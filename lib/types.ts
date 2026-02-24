@@ -32,6 +32,7 @@ export interface Workspace {
   domain: string
   owner_id: string
   settings: WorkspaceSettings
+  invite_code?: string
   created_at: string
   updated_at: string
 }

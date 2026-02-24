@@ -300,6 +300,14 @@ export const translations = {
     blindZoneMessageDeleted: 'This message has been deleted by admin',
     blindZoneAdminDelete: 'Delete message',
     blindZoneAdminOnly: 'Admin only',
+
+    // Invite Members
+    inviteMembers: 'Invite Members',
+    inviteCodeLabel: 'Invite Code',
+    copyInviteCode: 'Copy Code',
+    inviteCodeDescription: 'Share this invite code with new members to join your organization',
+    enterCodeToJoin: 'New members can enter this code in "Join Organization"',
+    noInviteCode: 'No invite code available for this workspace',
   },
   zh: {
     // Navigation
@@ -593,6 +601,14 @@ export const translations = {
     systemMessage: '系统消息',
     addReaction: '添加表情',
     pinned: '已置顶',
+
+    // Invite Members
+    inviteMembers: '邀请成员',
+    inviteCodeLabel: '邀请码',
+    copyInviteCode: '复制邀请码',
+    inviteCodeDescription: '分享以下邀请码给新成员，他们可以通过邀请码加入组织',
+    enterCodeToJoin: '新成员可在"加入组织"中输入此邀请码',
+    noInviteCode: '当前工作区暂无邀请码',
   }
 }
 

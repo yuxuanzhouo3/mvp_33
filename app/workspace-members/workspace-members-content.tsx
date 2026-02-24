@@ -113,6 +113,7 @@ function WorkspaceMembersPageContent() {
               <WorkspaceMembersPanel
                 currentUser={currentUser}
                 workspaceId={currentWorkspace.id}
+                workspace={currentWorkspace}
                 onStartChat={handleStartChat}
               />
             )}

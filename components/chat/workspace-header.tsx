@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { User, Workspace } from '@/lib/types'
-import { Building2, ChevronDown, Settings, LogOut, Bell, Hash, UsersIcon, MessageSquare, Plus, UserPlus, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
+import { Building2, ChevronDown, Settings, LogOut, Bell, Hash, UsersIcon, MessageSquare, Plus, UserPlus, Loader2, AlertCircle, RefreshCw, Copy, Check } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,6 +53,12 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
   const [isJoining, setIsJoining] = useState(false)
   const [joinError, setJoinError] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+
+  // Invite code dialog state
+  const [showInviteDialog, setShowInviteDialog] = useState(false)
+  const [currentInviteCode, setCurrentInviteCode] = useState<string | null>(null)
+  const [isLoadingInviteCode, setIsLoadingInviteCode] = useState(false)
+  const [copySuccess, setCopySuccess] = useState(false)
 
   // Initialize with prop value
   const [realTimeUnreadCount, setRealTimeUnreadCount] = useState<number | undefined>(propTotalUnreadCount)
@@ -342,6 +348,51 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
     router.push('/payment')
   }
 
+  const handleShowInviteCode = async () => {
+    setIsLoadingInviteCode(true)
+    setShowInviteDialog(true)
+
+    try {
+      // 从当前工作区对象获取邀请码（工作区列表已包含 invite_code）
+      if (workspace.invite_code) {
+        setCurrentInviteCode(workspace.invite_code)
+      } else {
+        // 如果当前对象没有，尝试从工作区列表查找
+        const currentWs = workspaceList.find(ws => ws.id === workspace.id)
+        if (currentWs?.invite_code) {
+          setCurrentInviteCode(currentWs.invite_code)
+        } else {
+          setCurrentInviteCode(null)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to get invite code:', error)
+      setCurrentInviteCode(null)
+    } finally {
+      setIsLoadingInviteCode(false)
+    }
+  }
+
+  const handleCopyInviteCode = async () => {
+    if (!currentInviteCode) return
+
+    try {
+      await navigator.clipboard.writeText(currentInviteCode)
+      setCopySuccess(true)
+      setTimeout(() => setCopySuccess(false), 2000)
+    } catch (error) {
+      // 降级方案
+      const textArea = document.createElement('textarea')
+      textArea.value = currentInviteCode
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textArea)
+      setCopySuccess(true)
+      setTimeout(() => setCopySuccess(false), 2000)
+    }
+  }
+
   const navItems = [
     { label: t('messages'), icon: MessageSquare, path: '/chat' },
     { label: t('channels'), icon: Hash, path: '/channels' },
@@ -395,6 +446,13 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
                   )}
                 </div>
                 <div className="p-2 border-t border-gray-100 bg-gray-50 flex flex-col space-y-1">
+                  <button
+                    onClick={() => { setShowWorkspaceMenu(false); handleShowInviteCode(); }}
+                    className="flex items-center space-x-2 px-3 py-2 text-sm text-purple-600 hover:bg-purple-100 rounded-lg transition-colors"
+                  >
+                    <UserPlus size={16} />
+                    <span>{language === 'zh' ? '邀请成员' : 'Invite Members'}</span>
+                  </button>
                   <button
                     onClick={() => { setShowWorkspaceMenu(false); setShowJoinDialog(true); }}
                     className="flex items-center space-x-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
@@ -616,6 +674,76 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 邀请成员对话框 */}
+      <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5" />
+              {language === 'zh' ? '邀请成员' : 'Invite Members'}
+            </DialogTitle>
+            <DialogDescription>
+              {language === 'zh'
+                ? '分享以下邀请码给新成员，他们可以通过邀请码加入组织'
+                : 'Share this invite code with new members to join your organization'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-6">
+            {isLoadingInviteCode ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : currentInviteCode ? (
+              <div className="space-y-4">
+                <div className="text-center">
+                  <div className="text-sm text-muted-foreground mb-2">
+                    {language === 'zh' ? '邀请码' : 'Invite Code'}
+                  </div>
+                  <div className="text-3xl font-mono font-bold tracking-widest text-primary bg-primary/10 px-6 py-4 rounded-lg">
+                    {currentInviteCode}
+                  </div>
+                </div>
+                <div className="flex justify-center">
+                  <Button
+                    onClick={handleCopyInviteCode}
+                    className="gap-2"
+                  >
+                    {copySuccess ? (
+                      <>
+                        <Check className="h-4 w-4" />
+                        {language === 'zh' ? '已复制' : 'Copied'}
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4" />
+                        {language === 'zh' ? '复制邀请码' : 'Copy Code'}
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <div className="text-center text-sm text-muted-foreground">
+                  {language === 'zh'
+                    ? '新成员可在"加入组织"中输入此邀请码'
+                    : 'New members can enter this code in "Join Organization"'}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground py-4">
+                <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                {language === 'zh'
+                  ? '当前工作区暂无邀请码'
+                  : 'No invite code available for this workspace'}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowInviteDialog(false)}>
+              {language === 'zh' ? '关闭' : 'Close'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
