@@ -129,7 +129,7 @@ export function JoinWorkspaceDialog({ open, onOpenChange, onJoin }: JoinWorkspac
               onKeyDown={handleKeyDown}
               placeholder={language === 'zh' ? '输入邀请码...' : 'Enter invite code...'}
               className="text-center text-lg tracking-widest font-mono flex-1"
-              maxLength={8}
+              maxLength={50}
               autoFocus
               disabled={isLoading}
             />
