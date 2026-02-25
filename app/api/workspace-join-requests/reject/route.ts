@@ -75,6 +75,30 @@ export async function POST(request: NextRequest) {
           reviewed_at: now
         })
 
+      // 获取工作区信息用于通知
+      const workspaceRes = await db.collection('workspaces').doc(workspaceId).get()
+      const workspace = workspaceRes.data || workspaceRes
+      const workspaceName = workspace?.name || 'Unknown Workspace'
+
+      // 发送系统助手消息 - 通知用户申请被拒绝
+      try {
+        const { sendSystemAssistantMessage } = await import('@/lib/system-assistant')
+        await sendSystemAssistantMessage(
+          joinRequest.user_id,
+          `很抱歉，您申请加入工作区「${workspaceName}」的请求未通过审核。`,
+          {
+            type: 'join_rejected',
+            workspace_id: workspaceId,
+            workspace_name: workspaceName,
+            request_id: requestId,
+          },
+          true // isCN
+        )
+      } catch (msgError) {
+        console.error('Failed to send system assistant message:', msgError)
+        // 不阻断主流程
+      }
+
       return NextResponse.json({ success: true, message: 'Request rejected' })
     }
 
@@ -130,6 +154,34 @@ export async function POST(request: NextRequest) {
     if (updateError) {
       console.error('Error updating request:', updateError)
       return NextResponse.json({ error: 'Failed to update request' }, { status: 500 })
+    }
+
+    // 获取工作区信息用于通知
+    const { data: workspace } = await supabase
+      .from('workspaces')
+      .select('name')
+      .eq('id', workspaceId)
+      .single()
+
+    const workspaceName = workspace?.name || 'Unknown Workspace'
+
+    // 发送系统助手消息 - 通知用户申请被拒绝
+    try {
+      const { sendSystemAssistantMessage } = await import('@/lib/system-assistant')
+      await sendSystemAssistantMessage(
+        joinRequest.user_id,
+        `很抱歉，您申请加入工作区「${workspaceName}」的请求未通过审核。`,
+        {
+          type: 'join_rejected',
+          workspace_id: workspaceId,
+          workspace_name: workspaceName,
+          request_id: requestId,
+        },
+        false // isCN
+      )
+    } catch (msgError) {
+      console.error('Failed to send system assistant message:', msgError)
+      // 不阻断主流程
     }
 
     return NextResponse.json({ success: true, message: 'Request rejected' })

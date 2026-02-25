@@ -169,6 +169,7 @@ export async function POST(request: NextRequest) {
     }
 
     const dbClient = await getDatabaseClient()
+    const now = new Date().toISOString()
 
     // CN version: use CloudBase
     if (dbClient.type === 'cloudbase') {
@@ -215,15 +216,39 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // 获取工作区信息用于通知
+      const workspaceRes = await db.collection('workspaces').doc(workspaceId).get()
+      const workspace = workspaceRes.data || workspaceRes
+      const workspaceName = workspace?.name || 'Unknown Workspace'
+
       // 创建申请
-      const now = new Date().toISOString()
-      await db.collection('workspace_join_requests').add({
+      const requestResult = await db.collection('workspace_join_requests').add({
         workspace_id: workspaceId,
         user_id: userId,
         reason: reason || null,
         status: 'pending',
         created_at: now
       })
+      const requestId = requestResult.id || requestResult._id
+
+      // 发送系统助手消息 - 通知用户申请已提交
+      try {
+        const { sendSystemAssistantMessage } = await import('@/lib/system-assistant')
+        await sendSystemAssistantMessage(
+          userId,
+          `您申请加入工作区「${workspaceName}」的请求已发送，请等待管理员审核。`,
+          {
+            type: 'join_request',
+            workspace_id: workspaceId,
+            workspace_name: workspaceName,
+            request_id: requestId,
+          },
+          true // isCN
+        )
+      } catch (msgError) {
+        console.error('Failed to send system assistant message:', msgError)
+        // 不阻断主流程
+      }
 
       return NextResponse.json({ success: true, message: 'Join request submitted' })
     }
@@ -266,7 +291,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 创建申请
-    const { error } = await supabase
+    const { data: requestData, error } = await supabase
       .from('workspace_join_requests')
       .insert({
         workspace_id: workspaceId,
@@ -274,10 +299,40 @@ export async function POST(request: NextRequest) {
         reason: reason || null,
         status: 'pending'
       })
+      .select('id')
+      .single()
 
-    if (error) {
+    if (error || !requestData) {
       console.error('Error creating join request:', error)
       return NextResponse.json({ error: 'Failed to create request' }, { status: 500 })
+    }
+
+    // 获取工作区信息用于通知
+    const { data: workspace } = await supabase
+      .from('workspaces')
+      .select('name')
+      .eq('id', workspaceId)
+      .single()
+
+    const workspaceName = workspace?.name || 'Unknown Workspace'
+
+    // 发送系统助手消息 - 通知用户申请已提交
+    try {
+      const { sendSystemAssistantMessage } = await import('@/lib/system-assistant')
+      await sendSystemAssistantMessage(
+        userId,
+        `您申请加入工作区「${workspaceName}」的请求已发送，请等待管理员审核。`,
+        {
+          type: 'join_request',
+          workspace_id: workspaceId,
+          workspace_name: workspaceName,
+          request_id: requestData.id,
+        },
+        false // isCN
+      )
+    } catch (msgError) {
+      console.error('Failed to send system assistant message:', msgError)
+      // 不阻断主流程
     }
 
     return NextResponse.json({ success: true, message: 'Join request submitted' })

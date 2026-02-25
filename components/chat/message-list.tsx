@@ -11,7 +11,7 @@ import { MessageWithSender, User } from '@/lib/types'
 
 import { cn } from '@/lib/utils'
 
-import { File, ImageIcon, Video, Smile, ChevronDown, ChevronUp, MoreVertical, Edit2, Trash2, Pin, PinOff, EyeOff, Reply, RotateCcw, Copy, Download, Eye, X, Phone } from 'lucide-react'
+import { File, ImageIcon, Video, Smile, ChevronDown, ChevronUp, MoreVertical, Edit2, Trash2, Pin, PinOff, EyeOff, Reply, RotateCcw, Copy, Download, Eye, X, Phone, Clock, CheckCircle, XCircle, Bell } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
@@ -1277,7 +1277,7 @@ export function MessageList({
                         const callDuration = callMetadata.call_duration || 0
                         const isIncoming = callMetadata.caller_id !== currentUser.id
                         const isCalling = callStatus === 'calling' && !isOwn
-                        
+
                         const formatCallDuration = (seconds: number) => {
                           const mins = Math.floor(seconds / 60)
                           const secs = seconds % 60
@@ -1296,7 +1296,7 @@ export function MessageList({
                                 {callMetadata.call_type === 'video' ? t('videoCall') : t('voiceCall')}
                               </span>
                             </div>
-                            
+
                             {callStatus === 'calling' && isCalling && (
                               <div className="flex items-center gap-2 mt-2">
                                 <Button
@@ -1328,7 +1328,7 @@ export function MessageList({
                                 </Button>
                               </div>
                             )}
-                            
+
                             {/* 显示通话状态和时长 */}
                             {callStatus === 'ended' ? (
                               <div className="text-xs text-muted-foreground">
@@ -1353,6 +1353,71 @@ export function MessageList({
                             ) : callStatus === 'calling' ? (
                               <div className="text-xs text-muted-foreground">Calling...</div>
                             ) : null}
+                          </div>
+                        )
+                      })()}
+
+                      {/* System assistant messages - join request notifications */}
+                      {message.type === 'system' && (message.metadata as any)?.type && ['join_request', 'join_approved', 'join_rejected'].includes((message.metadata as any)?.type) && (() => {
+                        const metadata = (message.metadata || {}) as any
+                        const notificationType = metadata.type
+                        const workspaceName = metadata.workspace_name || 'Unknown Workspace'
+
+                        const getNotificationStyle = () => {
+                          switch (notificationType) {
+                            case 'join_request':
+                              return {
+                                icon: Clock,
+                                bgColor: 'bg-blue-50 dark:bg-blue-950/30',
+                                iconColor: 'text-blue-500',
+                                borderColor: 'border-blue-200 dark:border-blue-800'
+                              }
+                            case 'join_approved':
+                              return {
+                                icon: CheckCircle,
+                                bgColor: 'bg-green-50 dark:bg-green-950/30',
+                                iconColor: 'text-green-500',
+                                borderColor: 'border-green-200 dark:border-green-800'
+                              }
+                            case 'join_rejected':
+                              return {
+                                icon: XCircle,
+                                bgColor: 'bg-red-50 dark:bg-red-950/30',
+                                iconColor: 'text-red-500',
+                                borderColor: 'border-red-200 dark:border-red-800'
+                              }
+                            default:
+                              return {
+                                icon: Bell,
+                                bgColor: 'bg-muted/50',
+                                iconColor: 'text-muted-foreground',
+                                borderColor: 'border-muted'
+                              }
+                          }
+                        }
+
+                        const style = getNotificationStyle()
+                        const IconComponent = style.icon
+
+                        return (
+                          <div className={cn(
+                            'flex items-start gap-3 p-3 rounded-lg border',
+                            style.bgColor,
+                            style.borderColor
+                          )}>
+                            <div className={cn('mt-0.5', style.iconColor)}>
+                              <IconComponent className="h-5 w-5" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground">
+                                {message.content}
+                              </p>
+                              {workspaceName && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {language === 'zh' ? '工作区' : 'Workspace'}: {workspaceName}
+                                </p>
+                              )}
+                            </div>
                           </div>
                         )
                       })()}

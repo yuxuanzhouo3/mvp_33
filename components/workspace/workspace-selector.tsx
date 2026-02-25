@@ -52,31 +52,25 @@ export function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) {
     onSelect(workspace)
   }
 
-  const handleJoin = async (inviteCode: string): Promise<{ success: boolean; error?: string }> => {
+  const handleJoin = async (workspaceId: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      const response = await fetch('/api/workspaces/join', {
+      // 调用申请 API 而不是直接加入
+      const response = await fetch('/api/workspace-join-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inviteCode }),
+        body: JSON.stringify({ workspaceId }),
       })
       const data = await response.json()
 
       if (data.success) {
-        // 刷新工作区列表
-        const response = await fetch('/api/workspaces')
-        const data = await response.json()
-        if (data.success && data.workspaces) {
-          setWorkspaces(data.workspaces)
-        }
+        // 申请已发送，不刷新工作区列表（因为用户还未加入）
+        // 返回成功，让对话框显示"申请已发送"
         return { success: true }
       } else {
-        return { success: false, error: data.error || 'Invalid invite code' }
+        return { success: false, error: data.error || 'Failed to submit request' }
       }
     } catch (error) {
-      // 模拟加入成功（前端演示用）
-      const mockWorkspace = { id: 'techcorp', name: 'TechCorp 总组', domain: 'techcorp' } as Workspace
-      setWorkspaces([...workspaces, mockWorkspace])
-      return { success: true }
+      return { success: false, error: 'Failed to submit join request' }
     }
   }
 

@@ -85,6 +85,30 @@ export async function POST(request: NextRequest) {
           joined_at: now
         })
 
+      // 获取工作区信息用于通知
+      const workspaceRes = await db.collection('workspaces').doc(workspaceId).get()
+      const workspace = workspaceRes.data || workspaceRes
+      const workspaceName = workspace?.name || 'Unknown Workspace'
+
+      // 发送系统助手消息 - 通知用户申请已通过
+      try {
+        const { sendSystemAssistantMessage } = await import('@/lib/system-assistant')
+        await sendSystemAssistantMessage(
+          joinRequest.user_id,
+          `恭喜！您申请加入工作区「${workspaceName}」的请求已通过审核，您现在可以访问该工作区了。`,
+          {
+            type: 'join_approved',
+            workspace_id: workspaceId,
+            workspace_name: workspaceName,
+            request_id: requestId,
+          },
+          true // isCN
+        )
+      } catch (msgError) {
+        console.error('Failed to send system assistant message:', msgError)
+        // 不阻断主流程
+      }
+
       return NextResponse.json({ success: true, message: 'Request approved' })
     }
 
@@ -155,6 +179,34 @@ export async function POST(request: NextRequest) {
     if (insertError) {
       console.error('Error adding member:', insertError)
       return NextResponse.json({ error: 'Failed to add member' }, { status: 500 })
+    }
+
+    // 获取工作区信息用于通知
+    const { data: workspace } = await supabase
+      .from('workspaces')
+      .select('name')
+      .eq('id', workspaceId)
+      .single()
+
+    const workspaceName = workspace?.name || 'Unknown Workspace'
+
+    // 发送系统助手消息 - 通知用户申请已通过
+    try {
+      const { sendSystemAssistantMessage } = await import('@/lib/system-assistant')
+      await sendSystemAssistantMessage(
+        joinRequest.user_id,
+        `恭喜！您申请加入工作区「${workspaceName}」的请求已通过审核，您现在可以访问该工作区了。`,
+        {
+          type: 'join_approved',
+          workspace_id: workspaceId,
+          workspace_name: workspaceName,
+          request_id: requestId,
+        },
+        false // isCN
+      )
+    } catch (msgError) {
+      console.error('Failed to send system assistant message:', msgError)
+      // 不阻断主流程
     }
 
     return NextResponse.json({ success: true, message: 'Request approved' })

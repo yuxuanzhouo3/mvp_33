@@ -133,25 +133,39 @@ export async function createWorkspace(
  */
 export async function getWorkspaceByInviteCode(inviteCode: string): Promise<Workspace | null> {
   try {
+    console.log('[CloudBase] getWorkspaceByInviteCode 开始')
+    console.log('[CloudBase] 输入邀请码:', JSON.stringify(inviteCode))
+    console.log('[CloudBase] 邀请码长度:', inviteCode.length)
+
     const db = getCloudBaseDb()
     if (!db) {
+      console.log('[CloudBase] 数据库未配置')
       return null
     }
 
+    const upperCode = inviteCode.toUpperCase()
+    console.log('[CloudBase] 查询条件 - invite_code:', JSON.stringify(upperCode))
+
     const result = await db.collection('workspaces')
       .where({
-        invite_code: inviteCode.toUpperCase()
+        invite_code: upperCode
       })
       .limit(1)
       .get()
 
+    console.log('[CloudBase] 查询结果数量:', result.data?.length || 0)
+    console.log('[CloudBase] 查询结果:', JSON.stringify(result.data))
+
     if (result.data && result.data.length > 0) {
-      return normalizeCloudBaseWorkspace(result.data[0])
+      const workspace = normalizeCloudBaseWorkspace(result.data[0])
+      console.log('[CloudBase] 标准化后的工作区:', JSON.stringify(workspace))
+      return workspace
     }
 
+    console.log('[CloudBase] 未找到匹配的工作区')
     return null
   } catch (error) {
-    console.error('CloudBase getWorkspaceByInviteCode error:', error)
+    console.error('[CloudBase] getWorkspaceByInviteCode 错误:', error)
     return null
   }
 }
