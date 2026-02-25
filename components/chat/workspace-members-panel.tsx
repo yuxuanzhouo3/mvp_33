@@ -5,6 +5,17 @@ import { User, Workspace } from '@/lib/types'
 import { Search, Users, Loader2, Shield, Clock, Trash2, MessageSquare, Phone, Video, ShieldOff } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
+import { toast } from 'sonner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 // 待审批申请的类型定义
 interface JoinRequest {
@@ -64,6 +75,13 @@ export function WorkspaceMembersPanel({
   const [requests, setRequests] = useState<JoinRequest[]>([])
   const [isOperating, setIsOperating] = useState(false) // 操作中状态
   const [currentUserRole, setCurrentUserRole] = useState<MemberRole | null>(null) // 当前用户在工作区的角色
+
+  // 确认对话框状态
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean
+    type: 'remove' | 'setAdmin' | 'removeAdmin' | null
+    member: MemberWithRole | null
+  }>({ open: false, type: null, member: null })
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
   const isZh = language === 'zh'
@@ -147,12 +165,13 @@ export function WorkspaceMembersPanel({
         setSelectedId(null)
         // 刷新成员列表
         loadWorkspaceMembers()
+        toast.success(isZh ? '已批准加入申请' : 'Request approved')
       } else {
-        alert(data.error || (isZh ? '操作失败' : 'Operation failed'))
+        toast.error(data.error || (isZh ? '操作失败' : 'Operation failed'))
       }
     } catch (error) {
       console.error('Approve request error:', error)
-      alert(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
+      toast.error(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
     } finally {
       setIsOperating(false)
     }
@@ -174,12 +193,13 @@ export function WorkspaceMembersPanel({
         // 从列表中移除
         setRequests(prev => prev.filter(r => r.id !== request.id))
         setSelectedId(null)
+        toast.success(isZh ? '已拒绝申请' : 'Request rejected')
       } else {
-        alert(data.error || (isZh ? '操作失败' : 'Operation failed'))
+        toast.error(data.error || (isZh ? '操作失败' : 'Operation failed'))
       }
     } catch (error) {
       console.error('Reject request error:', error)
-      alert(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
+      toast.error(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
     } finally {
       setIsOperating(false)
     }
@@ -188,9 +208,14 @@ export function WorkspaceMembersPanel({
   // 移除成员
   const handleRemoveMember = async (member: MemberWithRole) => {
     if (isOperating) return
-    if (!confirm(isZh ? `确定要将 ${member.full_name || member.username} 从工作区移除吗？` : `Are you sure you want to remove ${member.full_name || member.username} from the workspace?`)) {
-      return
-    }
+    // 打开确认对话框
+    setConfirmDialog({ open: true, type: 'remove', member })
+  }
+
+  // 确认移除成员
+  const confirmRemoveMember = async () => {
+    const member = confirmDialog.member
+    if (!member) return
 
     try {
       setIsOperating(true)
@@ -203,23 +228,30 @@ export function WorkspaceMembersPanel({
         // 从列表中移除
         setMembers(prev => prev.filter(m => m.id !== member.id))
         setSelectedId(null)
+        toast.success(isZh ? '已移除成员' : 'Member removed')
       } else {
-        alert(data.error || (isZh ? '操作失败' : 'Operation failed'))
+        toast.error(data.error || (isZh ? '操作失败' : 'Operation failed'))
       }
     } catch (error) {
       console.error('Remove member error:', error)
-      alert(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
+      toast.error(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
     } finally {
       setIsOperating(false)
+      setConfirmDialog({ open: false, type: null, member: null })
     }
   }
 
   // 设为管理员
   const handleSetAdmin = async (member: MemberWithRole) => {
     if (isOperating) return
-    if (!confirm(isZh ? `确定要将 ${member.full_name || member.username} 设为管理员吗？` : `Are you sure you want to set ${member.full_name || member.username} as admin?`)) {
-      return
-    }
+    // 打开确认对话框
+    setConfirmDialog({ open: true, type: 'setAdmin', member })
+  }
+
+  // 确认设为管理员
+  const confirmSetAdmin = async () => {
+    const member = confirmDialog.member
+    if (!member) return
 
     try {
       setIsOperating(true)
@@ -236,24 +268,31 @@ export function WorkspaceMembersPanel({
         setMembers(prev => prev.map(m =>
           m.id === member.id ? { ...m, role: 'admin' as MemberRole } : m
         ))
+        toast.success(isZh ? '已设为管理员' : 'Admin role assigned')
         console.log('[WorkspaceMembersPanel] 设为管理员成功')
       } else {
-        alert(data.error || (isZh ? '操作失败' : 'Operation failed'))
+        toast.error(data.error || (isZh ? '操作失败' : 'Operation failed'))
       }
     } catch (error) {
       console.error('Set admin error:', error)
-      alert(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
+      toast.error(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
     } finally {
       setIsOperating(false)
+      setConfirmDialog({ open: false, type: null, member: null })
     }
   }
 
   // 取消管理员
   const handleRemoveAdmin = async (member: MemberWithRole) => {
     if (isOperating) return
-    if (!confirm(isZh ? `确定要取消 ${member.full_name || member.username} 的管理员身份吗？` : `Are you sure you want to remove ${member.full_name || member.username} from admin role?`)) {
-      return
-    }
+    // 打开确认对话框
+    setConfirmDialog({ open: true, type: 'removeAdmin', member })
+  }
+
+  // 确认取消管理员
+  const confirmRemoveAdmin = async () => {
+    const member = confirmDialog.member
+    if (!member) return
 
     try {
       setIsOperating(true)
@@ -270,15 +309,70 @@ export function WorkspaceMembersPanel({
         setMembers(prev => prev.map(m =>
           m.id === member.id ? { ...m, role: 'member' as MemberRole } : m
         ))
+        toast.success(isZh ? '已取消管理员' : 'Admin role removed')
         console.log('[WorkspaceMembersPanel] 取消管理员成功')
       } else {
-        alert(data.error || (isZh ? '操作失败' : 'Operation failed'))
+        toast.error(data.error || (isZh ? '操作失败' : 'Operation failed'))
       }
     } catch (error) {
       console.error('Remove admin error:', error)
-      alert(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
+      toast.error(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
     } finally {
       setIsOperating(false)
+      setConfirmDialog({ open: false, type: null, member: null })
+    }
+  }
+
+  // 执行确认操作
+  const handleConfirmAction = () => {
+    switch (confirmDialog.type) {
+      case 'remove':
+        confirmRemoveMember()
+        break
+      case 'setAdmin':
+        confirmSetAdmin()
+        break
+      case 'removeAdmin':
+        confirmRemoveAdmin()
+        break
+    }
+  }
+
+  // 获取确认对话框内容
+  const getConfirmDialogContent = () => {
+    const member = confirmDialog.member
+    const memberName = member?.full_name || member?.username || ''
+
+    switch (confirmDialog.type) {
+      case 'remove':
+        return {
+          title: isZh ? '移除成员' : 'Remove Member',
+          description: isZh
+            ? `确定要将 ${memberName} 从工作区移除吗？`
+            : `Are you sure you want to remove ${memberName} from the workspace?`,
+          confirmText: isZh ? '确认移除' : 'Remove',
+          variant: 'destructive' as const
+        }
+      case 'setAdmin':
+        return {
+          title: isZh ? '设为管理员' : 'Set as Admin',
+          description: isZh
+            ? `确定要将 ${memberName} 设为管理员吗？`
+            : `Are you sure you want to set ${memberName} as admin?`,
+          confirmText: isZh ? '确认' : 'Confirm',
+          variant: 'default' as const
+        }
+      case 'removeAdmin':
+        return {
+          title: isZh ? '取消管理员' : 'Remove Admin',
+          description: isZh
+            ? `确定要取消 ${memberName} 的管理员身份吗？`
+            : `Are you sure you want to remove ${memberName} from admin role?`,
+          confirmText: isZh ? '确认' : 'Confirm',
+          variant: 'default' as const
+        }
+      default:
+        return { title: '', description: '', confirmText: '', variant: 'default' as const }
     }
   }
 
@@ -525,7 +619,7 @@ export function WorkspaceMembersPanel({
                   <button
                     onClick={() => {
                       // TODO: 实现电话功能
-                      alert(isZh ? '电话功能即将推出！' : 'Call feature coming soon!')
+                      toast.info(isZh ? '电话功能即将推出！' : 'Call feature coming soon!')
                     }}
                     className="flex-1 flex items-center justify-center gap-2 py-3 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition"
                   >
@@ -535,7 +629,7 @@ export function WorkspaceMembersPanel({
                   <button
                     onClick={() => {
                       // TODO: 实现视频功能
-                      alert(isZh ? '视频功能即将推出！' : 'Video call feature coming soon!')
+                      toast.info(isZh ? '视频功能即将推出！' : 'Video call feature coming soon!')
                     }}
                     className="flex-1 flex items-center justify-center gap-2 py-3 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition"
                   >
@@ -621,6 +715,32 @@ export function WorkspaceMembersPanel({
           </div>
         )}
       </div>
+
+      {/* 确认对话框 */}
+      <AlertDialog open={confirmDialog.open} onOpenChange={(open) => {
+        if (!open) setConfirmDialog({ open: false, type: null, member: null })
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{getConfirmDialogContent().title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {getConfirmDialogContent().description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isOperating}>
+              {isZh ? '取消' : 'Cancel'}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmAction}
+              disabled={isOperating}
+              className={getConfirmDialogContent().variant === 'destructive' ? 'bg-red-600 hover:bg-red-700' : ''}
+            >
+              {isOperating ? (isZh ? '处理中...' : 'Processing...') : getConfirmDialogContent().confirmText}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
