@@ -1,0 +1,165 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getDatabaseClient } from '@/lib/database-router'
+
+/**
+ * 批准加入申请 API
+ * POST /api/workspace-join-requests/approve
+ * 需要 owner/admin 权限
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { requestId, workspaceId } = body
+
+    if (!requestId || !workspaceId) {
+      return NextResponse.json({ error: 'requestId and workspaceId are required' }, { status: 400 })
+    }
+
+    const dbClient = await getDatabaseClient()
+    const now = new Date().toISOString()
+
+    // CN version: use CloudBase
+    if (dbClient.type === 'cloudbase') {
+      const userId = request.headers.get('x-user-id')
+      if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
+      const { getCloudBaseDb } = await import('@/lib/cloudbase/client')
+      const db = getCloudBaseDb()
+      if (!db) {
+        return NextResponse.json({ error: 'Database not available' }, { status: 500 })
+      }
+
+      // 检查是否为工作区管理员
+      const adminCheck = await db
+        .collection('workspace_members')
+        .where({
+          workspace_id: workspaceId,
+          user_id: userId,
+          role: db.command.in(['owner', 'admin'])
+        })
+        .get()
+
+      if (!adminCheck.data || adminCheck.data.length === 0) {
+        return NextResponse.json({ error: 'Permission denied. Admin role required.' }, { status: 403 })
+      }
+
+      // 获取申请信息
+      const requestResult = await db
+        .collection('workspace_join_requests')
+        .doc(requestId)
+        .get()
+
+      if (!requestResult.data) {
+        return NextResponse.json({ error: 'Request not found' }, { status: 404 })
+      }
+
+      const joinRequest = requestResult.data
+
+      if (joinRequest.status !== 'pending') {
+        return NextResponse.json({ error: 'Request already processed' }, { status: 400 })
+      }
+
+      if (joinRequest.workspace_id !== workspaceId) {
+        return NextResponse.json({ error: 'Workspace mismatch' }, { status: 400 })
+      }
+
+      // 更新申请状态
+      await db
+        .collection('workspace_join_requests')
+        .doc(requestId)
+        .update({
+          status: 'approved',
+          reviewed_by: userId,
+          reviewed_at: now
+        })
+
+      // 添加成员到工作区
+      await db
+        .collection('workspace_members')
+        .add({
+          workspace_id: workspaceId,
+          user_id: joinRequest.user_id,
+          role: 'member',
+          joined_at: now
+        })
+
+      return NextResponse.json({ success: true, message: 'Request approved' })
+    }
+
+    // INTL version: use Supabase
+    const supabase = dbClient.supabase!
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // 检查是否为工作区管理员
+    const { data: memberCheck } = await supabase
+      .from('workspace_members')
+      .select('role')
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', user.id)
+      .single()
+
+    if (!memberCheck || !['owner', 'admin'].includes(memberCheck.role)) {
+      return NextResponse.json({ error: 'Permission denied. Admin role required.' }, { status: 403 })
+    }
+
+    // 获取申请信息
+    const { data: joinRequest, error: fetchError } = await supabase
+      .from('workspace_join_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single()
+
+    if (fetchError || !joinRequest) {
+      return NextResponse.json({ error: 'Request not found' }, { status: 404 })
+    }
+
+    if (joinRequest.status !== 'pending') {
+      return NextResponse.json({ error: 'Request already processed' }, { status: 400 })
+    }
+
+    if (joinRequest.workspace_id !== workspaceId) {
+      return NextResponse.json({ error: 'Workspace mismatch' }, { status: 400 })
+    }
+
+    // 更新申请状态
+    const { error: updateError } = await supabase
+      .from('workspace_join_requests')
+      .update({
+        status: 'approved',
+        reviewed_by: user.id,
+        reviewed_at: now
+      })
+      .eq('id', requestId)
+
+    if (updateError) {
+      console.error('Error updating request:', updateError)
+      return NextResponse.json({ error: 'Failed to update request' }, { status: 500 })
+    }
+
+    // 添加成员到工作区
+    const { error: insertError } = await supabase
+      .from('workspace_members')
+      .insert({
+        workspace_id: workspaceId,
+        user_id: joinRequest.user_id,
+        role: 'member',
+        joined_at: now
+      })
+
+    if (insertError) {
+      console.error('Error adding member:', insertError)
+      return NextResponse.json({ error: 'Failed to add member' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, message: 'Request approved' })
+  } catch (error: any) {
+    console.error('Approve request error:', error)
+    return NextResponse.json({ error: error.message || 'Failed to approve request' }, { status: 500 })
+  }
+}

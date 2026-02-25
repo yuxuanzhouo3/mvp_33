@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { User, Workspace } from '@/lib/types'
-import { Search, Users, Loader2, Shield, Clock, Trash2, MessageSquare, Phone, Video } from 'lucide-react'
+import { Search, Users, Loader2, Shield, Clock, Trash2, MessageSquare, Phone, Video, ShieldOff } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
 
 // 待审批申请的类型定义
 interface JoinRequest {
   id: string
+  user_id?: string
   name: string
   email: string
   reason: string
@@ -31,26 +32,6 @@ interface MemberWithRole extends User {
   role: MemberRole
   joinedAt: string
 }
-
-// Mock 待审批数据
-const mockJoinRequests: JoinRequest[] = [
-  {
-    id: 'req-1',
-    name: '张三',
-    email: 'zhangsan@example.com',
-    reason: '我是产品团队成员，需要加入工作区进行协作',
-    time: '10分钟前',
-    avatarColor: 'bg-blue-500'
-  },
-  {
-    id: 'req-2',
-    name: '李四',
-    email: 'lisi@example.com',
-    reason: '新入职员工，需要加入团队工作区',
-    time: '1小时前',
-    avatarColor: 'bg-green-500'
-  }
-]
 
 // 头像颜色映射
 const avatarColors = [
@@ -80,7 +61,9 @@ export function WorkspaceMembersPanel({
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'members' | 'pending'>('members')
-  const [requests, setRequests] = useState<JoinRequest[]>(mockJoinRequests)
+  const [requests, setRequests] = useState<JoinRequest[]>([])
+  const [isOperating, setIsOperating] = useState(false) // 操作中状态
+  const [currentUserRole, setCurrentUserRole] = useState<MemberRole | null>(null) // 当前用户在工作区的角色
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
   const isZh = language === 'zh'
@@ -88,6 +71,30 @@ export function WorkspaceMembersPanel({
   useEffect(() => {
     loadWorkspaceMembers()
   }, [workspaceId])
+
+  // 切换到待审批 tab 时加载数据
+  useEffect(() => {
+    if (activeTab === 'pending' && workspaceId) {
+      loadJoinRequests()
+    }
+  }, [activeTab, workspaceId])
+
+  const loadJoinRequests = async () => {
+    try {
+      const response = await fetch(`/api/workspace-join-requests?workspaceId=${workspaceId}`)
+      const data = await response.json()
+
+      if (data.success) {
+        setRequests(data.requests || [])
+      } else {
+        // 如果没有权限或出错，显示空列表
+        setRequests([])
+      }
+    } catch (error) {
+      console.error('Failed to load join requests:', error)
+      setRequests([])
+    }
+  }
 
   const loadWorkspaceMembers = async () => {
     try {
@@ -101,18 +108,177 @@ export function WorkspaceMembersPanel({
       const data = await response.json()
 
       if (data.success) {
-        // 添加 mock 角色和加入时间数据
-        const membersWithRoles: MemberWithRole[] = (data.members || []).map((member: User, index: number) => ({
+        // 使用真实角色数据
+        const membersWithRoles: MemberWithRole[] = (data.members || []).map((member: any) => ({
           ...member,
-          role: index === 0 ? 'owner' : (index <= 2 ? 'admin' : 'member') as MemberRole,
-          joinedAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toLocaleDateString('zh-CN')
+          role: (member.role || 'member') as MemberRole,
+          joinedAt: member.joined_at ? new Date(member.joined_at).toLocaleDateString('zh-CN') : '-'
         }))
         setMembers(membersWithRoles)
+
+        // 获取当前用户角色
+        if (data.currentUserRole) {
+          console.log('[WorkspaceMembersPanel] 当前用户角色:', data.currentUserRole)
+          setCurrentUserRole(data.currentUserRole as MemberRole)
+        }
       }
     } catch (error) {
       console.error('Failed to load workspace members:', error)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  // 批准申请
+  const handleApproveRequest = async (request: JoinRequest) => {
+    if (isOperating) return
+    try {
+      setIsOperating(true)
+      const response = await fetch('/api/workspace-join-requests/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: request.id, workspaceId })
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        // 从列表中移除
+        setRequests(prev => prev.filter(r => r.id !== request.id))
+        setSelectedId(null)
+        // 刷新成员列表
+        loadWorkspaceMembers()
+      } else {
+        alert(data.error || (isZh ? '操作失败' : 'Operation failed'))
+      }
+    } catch (error) {
+      console.error('Approve request error:', error)
+      alert(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
+    } finally {
+      setIsOperating(false)
+    }
+  }
+
+  // 拒绝申请
+  const handleRejectRequest = async (request: JoinRequest) => {
+    if (isOperating) return
+    try {
+      setIsOperating(true)
+      const response = await fetch('/api/workspace-join-requests/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: request.id, workspaceId })
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        // 从列表中移除
+        setRequests(prev => prev.filter(r => r.id !== request.id))
+        setSelectedId(null)
+      } else {
+        alert(data.error || (isZh ? '操作失败' : 'Operation failed'))
+      }
+    } catch (error) {
+      console.error('Reject request error:', error)
+      alert(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
+    } finally {
+      setIsOperating(false)
+    }
+  }
+
+  // 移除成员
+  const handleRemoveMember = async (member: MemberWithRole) => {
+    if (isOperating) return
+    if (!confirm(isZh ? `确定要将 ${member.full_name || member.username} 从工作区移除吗？` : `Are you sure you want to remove ${member.full_name || member.username} from the workspace?`)) {
+      return
+    }
+
+    try {
+      setIsOperating(true)
+      const response = await fetch(`/api/workspace-members?memberId=${member.id}&workspaceId=${workspaceId}`, {
+        method: 'DELETE'
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        // 从列表中移除
+        setMembers(prev => prev.filter(m => m.id !== member.id))
+        setSelectedId(null)
+      } else {
+        alert(data.error || (isZh ? '操作失败' : 'Operation failed'))
+      }
+    } catch (error) {
+      console.error('Remove member error:', error)
+      alert(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
+    } finally {
+      setIsOperating(false)
+    }
+  }
+
+  // 设为管理员
+  const handleSetAdmin = async (member: MemberWithRole) => {
+    if (isOperating) return
+    if (!confirm(isZh ? `确定要将 ${member.full_name || member.username} 设为管理员吗？` : `Are you sure you want to set ${member.full_name || member.username} as admin?`)) {
+      return
+    }
+
+    try {
+      setIsOperating(true)
+      console.log('[WorkspaceMembersPanel] 设为管理员:', { memberId: member.id, workspaceId })
+      const response = await fetch('/api/workspace-members', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceId, memberId: member.id, role: 'admin' })
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        // 更新本地状态
+        setMembers(prev => prev.map(m =>
+          m.id === member.id ? { ...m, role: 'admin' as MemberRole } : m
+        ))
+        console.log('[WorkspaceMembersPanel] 设为管理员成功')
+      } else {
+        alert(data.error || (isZh ? '操作失败' : 'Operation failed'))
+      }
+    } catch (error) {
+      console.error('Set admin error:', error)
+      alert(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
+    } finally {
+      setIsOperating(false)
+    }
+  }
+
+  // 取消管理员
+  const handleRemoveAdmin = async (member: MemberWithRole) => {
+    if (isOperating) return
+    if (!confirm(isZh ? `确定要取消 ${member.full_name || member.username} 的管理员身份吗？` : `Are you sure you want to remove ${member.full_name || member.username} from admin role?`)) {
+      return
+    }
+
+    try {
+      setIsOperating(true)
+      console.log('[WorkspaceMembersPanel] 取消管理员:', { memberId: member.id, workspaceId })
+      const response = await fetch('/api/workspace-members', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceId, memberId: member.id, role: 'member' })
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        // 更新本地状态
+        setMembers(prev => prev.map(m =>
+          m.id === member.id ? { ...m, role: 'member' as MemberRole } : m
+        ))
+        console.log('[WorkspaceMembersPanel] 取消管理员成功')
+      } else {
+        alert(data.error || (isZh ? '操作失败' : 'Operation failed'))
+      }
+    } catch (error) {
+      console.error('Remove admin error:', error)
+      alert(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
+    } finally {
+      setIsOperating(false)
     }
   }
 
@@ -151,6 +317,11 @@ export function WorkspaceMembersPanel({
     }
     return roleMap[role] || roleMap.member
   }
+
+  // 权限判断变量
+  const isCurrentUserOwner = currentUserRole === 'owner'
+  const isCurrentUserAdmin = currentUserRole === 'admin' || isCurrentUserOwner
+  console.log('[WorkspaceMembersPanel] 权限判断:', { currentUserRole, isCurrentUserOwner, isCurrentUserAdmin })
 
   const getStatusText = (status: string) => {
     const statusKey = status as 'online' | 'away' | 'busy' | 'offline'
@@ -374,44 +545,61 @@ export function WorkspaceMembersPanel({
                 </div>
               )}
 
-              <div className="flex gap-4 relative z-10">
+              <div className="flex flex-col gap-3 relative z-10">
                 {activeTab === 'members' && selectedMember ? (
-                  selectedMember.role !== 'owner' && (
-                    <button
-                      onClick={() => {
-                        // TODO: 实现移除成员逻辑
-                        console.log('Remove member:', selectedMember.id)
-                      }}
-                      className="flex-1 flex items-center justify-center gap-2 py-4 border-2 border-red-100 text-red-500 font-bold rounded-2xl hover:bg-red-50 transition"
-                    >
-                      <Trash2 size={18} />
-                      {isZh ? `从 ${workspaceName} 移除` : `Remove from ${workspaceName}`}
-                    </button>
-                  )
-                ) : selectedRequest ? (
                   <>
-                    <button
-                      onClick={() => {
-                        // TODO: 实现拒绝逻辑
-                        setRequests(requests.filter(r => r.id !== selectedRequest.id))
-                        setSelectedId(null)
-                      }}
-                      className="flex-1 py-4 border-2 border-gray-100 text-gray-400 font-bold rounded-2xl hover:bg-gray-50 transition"
-                    >
-                      {isZh ? '拒绝' : 'Reject'}
-                    </button>
-                    <button
-                      onClick={() => {
-                        // TODO: 实现批准逻辑
-                        console.log('Approve request:', selectedRequest.id)
-                        setRequests(requests.filter(r => r.id !== selectedRequest.id))
-                        setSelectedId(null)
-                      }}
-                      className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition"
-                    >
-                      {isZh ? '批准加入' : 'Approve'}
-                    </button>
+                    {/* 只有 owner 能设置/取消管理员 */}
+                    {isCurrentUserOwner && selectedMember.role === 'member' && (
+                      <button
+                        onClick={() => handleSetAdmin(selectedMember)}
+                        disabled={isOperating}
+                        className="flex items-center justify-center gap-2 py-3 border-2 border-blue-100 text-blue-600 font-bold rounded-2xl hover:bg-blue-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Shield size={18} />
+                        {isOperating ? (isZh ? '处理中...' : 'Processing...') : (isZh ? '设为管理员' : 'Set as Admin')}
+                      </button>
+                    )}
+
+                    {isCurrentUserOwner && selectedMember.role === 'admin' && (
+                      <button
+                        onClick={() => handleRemoveAdmin(selectedMember)}
+                        disabled={isOperating}
+                        className="flex items-center justify-center gap-2 py-3 border-2 border-gray-200 text-gray-600 font-bold rounded-2xl hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ShieldOff size={18} />
+                        {isOperating ? (isZh ? '处理中...' : 'Processing...') : (isZh ? '取消管理员' : 'Remove Admin')}
+                      </button>
+                    )}
+
+                    {/* 只有 owner 和 admin 能移除成员，且不能移除 owner */}
+                    {isCurrentUserAdmin && selectedMember.role !== 'owner' && (
+                      <button
+                        onClick={() => handleRemoveMember(selectedMember)}
+                        disabled={isOperating}
+                        className="flex items-center justify-center gap-2 py-3 border-2 border-red-100 text-red-500 font-bold rounded-2xl hover:bg-red-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 size={18} />
+                        {isOperating ? (isZh ? '处理中...' : 'Processing...') : (isZh ? `从 ${workspaceName} 移除` : `Remove from ${workspaceName}`)}
+                      </button>
+                    )}
                   </>
+                ) : selectedRequest ? (
+                  <div className="flex gap-4">
+                    <button
+                      onClick={() => handleRejectRequest(selectedRequest)}
+                      disabled={isOperating}
+                      className="flex-1 py-4 border-2 border-gray-100 text-gray-400 font-bold rounded-2xl hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isOperating ? (isZh ? '处理中...' : 'Processing...') : (isZh ? '拒绝' : 'Reject')}
+                    </button>
+                    <button
+                      onClick={() => handleApproveRequest(selectedRequest)}
+                      disabled={isOperating}
+                      className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isOperating ? (isZh ? '处理中...' : 'Processing...') : (isZh ? '批准加入' : 'Approve')}
+                    </button>
+                  </div>
                 ) : null}
               </div>
             </div>
