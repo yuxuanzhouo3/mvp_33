@@ -14,7 +14,13 @@ export async function GET(request: NextRequest) {
 
     // For China region, use CloudBase
     if (deploymentRegion === 'CN') {
-      const workspaces = await getWorkspaces()
+      const currentUser = await getCloudBaseUser(request)
+
+      if (!currentUser) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
+      const workspaces = await getWorkspaces(currentUser.id)
       return NextResponse.json({
         success: true,
         workspaces: workspaces || []
@@ -29,11 +35,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get workspaces where user is a member
-    const { data: workspaces, error } = await supabase
-      .from('workspaces')
-      .select('*')
-      .order('created_at', { ascending: false })
+    // Get workspaces where user is a member (through workspace_members table)
+    const { data: memberWorkspaces, error } = await supabase
+      .from('workspace_members')
+      .select(`
+        workspaces (
+          id,
+          name,
+          domain,
+          logo_url,
+          description,
+          owner_id,
+          invite_code,
+          created_at,
+          updated_at
+        )
+      `)
+      .eq('user_id', user.id)
 
     if (error) {
       console.error('Get workspaces error:', error)
@@ -42,6 +60,12 @@ export async function GET(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Extract workspace data from the join result
+    const workspaces = memberWorkspaces
+      ?.map((m: any) => m.workspaces)
+      .filter(Boolean)
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
     return NextResponse.json({
       success: true,
