@@ -9,18 +9,28 @@ import { v4 as uuidv4 } from 'uuid'
  * GET /api/workspaces
  */
 export async function GET(request: NextRequest) {
+  const requestId = Date.now().toString(36)
+  console.log(`\n[${requestId}] ========== GET /api/workspaces ==========`)
+  console.log(`[${requestId}] Timestamp:`, new Date().toISOString())
+
   try {
     const deploymentRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION
+    console.log(`[${requestId}] Deployment region:`, deploymentRegion)
 
     // For China region, use CloudBase
     if (deploymentRegion === 'CN') {
+      console.log(`[${requestId}] Using CloudBase (CN region)`)
       const currentUser = await getCloudBaseUser(request)
 
+      console.log(`[${requestId}] CloudBase user:`, currentUser ? { id: currentUser.id, email: currentUser.email } : null)
+
       if (!currentUser) {
+        console.log(`[${requestId}] ❌ Unauthorized - No CloudBase user`)
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
 
       const workspaces = await getWorkspaces(currentUser.id)
+      console.log(`[${requestId}] CloudBase workspaces result:`, workspaces?.length || 0, 'workspaces')
       return NextResponse.json({
         success: true,
         workspaces: workspaces || []
@@ -28,14 +38,26 @@ export async function GET(request: NextRequest) {
     }
 
     // For international region, use Supabase
+    console.log(`[${requestId}] Using Supabase (International region)`)
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+
+    console.log(`[${requestId}] Getting auth user...`)
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    console.log(`[${requestId}] Auth result:`, {
+      userId: user?.id || null,
+      userEmail: user?.email || null,
+      authError: authError ? authError.message : null
+    })
 
     if (!user) {
+      console.log(`[${requestId}] ❌ Unauthorized - No user found`)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Get workspaces where user is a member (through workspace_members table)
+    console.log(`[${requestId}] Querying workspace_members for user_id:`, user.id)
+
     const { data: memberWorkspaces, error } = await supabase
       .from('workspace_members')
       .select(`
@@ -44,19 +66,25 @@ export async function GET(request: NextRequest) {
           name,
           domain,
           logo_url,
-          description,
           owner_id,
           invite_code,
+          settings,
           created_at,
           updated_at
         )
       `)
       .eq('user_id', user.id)
 
+    console.log(`[${requestId}] Query result:`, {
+      rowCount: memberWorkspaces?.length || 0,
+      error: error ? { message: error.message, code: error.code, details: error.details } : null,
+      rawData: memberWorkspaces
+    })
+
     if (error) {
-      console.error('Get workspaces error:', error)
+      console.error(`[${requestId}] ❌ Get workspaces error:`, error)
       return NextResponse.json(
-        { error: 'Failed to get workspaces' },
+        { error: 'Failed to get workspaces', details: error.message },
         { status: 500 }
       )
     }
@@ -67,14 +95,19 @@ export async function GET(request: NextRequest) {
       .filter(Boolean)
       .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
+    console.log(`[${requestId}] ✅ Final result: ${workspaces?.length || 0} workspaces`)
+    console.log(`[${requestId}] Workspaces:`, workspaces?.map((w: any) => ({ id: w.id, name: w.name })))
+    console.log(`[${requestId}] ========== END ==========\n`)
+
     return NextResponse.json({
       success: true,
       workspaces: workspaces || []
     })
-  } catch (error) {
-    console.error('Get workspaces error:', error)
+  } catch (error: any) {
+    console.error(`[${requestId}] ❌ Unhandled error:`, error)
+    console.log(`[${requestId}] ========== END (ERROR) ==========\n`)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error?.message },
       { status: 500 }
     )
   }
