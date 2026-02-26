@@ -53,23 +53,36 @@ export function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) {
   }
 
   const handleJoin = async (workspaceId: string): Promise<{ success: boolean; error?: string }> => {
+    console.log('[WorkspaceSelector] ========== handleJoin 开始 ==========')
+    console.log('[WorkspaceSelector] 目标工作区ID:', workspaceId)
+
     try {
-      // 调用申请 API 而不是直接加入
+      console.log('[WorkspaceSelector] 准备发送 POST 请求到 /api/workspace-join-requests')
+
       const response = await fetch('/api/workspace-join-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspaceId }),
       })
+
+      console.log('[WorkspaceSelector] 响应状态:', response.status, response.statusText)
+      console.log('[WorkspaceSelector] 响应头:', JSON.stringify(Object.fromEntries(response.headers.entries())))
+
       const data = await response.json()
+      console.log('[WorkspaceSelector] 响应数据:', JSON.stringify(data, null, 2))
 
       if (data.success) {
+        console.log('[WorkspaceSelector] 申请成功!')
         // 申请已发送，不刷新工作区列表（因为用户还未加入）
         // 返回成功，让对话框显示"申请已发送"
         return { success: true }
       } else {
+        console.log('[WorkspaceSelector] 申请失败:', data.error)
         return { success: false, error: data.error || 'Failed to submit request' }
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('[WorkspaceSelector] 请求异常:', error)
+      console.error('[WorkspaceSelector] 异常堆栈:', error.stack)
       return { success: false, error: 'Failed to submit join request' }
     }
   }

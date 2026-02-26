@@ -89,6 +89,11 @@ function WorkspaceMembersPageContent() {
     }
   }, [currentUser, currentWorkspace, router])
 
+  // 处理工作区切换
+  const handleWorkspaceChange = useCallback((newWorkspace: Workspace) => {
+    setCurrentWorkspace(newWorkspace)
+  }, [])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -104,6 +109,7 @@ function WorkspaceMembersPageContent() {
           workspace={currentWorkspace!}
           currentUser={currentUser!}
           totalUnreadCount={totalUnreadCount}
+          onWorkspaceChange={handleWorkspaceChange}
         />
         <div className="flex flex-1 overflow-hidden relative">
           {/* 左侧导航栏（仅桌面端显示） */}

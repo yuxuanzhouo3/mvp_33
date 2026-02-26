@@ -42,17 +42,31 @@ export function JoinWorkspaceDialog({ open, onOpenChange, onJoin }: JoinWorkspac
     setFoundWorkspace(null)
     setIsSelected(false)
 
+    const searchCode = inviteCode.trim()
+    console.log('[JoinDialog] ========== 开始搜索工作区 ==========')
+    console.log('[JoinDialog] 输入的邀请码:', JSON.stringify(searchCode))
+    console.log('[JoinDialog] 邀请码长度:', searchCode.length)
+
     try {
-      const response = await fetch(`/api/workspaces/lookup?code=${encodeURIComponent(inviteCode.trim())}`)
+      const url = `/api/workspaces/lookup?code=${encodeURIComponent(searchCode)}`
+      console.log('[JoinDialog] 请求URL:', url)
+
+      const response = await fetch(url)
+      console.log('[JoinDialog] 响应状态:', response.status, response.statusText)
+
       const data = await response.json()
+      console.log('[JoinDialog] 响应数据:', JSON.stringify(data, null, 2))
 
       if (!response.ok) {
+        console.log('[JoinDialog] 搜索失败:', data.error)
         setError(data.error || (language === 'zh' ? '未找到工作区' : 'Workspace not found'))
         return
       }
 
+      console.log('[JoinDialog] 成功找到工作区:', JSON.stringify(data.workspace))
       setFoundWorkspace(data.workspace)
-    } catch (err) {
+    } catch (err: any) {
+      console.error('[JoinDialog] 搜索异常:', err)
       setError(language === 'zh' ? '搜索失败' : 'Search failed')
     } finally {
       setIsSearching(false)
@@ -65,15 +79,24 @@ export function JoinWorkspaceDialog({ open, onOpenChange, onJoin }: JoinWorkspac
     setIsLoading(true)
     setError('')
 
+    console.log('[JoinDialog] ========== 开始申请加入工作区 ==========')
+    console.log('[JoinDialog] 目标工作区ID:', foundWorkspace.id)
+    console.log('[JoinDialog] 目标工作区名称:', foundWorkspace.name)
+
     try {
       const result = await onJoin(foundWorkspace.id)
+      console.log('[JoinDialog] onJoin 返回结果:', JSON.stringify(result))
+
       if (result.success) {
+        console.log('[JoinDialog] 申请成功!')
         setIsSuccess(true) // 显示成功状态
         // 不再立即关闭对话框，让用户看到成功消息
       } else {
+        console.log('[JoinDialog] 申请失败:', result.error)
         setError(result.error || 'Failed to submit join request')
       }
-    } catch (err) {
+    } catch (err: any) {
+      console.error('[JoinDialog] 申请异常:', err)
       setError('Failed to submit join request')
     } finally {
       setIsLoading(false)

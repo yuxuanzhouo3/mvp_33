@@ -5,7 +5,7 @@
  * 系统助手服务 - 类似飞书的系统助手，用于发送申请状态通知
  */
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
 import { getCloudBaseDb } from '@/lib/cloudbase/client'
 
 // System Assistant IDs
@@ -17,6 +17,23 @@ export const SYSTEM_ASSISTANT_ID_INTL = '00000000-0000-0000-0000-000000000001'
  */
 export function getSystemAssistantId(isCN: boolean): string {
   return isCN ? SYSTEM_ASSISTANT_ID_CN : SYSTEM_ASSISTANT_ID_INTL
+}
+
+/**
+ * Get Supabase Service Role client (bypasses RLS)
+ * 获取 Supabase Service Role 客户端（绕过 RLS）
+ */
+function getSupabaseServiceRoleClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  )
 }
 
 /**
@@ -117,12 +134,14 @@ async function getOrCreateSystemAssistantConversationCN(
 
 /**
  * Supabase version - get or create system assistant conversation
+ * Uses Service Role client to bypass RLS
  */
 async function getOrCreateSystemAssistantConversationIntl(
   userId: string,
   systemAssistantId: string
 ): Promise<string> {
-  const supabase = await createClient()
+  // Use Service Role client to bypass RLS
+  const supabase = getSupabaseServiceRoleClient()
 
   // 1. Find existing direct conversation with system assistant
   // First get user's conversations that include system assistant
@@ -274,6 +293,7 @@ async function sendSystemAssistantMessageCN(
 
 /**
  * Supabase version - send system assistant message
+ * Uses Service Role client to bypass RLS
  */
 async function sendSystemAssistantMessageIntl(
   conversationId: string,
@@ -282,7 +302,8 @@ async function sendSystemAssistantMessageIntl(
   metadata: any,
   timestamp: string
 ): Promise<void> {
-  const supabase = await createClient()
+  // Use Service Role client to bypass RLS
+  const supabase = getSupabaseServiceRoleClient()
 
   // Add message
   const { error: msgError } = await supabase.from('messages').insert({

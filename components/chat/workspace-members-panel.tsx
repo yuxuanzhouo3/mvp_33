@@ -61,6 +61,17 @@ const getAvatarColor = (name: string) => {
   return avatarColors[index]
 }
 
+// 角色排序权重：owner 最前，admin 其次，member 再次，guest 最后
+const getRoleWeight = (role: MemberRole): number => {
+  const roleWeights: Record<MemberRole, number> = {
+    owner: 0,
+    admin: 1,
+    member: 2,
+    guest: 3
+  }
+  return roleWeights[role] ?? 4
+}
+
 export function WorkspaceMembersPanel({
   currentUser,
   workspaceId,
@@ -99,17 +110,23 @@ export function WorkspaceMembersPanel({
 
   const loadJoinRequests = async () => {
     try {
+      console.log('[WorkspaceMembersPanel] Loading join requests for workspace:', workspaceId)
       const response = await fetch(`/api/workspace-join-requests?workspaceId=${workspaceId}`)
       const data = await response.json()
+
+      console.log('[WorkspaceMembersPanel] Join requests response:', data)
 
       if (data.success) {
         setRequests(data.requests || [])
       } else {
-        // 如果没有权限或出错，显示空列表
+        // 显示错误给用户，而不是静默处理
+        console.error('[WorkspaceMembersPanel] Failed to load join requests:', data.error)
+        toast.error(data.error || (isZh ? '加载待审批申请失败' : 'Failed to load requests'))
         setRequests([])
       }
     } catch (error) {
-      console.error('Failed to load join requests:', error)
+      console.error('[WorkspaceMembersPanel] Failed to load join requests:', error)
+      toast.error(isZh ? '加载待审批申请失败，请重试' : 'Failed to load join requests')
       setRequests([])
     }
   }
@@ -385,7 +402,7 @@ export function WorkspaceMembersPanel({
       member.email?.toLowerCase().includes(query) ||
       member.title?.toLowerCase().includes(query)
     )
-  })
+  }).sort((a, b) => getRoleWeight(a.role) - getRoleWeight(b.role)) // 按角色排序：owner > admin > member > guest
 
   const filteredRequests = requests.filter(request => {
     if (!searchQuery) return true

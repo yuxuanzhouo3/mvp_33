@@ -30,9 +30,10 @@ interface WorkspaceHeaderProps {
   workspace: Workspace
   currentUser: User
   totalUnreadCount?: number
+  onWorkspaceChange?: (workspace: Workspace) => void
 }
 
-export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, totalUnreadCount: propTotalUnreadCount = 0 }: WorkspaceHeaderProps) {
+export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, totalUnreadCount: propTotalUnreadCount = 0, onWorkspaceChange }: WorkspaceHeaderProps) {
   const router = useRouter()
   const pathname = usePathname()
   const { t: tSettings } = useSettings()
@@ -235,6 +236,8 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
     setWorkspace(ws)
     mockAuth.setCurrentWorkspace(ws)
     setShowWorkspaceMenu(false)
+    // 通知父组件工作区已切换
+    onWorkspaceChange?.(ws)
   }
 
   const handleJoinWorkspace = async (e: React.FormEvent) => {
