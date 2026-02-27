@@ -7965,6 +7965,7 @@ function ChatPageContent() {
               <GlobalAnnouncement
                 isOpen={activeChannel === 'announcement'}
                 onClose={() => setActiveChannel('none')}
+                workspaceId={currentWorkspace?.id || ''}
               />
             )
           ) : showChatInterface && displayConversation ? (
