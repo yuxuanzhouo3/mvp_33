@@ -166,15 +166,23 @@ export function WorkspaceMembersPanel({
 
   // 批准申请
   const handleApproveRequest = async (request: JoinRequest) => {
-    if (isOperating) return
+    if (isOperating) {
+      console.log('[WorkspaceMembersPanel] 操作进行中，跳过')
+      return
+    }
     try {
       setIsOperating(true)
+      console.log('[WorkspaceMembersPanel] 开始批准申请:', { requestId: request.id, workspaceId })
+
       const response = await fetch('/api/workspace-join-requests/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestId: request.id, workspaceId })
       })
+
+      console.log('[WorkspaceMembersPanel] API 响应状态:', response.status)
       const data = await response.json()
+      console.log('[WorkspaceMembersPanel] API 响应数据:', data)
 
       if (data.success) {
         // 从列表中移除
@@ -186,10 +194,11 @@ export function WorkspaceMembersPanel({
         // 通知导航栏更新红点
         window.dispatchEvent(new Event('pendingRequestsUpdated'))
       } else {
+        console.error('[WorkspaceMembersPanel] 批准失败:', data.error)
         toast.error(data.error || (isZh ? '操作失败' : 'Operation failed'))
       }
     } catch (error) {
-      console.error('Approve request error:', error)
+      console.error('[WorkspaceMembersPanel] 批准请求异常:', error)
       toast.error(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
     } finally {
       setIsOperating(false)
@@ -198,15 +207,23 @@ export function WorkspaceMembersPanel({
 
   // 拒绝申请
   const handleRejectRequest = async (request: JoinRequest) => {
-    if (isOperating) return
+    if (isOperating) {
+      console.log('[WorkspaceMembersPanel] 操作进行中，跳过')
+      return
+    }
     try {
       setIsOperating(true)
+      console.log('[WorkspaceMembersPanel] 开始拒绝申请:', { requestId: request.id, workspaceId })
+
       const response = await fetch('/api/workspace-join-requests/reject', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestId: request.id, workspaceId })
       })
+
+      console.log('[WorkspaceMembersPanel] API 响应状态:', response.status)
       const data = await response.json()
+      console.log('[WorkspaceMembersPanel] API 响应数据:', data)
 
       if (data.success) {
         // 从列表中移除
@@ -216,10 +233,11 @@ export function WorkspaceMembersPanel({
         // 通知导航栏更新红点
         window.dispatchEvent(new Event('pendingRequestsUpdated'))
       } else {
+        console.error('[WorkspaceMembersPanel] 拒绝失败:', data.error)
         toast.error(data.error || (isZh ? '操作失败' : 'Operation failed'))
       }
     } catch (error) {
-      console.error('Reject request error:', error)
+      console.error('[WorkspaceMembersPanel] 拒绝请求异常:', error)
       toast.error(isZh ? '操作失败，请重试' : 'Operation failed, please try again')
     } finally {
       setIsOperating(false)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -28,7 +28,7 @@ const navItems: NavItem[] = [
   {
     href: '/workspace-members',
     icon: Building2,
-    label: '工作区成员',
+    label: '工作区',
   },
   {
     href: '/channels',
@@ -51,25 +51,34 @@ export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0)
 
   // 获取待审批申请数量
-  const fetchPendingRequestsCount = async () => {
+  const fetchPendingRequestsCount = useCallback(async () => {
     try {
       // 从 localStorage 获取当前工作区
       const workspaceStr = localStorage.getItem('chat_app_current_workspace')
-      if (!workspaceStr) return
+      if (!workspaceStr) {
+        setPendingRequestsCount(0)
+        return
+      }
 
       const workspace = JSON.parse(workspaceStr)
-      if (!workspace?.id) return
+      if (!workspace?.id) {
+        setPendingRequestsCount(0)
+        return
+      }
 
       const response = await fetch(`/api/workspace-join-requests?workspaceId=${workspace.id}`)
       const data = await response.json()
 
       if (data.success && data.requests) {
         setPendingRequestsCount(data.requests.length)
+      } else {
+        setPendingRequestsCount(0)
       }
     } catch (error) {
       console.error('[AppNavigation] Failed to fetch pending requests:', error)
+      setPendingRequestsCount(0)
     }
-  }
+  }, [])
 
   // 初始化和定时刷新
   useEffect(() => {
@@ -79,14 +88,17 @@ export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
     const interval = setInterval(fetchPendingRequestsCount, 30000)
 
     // 监听自定义事件，当有新申请或审批操作时刷新
-    const handleRefresh = () => fetchPendingRequestsCount()
+    const handleRefresh = () => {
+      // 添加小延迟确保数据库已更新
+      setTimeout(fetchPendingRequestsCount, 100)
+    }
     window.addEventListener('pendingRequestsUpdated', handleRefresh)
 
     return () => {
       clearInterval(interval)
       window.removeEventListener('pendingRequestsUpdated', handleRefresh)
     }
-  }, [])
+  }, [fetchPendingRequestsCount])
 
   const isActive = (href: string) => {
     return pathname === href || pathname?.startsWith(href + '/')

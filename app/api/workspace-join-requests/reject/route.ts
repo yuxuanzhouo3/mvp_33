@@ -7,31 +7,50 @@ import { getDatabaseClient } from '@/lib/database-router'
  * 需要 owner/admin 权限
  */
 export async function POST(request: NextRequest) {
+  console.log('[Reject API] ===== 开始处理拒绝请求 =====')
+
   try {
     const body = await request.json()
     const { requestId, workspaceId } = body
 
+    console.log('[Reject API] 请求参数:', { requestId, workspaceId })
+
     if (!requestId || !workspaceId) {
-      return NextResponse.json({ error: 'requestId and workspaceId are required' }, { status: 400 })
+      console.log('[Reject API] 错误: 缺少必要参数')
+      return NextResponse.json({ success: false, error: 'requestId and workspaceId are required' }, { status: 400 })
     }
 
     const dbClient = await getDatabaseClient()
     const now = new Date().toISOString()
 
+    console.log('[Reject API] 数据库类型:', dbClient.type, '区域:', dbClient.region)
+
     // CN version: use CloudBase
     if (dbClient.type === 'cloudbase') {
-      const userId = request.headers.get('x-user-id')
-      if (!userId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      console.log('[Reject API] 使用 CloudBase 认证')
+
+      // 使用 verifyCloudBaseSession 从 session 获取用户身份
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const currentUser = await verifyCloudBaseSession(request)
+
+      console.log('[Reject API] CloudBase 用户认证结果:', currentUser ? `用户ID: ${currentUser.id}` : '未认证')
+
+      if (!currentUser) {
+        console.log('[Reject API] 错误: 用户未授权 - CloudBase session 验证失败')
+        return NextResponse.json({ success: false, error: 'Unauthorized - Please login again' }, { status: 401 })
       }
+
+      const userId = currentUser.id
 
       const { getCloudBaseDb } = await import('@/lib/cloudbase/client')
       const db = getCloudBaseDb()
       if (!db) {
-        return NextResponse.json({ error: 'Database not available' }, { status: 500 })
+        console.log('[Reject API] 错误: 数据库不可用')
+        return NextResponse.json({ success: false, error: 'Database not available' }, { status: 500 })
       }
 
       // 检查是否为工作区管理员
+      console.log('[Reject API] 检查管理员权限, userId:', userId, 'workspaceId:', workspaceId)
       const adminCheck = await db
         .collection('workspace_members')
         .where({
@@ -41,31 +60,41 @@ export async function POST(request: NextRequest) {
         })
         .get()
 
+      console.log('[Reject API] 管理员检查结果:', adminCheck.data)
+
       if (!adminCheck.data || adminCheck.data.length === 0) {
-        return NextResponse.json({ error: 'Permission denied. Admin role required.' }, { status: 403 })
+        console.log('[Reject API] 错误: 权限不足，需要管理员权限')
+        return NextResponse.json({ success: false, error: 'Permission denied. Admin role required.' }, { status: 403 })
       }
 
       // 获取申请信息
+      console.log('[Reject API] 获取申请信息, requestId:', requestId)
       const requestResult = await db
         .collection('workspace_join_requests')
         .doc(requestId)
         .get()
 
+      console.log('[Reject API] 申请信息:', requestResult.data)
+
       if (!requestResult.data) {
-        return NextResponse.json({ error: 'Request not found' }, { status: 404 })
+        console.log('[Reject API] 错误: 申请不存在')
+        return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 })
       }
 
       const joinRequest = requestResult.data
 
       if (joinRequest.status !== 'pending') {
-        return NextResponse.json({ error: 'Request already processed' }, { status: 400 })
+        console.log('[Reject API] 错误: 申请已处理, 当前状态:', joinRequest.status)
+        return NextResponse.json({ success: false, error: 'Request already processed' }, { status: 400 })
       }
 
       if (joinRequest.workspace_id !== workspaceId) {
-        return NextResponse.json({ error: 'Workspace mismatch' }, { status: 400 })
+        console.log('[Reject API] 错误: 工作区不匹配')
+        return NextResponse.json({ success: false, error: 'Workspace mismatch' }, { status: 400 })
       }
 
       // 更新申请状态
+      console.log('[Reject API] 更新申请状态为 rejected')
       await db
         .collection('workspace_join_requests')
         .doc(requestId)
@@ -74,6 +103,8 @@ export async function POST(request: NextRequest) {
           reviewed_by: userId,
           reviewed_at: now
         })
+
+      console.log('[Reject API] 拒绝操作成功完成')
 
       // 获取工作区信息用于通知
       const workspaceRes = await db.collection('workspaces').doc(workspaceId).get()
