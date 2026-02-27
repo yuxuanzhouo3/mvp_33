@@ -183,6 +183,8 @@ export function WorkspaceMembersPanel({
         // 刷新成员列表
         loadWorkspaceMembers()
         toast.success(isZh ? '已批准加入申请' : 'Request approved')
+        // 通知导航栏更新红点
+        window.dispatchEvent(new Event('pendingRequestsUpdated'))
       } else {
         toast.error(data.error || (isZh ? '操作失败' : 'Operation failed'))
       }
@@ -211,6 +213,8 @@ export function WorkspaceMembersPanel({
         setRequests(prev => prev.filter(r => r.id !== request.id))
         setSelectedId(null)
         toast.success(isZh ? '已拒绝申请' : 'Request rejected')
+        // 通知导航栏更新红点
+        window.dispatchEvent(new Event('pendingRequestsUpdated'))
       } else {
         toast.error(data.error || (isZh ? '操作失败' : 'Operation failed'))
       }
@@ -479,8 +483,8 @@ export function WorkspaceMembersPanel({
             >
               {isZh ? '待审批' : 'Pending'}
               {requests.length > 0 && (
-                <span className="ml-2 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full uppercase font-bold tracking-tighter">
-                  {isZh ? '新' : 'New'}
+                <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-red-500 text-[10px] leading-none text-white px-1.5 py-0.5 font-bold">
+                  {requests.length}
                 </span>
               )}
             </button>

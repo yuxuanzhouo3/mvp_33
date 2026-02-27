@@ -7715,7 +7715,15 @@ function ChatPageContent() {
 
   const displayConversation = selectedConversation || tempConversation
 
-  
+  // Check if this is a system assistant conversation (用户不能回复系统通知)
+  const isSystemAssistantConversation = (() => {
+    if (!displayConversation || displayConversation.type !== 'direct') return false
+    const systemAssistantIds = ['system-assistant', '00000000-0000-0000-0000-000000000001']
+    return displayConversation.members?.some(
+      (m: any) => systemAssistantIds.includes(m.id || m) || systemAssistantIds.includes(m.user_id)
+    ) || false
+  })()
+
 
   // If conversation is selected but not in list, we still want to show the chat interface
 
@@ -8001,7 +8009,10 @@ function ChatPageContent() {
 
                   />
 
-                  <MessageInput onSendMessage={handleSendMessage} />
+                  {/* 系统助手会话不显示输入框 - 只能接收通知，不能回复 */}
+                  {!isSystemAssistantConversation && (
+                    <MessageInput onSendMessage={handleSendMessage} />
+                  )}
                 </>
               )}
 

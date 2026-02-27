@@ -64,6 +64,59 @@ import { CodeBlock } from './code-block'
 import { useToast } from '@/components/ui/use-toast'
 import { MessageSkeleton } from './message-skeleton'
 
+/**
+ * 飞书风格系统通知卡片组件
+ * 居中显示，灰色背景，简洁的卡片式设计
+ */
+function SystemNotificationCard({ message, language }: { message: MessageWithSender; language: string }) {
+  const metadata = (message.metadata || {}) as any
+  const notificationType = metadata.type
+  const workspaceName = metadata.workspace_name || 'Unknown Workspace'
+
+  const getNotificationStyle = () => {
+    switch (notificationType) {
+      case 'join_request':
+        return {
+          icon: Clock,
+          iconColor: 'text-blue-500',
+        }
+      case 'join_approved':
+        return {
+          icon: CheckCircle,
+          iconColor: 'text-green-500',
+        }
+      case 'join_rejected':
+        return {
+          icon: XCircle,
+          iconColor: 'text-red-500',
+        }
+      default:
+        return {
+          icon: Bell,
+          iconColor: 'text-gray-500',
+        }
+    }
+  }
+
+  const style = getNotificationStyle()
+  const IconComponent = style.icon
+
+  return (
+    <div className="inline-flex flex-col items-center px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800/60 max-w-[90%] sm:max-w-md">
+      <div className="flex items-center gap-2">
+        <IconComponent className={cn('h-4 w-4', style.iconColor)} />
+        <span className="text-sm text-gray-600 dark:text-gray-300 text-center">
+          {message.content}
+        </span>
+      </div>
+      {workspaceName && (
+        <span className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+          {language === 'zh' ? '工作区' : 'Workspace'}: {workspaceName}
+        </span>
+      )}
+    </div>
+  )
+}
 
 
 interface MessageListProps {
@@ -949,6 +1002,14 @@ export function MessageList({
                       {isOwn ? '你撤回了一条消息' : `${getDisplayName(displaySender) || '对方'}撤回了一条消息`}
                     </span>
                   </div>
+                ) : message.type === 'system' && (message.metadata as any)?.type && ['join_request', 'join_approved', 'join_rejected'].includes((message.metadata as any)?.type) ? (
+                  /* 飞书风格系统通知 - 居中显示，灰色卡片样式 */
+                  <div className="flex justify-center my-3">
+                    <SystemNotificationCard
+                      message={message}
+                      language={language}
+                    />
+                  </div>
                 ) : (
 
                 <div
@@ -1353,71 +1414,6 @@ export function MessageList({
                             ) : callStatus === 'calling' ? (
                               <div className="text-xs text-muted-foreground">Calling...</div>
                             ) : null}
-                          </div>
-                        )
-                      })()}
-
-                      {/* System assistant messages - join request notifications */}
-                      {message.type === 'system' && (message.metadata as any)?.type && ['join_request', 'join_approved', 'join_rejected'].includes((message.metadata as any)?.type) && (() => {
-                        const metadata = (message.metadata || {}) as any
-                        const notificationType = metadata.type
-                        const workspaceName = metadata.workspace_name || 'Unknown Workspace'
-
-                        const getNotificationStyle = () => {
-                          switch (notificationType) {
-                            case 'join_request':
-                              return {
-                                icon: Clock,
-                                bgColor: 'bg-blue-50 dark:bg-blue-950/30',
-                                iconColor: 'text-blue-500',
-                                borderColor: 'border-blue-200 dark:border-blue-800'
-                              }
-                            case 'join_approved':
-                              return {
-                                icon: CheckCircle,
-                                bgColor: 'bg-green-50 dark:bg-green-950/30',
-                                iconColor: 'text-green-500',
-                                borderColor: 'border-green-200 dark:border-green-800'
-                              }
-                            case 'join_rejected':
-                              return {
-                                icon: XCircle,
-                                bgColor: 'bg-red-50 dark:bg-red-950/30',
-                                iconColor: 'text-red-500',
-                                borderColor: 'border-red-200 dark:border-red-800'
-                              }
-                            default:
-                              return {
-                                icon: Bell,
-                                bgColor: 'bg-muted/50',
-                                iconColor: 'text-muted-foreground',
-                                borderColor: 'border-muted'
-                              }
-                          }
-                        }
-
-                        const style = getNotificationStyle()
-                        const IconComponent = style.icon
-
-                        return (
-                          <div className={cn(
-                            'flex items-start gap-3 p-3 rounded-lg border',
-                            style.bgColor,
-                            style.borderColor
-                          )}>
-                            <div className={cn('mt-0.5', style.iconColor)}>
-                              <IconComponent className="h-5 w-5" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-foreground">
-                                {message.content}
-                              </p>
-                              {workspaceName && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {language === 'zh' ? '工作区' : 'Workspace'}: {workspaceName}
-                                </p>
-                              )}
-                            </div>
                           </div>
                         )
                       })()}

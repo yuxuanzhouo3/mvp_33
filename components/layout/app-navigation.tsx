@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -47,6 +48,45 @@ interface AppNavigationProps {
 
 export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
   const pathname = usePathname()
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0)
+
+  // 获取待审批申请数量
+  const fetchPendingRequestsCount = async () => {
+    try {
+      // 从 localStorage 获取当前工作区
+      const workspaceStr = localStorage.getItem('chat_app_current_workspace')
+      if (!workspaceStr) return
+
+      const workspace = JSON.parse(workspaceStr)
+      if (!workspace?.id) return
+
+      const response = await fetch(`/api/workspace-join-requests?workspaceId=${workspace.id}`)
+      const data = await response.json()
+
+      if (data.success && data.requests) {
+        setPendingRequestsCount(data.requests.length)
+      }
+    } catch (error) {
+      console.error('[AppNavigation] Failed to fetch pending requests:', error)
+    }
+  }
+
+  // 初始化和定时刷新
+  useEffect(() => {
+    fetchPendingRequestsCount()
+
+    // 每 30 秒刷新一次
+    const interval = setInterval(fetchPendingRequestsCount, 30000)
+
+    // 监听自定义事件，当有新申请或审批操作时刷新
+    const handleRefresh = () => fetchPendingRequestsCount()
+    window.addEventListener('pendingRequestsUpdated', handleRefresh)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('pendingRequestsUpdated', handleRefresh)
+    }
+  }, [])
 
   const isActive = (href: string) => {
     return pathname === href || pathname?.startsWith(href + '/')
@@ -57,7 +97,8 @@ export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
       {navItems.map((item) => {
         const Icon = item.icon
         const active = isActive(item.href)
-        const showBadge = item.href === '/chat' && totalUnreadCount > 0
+        const showChatBadge = item.href === '/chat' && totalUnreadCount > 0
+        const showPendingBadge = item.href === '/workspace-members' && pendingRequestsCount > 0
 
         return (
           <Link key={item.href} href={item.href} className="w-full">
@@ -70,12 +111,20 @@ export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
             >
               <Icon className="h-5 w-5 shrink-0" />
               <span className="text-sm font-medium">{item.label}</span>
-              {showBadge && (
+              {showChatBadge && (
                 <Badge
                   variant="destructive"
                   className="absolute right-2 h-5 px-2 flex items-center justify-center text-xs font-medium"
                 >
                   {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
+                </Badge>
+              )}
+              {showPendingBadge && (
+                <Badge
+                  variant="destructive"
+                  className="absolute right-2 h-5 w-5 flex items-center justify-center p-0 text-xs font-medium"
+                >
+                  {pendingRequestsCount > 99 ? '99+' : pendingRequestsCount}
                 </Badge>
               )}
             </Button>
