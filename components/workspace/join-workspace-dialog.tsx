@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { UserPlus, Loader2, AlertCircle, Search, ArrowRight, Check, Building2, CheckCircle } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
@@ -19,11 +20,12 @@ interface Workspace {
 interface JoinWorkspaceDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onJoin: (workspaceId: string) => Promise<{ success: boolean; error?: string }>
+  onJoin: (workspaceId: string, reason?: string) => Promise<{ success: boolean; error?: string }>
 }
 
 export function JoinWorkspaceDialog({ open, onOpenChange, onJoin }: JoinWorkspaceDialogProps) {
   const [inviteCode, setInviteCode] = useState('')
+  const [reason, setReason] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
   const [error, setError] = useState('')
@@ -82,9 +84,10 @@ export function JoinWorkspaceDialog({ open, onOpenChange, onJoin }: JoinWorkspac
     console.log('[JoinDialog] ========== 开始申请加入工作区 ==========')
     console.log('[JoinDialog] 目标工作区ID:', foundWorkspace.id)
     console.log('[JoinDialog] 目标工作区名称:', foundWorkspace.name)
+    console.log('[JoinDialog] 申请原因:', reason)
 
     try {
-      const result = await onJoin(foundWorkspace.id)
+      const result = await onJoin(foundWorkspace.id, reason.trim() || undefined)
       console.log('[JoinDialog] onJoin 返回结果:', JSON.stringify(result))
 
       if (result.success) {
@@ -105,6 +108,7 @@ export function JoinWorkspaceDialog({ open, onOpenChange, onJoin }: JoinWorkspac
 
   const handleReset = () => {
     setInviteCode('')
+    setReason('')
     setError('')
     setFoundWorkspace(null)
     setIsSelected(false)
@@ -255,6 +259,24 @@ export function JoinWorkspaceDialog({ open, onOpenChange, onJoin }: JoinWorkspac
                       : (language === 'zh' ? '点击选择此工作区' : 'Click to select this workspace')
                     }
                   </div>
+                </div>
+              )}
+
+              {/* 申请原因输入框 - 仅在选中工作区后显示 */}
+              {foundWorkspace && isSelected && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">
+                    {t('joinReason')}
+                  </label>
+                  <Textarea
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder={t('joinReasonPlaceholder')}
+                    className="resize-none"
+                    rows={3}
+                    maxLength={500}
+                    disabled={isLoading}
+                  />
                 </div>
               )}
             </>

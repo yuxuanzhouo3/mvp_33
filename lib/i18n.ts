@@ -308,6 +308,10 @@ export const translations = {
     inviteCodeDescription: 'Share this invite code with new members to join your organization',
     enterCodeToJoin: 'New members can enter this code in "Join Organization"',
     noInviteCode: 'No invite code available for this workspace',
+
+    // Join Workspace
+    joinReason: 'Reason (optional)',
+    joinReasonPlaceholder: 'Tell us why you want to join...',
   },
   zh: {
     // Navigation
@@ -609,6 +613,10 @@ export const translations = {
     inviteCodeDescription: '分享以下邀请码给新成员，他们可以通过邀请码加入组织',
     enterCodeToJoin: '新成员可在"加入组织"中输入此邀请码',
     noInviteCode: '当前工作区暂无邀请码',
+
+    // Join Workspace
+    joinReason: '申请原因（可选）',
+    joinReasonPlaceholder: '请说明您想加入的原因...',
   }
 }
 

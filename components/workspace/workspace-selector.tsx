@@ -52,9 +52,10 @@ export function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) {
     onSelect(workspace)
   }
 
-  const handleJoin = async (workspaceId: string): Promise<{ success: boolean; error?: string }> => {
+  const handleJoin = async (workspaceId: string, reason?: string): Promise<{ success: boolean; error?: string }> => {
     console.log('[WorkspaceSelector] ========== handleJoin 开始 ==========')
     console.log('[WorkspaceSelector] 目标工作区ID:', workspaceId)
+    console.log('[WorkspaceSelector] 申请原因:', reason)
 
     try {
       console.log('[WorkspaceSelector] 准备发送 POST 请求到 /api/workspace-join-requests')
@@ -62,7 +63,7 @@ export function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) {
       const response = await fetch('/api/workspace-join-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceId }),
+        body: JSON.stringify({ workspaceId, reason }),
       })
 
       console.log('[WorkspaceSelector] 响应状态:', response.status, response.statusText)
