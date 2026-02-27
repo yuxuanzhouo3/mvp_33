@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDatabaseClient } from '@/lib/database-router'
 
+function isCollectionMissingError(error: any): boolean {
+  const message = String(error?.message || '')
+  const code = error?.code || error?.errCode
+  return (
+    code === 'DATABASE_COLLECTION_NOT_EXIST' ||
+    code === 'COLLECTION_NOT_EXIST' ||
+    message.includes('DATABASE_COLLECTION_NOT_EXIST') ||
+    message.includes('COLLECTION_NOT_EXIST') ||
+    message.includes('Db or Table not exist') ||
+    message.includes('not exist')
+  )
+}
+
 /**
  * 批准加入申请 API
  * POST /api/workspace-join-requests/approve
@@ -69,10 +82,25 @@ export async function POST(request: NextRequest) {
 
       // 获取申请信息
       console.log('[Approve API] 获取申请信息, requestId:', requestId)
-      const requestResult = await db
-        .collection('workspace_join_requests')
-        .doc(requestId)
-        .get()
+      let requestResult: any
+      try {
+        requestResult = await db
+          .collection('workspace_join_requests')
+          .doc(requestId)
+          .get()
+      } catch (error: any) {
+        if (isCollectionMissingError(error)) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'workspace_join_requests collection is not initialized',
+              details: 'Please run scripts/cloudbase_setup.js to create CloudBase collections.',
+            },
+            { status: 503 }
+          )
+        }
+        throw error
+      }
 
       console.log('[Approve API] 申请信息:', requestResult.data)
 
@@ -120,14 +148,28 @@ export async function POST(request: NextRequest) {
 
       // 成员处理成功后再更新申请状态
       console.log('[Approve API] 更新申请状态为 approved')
-      await db
-        .collection('workspace_join_requests')
-        .doc(requestId)
-        .update({
-          status: 'approved',
-          reviewed_by: userId,
-          reviewed_at: now
-        })
+      try {
+        await db
+          .collection('workspace_join_requests')
+          .doc(requestId)
+          .update({
+            status: 'approved',
+            reviewed_by: userId,
+            reviewed_at: now
+          })
+      } catch (error: any) {
+        if (isCollectionMissingError(error)) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'workspace_join_requests collection is not initialized',
+              details: 'Please run scripts/cloudbase_setup.js to create CloudBase collections.',
+            },
+            { status: 503 }
+          )
+        }
+        throw error
+      }
 
       console.log('[Approve API] 批准操作成功完成')
 

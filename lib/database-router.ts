@@ -83,7 +83,6 @@ export async function getDatabaseClient(): Promise<DatabaseClient> {
  *
  * If FORCE_GLOBAL_DATABASE=true, always returns Supabase (Global)
  */
-export async function getDatabaseClientForUser(): Promise<DatabaseClient> {
+export async function getDatabaseClientForUser(_request?: unknown): Promise<DatabaseClient> {
   return getDatabaseClient()
 }
-

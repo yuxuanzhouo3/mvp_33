@@ -13,11 +13,31 @@ export const runtime = 'nodejs'
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Get current user
-    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser()
-    if (authError || !currentUser) {
+    const dbClient = await getDatabaseClientForUser(request)
+    const isCloudbase = dbClient.type === 'cloudbase' && dbClient.region === 'cn'
+
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null
+    let currentUser: { id: string } | null = null
+
+    if (isCloudbase) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) {
+        currentUser = { id: cloudBaseUser.id }
+      }
+    } else {
+      supabase = dbClient.supabase || await createClient()
+      const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
+      if (authError || !supabaseUser) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        )
+      }
+      currentUser = { id: supabaseUser.id }
+    }
+
+    if (!currentUser) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -51,8 +71,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get the correct database client based on user's registered region
-    const dbClient = await getDatabaseClientForUser(request)
     console.log('[AVATAR UPLOAD] Database client type:', dbClient.type, 'region:', dbClient.region)
 
     // Generate unique filename
@@ -117,6 +135,13 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // Global region: Use Supabase Storage
+      if (!supabase) {
+        return NextResponse.json(
+          { error: 'Database client unavailable' },
+          { status: 500 }
+        )
+      }
+
       const supabaseFilePath = `${currentUser.id}/${fileName}`
       
       // Upload to Supabase Storage
@@ -198,6 +223,13 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // Update in Supabase
+      if (!supabase) {
+        return NextResponse.json(
+          { error: 'Database client unavailable' },
+          { status: 500 }
+        )
+      }
+
       const supabaseFilePath = `${currentUser.id}/${fileName}`
       console.log('[AVATAR UPLOAD] Updating avatar in Supabase:', currentUser.id, avatarUrl)
       const { data, error: updateError } = await supabase
@@ -241,4 +273,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

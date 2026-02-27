@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getDatabaseClientForUser } from '@/lib/database-router'
-import { updateGroupSettings } from '@/lib/database/supabase/groups'
+import { updateGroupSettings as updateGroupSettingsSupabase } from '@/lib/database/supabase/groups'
+import { updateGroupSettings as updateGroupSettingsCloudbase } from '@/lib/database/cloudbase/groups'
 import { getCloudBaseApp } from '@/lib/cloudbase/client'
 
 export const runtime = 'nodejs'
@@ -11,15 +12,32 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const dbClient = await getDatabaseClientForUser(request)
+    const isCloudbase = dbClient.type === 'cloudbase' && dbClient.region === 'cn'
 
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null
+    let user: { id: string } | null = null
 
-    if (authError || !user) {
-      console.error('[GROUP AVATAR] 用户认证失败:', authError)
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (isCloudbase) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) {
+        user = { id: cloudBaseUser.id }
+      }
+    } else {
+      supabase = dbClient.supabase || await createClient()
+      const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
+      if (authError) {
+        console.error('[GROUP AVATAR] 用户认证失败:', authError)
+      }
+      if (supabaseUser) {
+        user = { id: supabaseUser.id }
+      }
     }
 
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
     const { id: groupId } = await params
     const formData = await request.formData()
@@ -53,8 +71,6 @@ export async function POST(
       return NextResponse.json({ error: 'File size must be less than 5MB' }, { status: 400 })
     }
 
-
-    const dbClient = await getDatabaseClientForUser(request)
     console.log('[GROUP AVATAR] 数据库客户端:', {
       type: dbClient.type,
       region: dbClient.region
@@ -130,6 +146,10 @@ export async function POST(
         return NextResponse.json({ error: 'Failed to upload to CloudBase', details: error.message }, { status: 500 })
       }
     } else {
+      if (!supabase) {
+        return NextResponse.json({ error: 'Database client unavailable' }, { status: 500 })
+      }
+
 
       const supabaseFilePath = `${groupId}/${fileName}`
 
@@ -161,7 +181,9 @@ export async function POST(
       avatarUrl
     })
 
-    const success = await updateGroupSettings(groupId, { avatar_url: avatarUrl })
+    const success = isCloudbase
+      ? await updateGroupSettingsCloudbase(groupId, { avatar_url: avatarUrl })
+      : await updateGroupSettingsSupabase(groupId, { avatar_url: avatarUrl })
 
     console.log('[GROUP AVATAR] 数据库更新结果:', {
       success,

@@ -8,29 +8,29 @@ import { getDatabaseClientForUser } from '@/lib/database-router'
  */
 export async function GET(request: NextRequest) {
   try {
-    // Get user from global system (primary) for authentication
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Unauthorized',
-        },
-        { status: 401 }
-      )
-    }
-
-    // Get database client based on user IP and profile
     const dbClient = await getDatabaseClientForUser(request)
+    const isCloudbase = dbClient.type === 'cloudbase' && dbClient.region === 'cn'
+    let userId: string
 
     let messagesUsed = 0
     let storageUsed = 0 // in MB
     let workspacesUsed = 0
     let membersUsed = 0
 
-    if (dbClient.type === 'cloudbase') {
+    if (isCloudbase) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const currentUser = await verifyCloudBaseSession(request)
+      if (!currentUser) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'Unauthorized',
+          },
+          { status: 401 }
+        )
+      }
+      userId = currentUser.id
+
       // CloudBase calculation
       const db = dbClient.cloudbase
       
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
         // Count messages sent by user
         const messagesResult = await db.collection('messages')
           .where({
-            sender_id: user.id,
+            sender_id: userId,
             created_at: db.command.gte(thirtyDaysAgo)
           })
           .count()
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
         // Calculate storage: sum all file_size from messages metadata
         const messagesWithFiles = await db.collection('messages')
           .where({
-            sender_id: user.id,
+            sender_id: userId,
             metadata: db.command.neq(null)
           })
           .get()
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
         // Count workspaces
         const workspacesResult = await db.collection('workspace_members')
           .where({
-            user_id: user.id
+            user_id: userId
           })
           .count()
         workspacesUsed = workspacesResult.total || 0
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
         // Get all workspace IDs user is member of
         const userWorkspaces = await db.collection('workspace_members')
           .where({
-            user_id: user.id
+            user_id: userId
           })
           .get()
 
@@ -95,8 +95,22 @@ export async function GET(request: NextRequest) {
         // Return zeros if calculation fails
       }
     } else {
+      const supabase = dbClient.supabase || await createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'Unauthorized',
+          },
+          { status: 401 }
+        )
+      }
+      userId = user.id
+
       // Supabase calculation
-      const supabaseClient = dbClient.supabase
+      const supabaseClient = supabase
 
       // Count messages sent by user (last 30 days for free users)
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
@@ -104,7 +118,7 @@ export async function GET(request: NextRequest) {
       const { count: messagesCount } = await supabaseClient
         .from('messages')
         .select('*', { count: 'exact', head: true })
-        .eq('sender_id', user.id)
+        .eq('sender_id', userId)
         .gte('created_at', thirtyDaysAgo)
       
       messagesUsed = messagesCount || 0
@@ -114,7 +128,7 @@ export async function GET(request: NextRequest) {
       const { data: messagesWithFiles } = await supabaseClient
         .from('messages')
         .select('metadata')
-        .eq('sender_id', user.id)
+        .eq('sender_id', userId)
         .not('metadata', 'is', null)
 
       let totalStorageBytes = 0
@@ -134,7 +148,7 @@ export async function GET(request: NextRequest) {
       const { count: workspacesCount } = await supabaseClient
         .from('workspace_members')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
       
       workspacesUsed = workspacesCount || 0
 
@@ -143,7 +157,7 @@ export async function GET(request: NextRequest) {
       const { data: userWorkspaces } = await supabaseClient
         .from('workspace_members')
         .select('workspace_id')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
 
       if (userWorkspaces && userWorkspaces.length > 0) {
         const workspaceIds = userWorkspaces.map((w:any) => w.workspace_id)
@@ -161,7 +175,7 @@ export async function GET(request: NextRequest) {
       const { data: userProfile } = await supabaseClient
         .from('users')
         .select('avatar_url')
-        .eq('id', user.id)
+        .eq('id', userId)
         .single()
 
       // If avatar is in storage, we could estimate its size (typically 50-200KB)
@@ -188,7 +202,6 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-
 
 
 

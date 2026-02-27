@@ -8,9 +8,22 @@
  * 3. 运行: node scripts/cloudbase_setup.js
  */
 
+const fs = require('fs');
 const path = require('path');
-const envPath = path.join(__dirname, '..', '.env');
-require('dotenv').config({ path: envPath });
+const dotenv = require('dotenv');
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  const parsed = dotenv.parse(fs.readFileSync(filePath));
+  for (const [key, value] of Object.entries(parsed)) {
+    if (!process.env[key]) {
+      process.env[key] = value;
+    }
+  }
+}
+
+loadEnvFile(path.join(__dirname, '..', '.env'));
+loadEnvFile(path.join(__dirname, '..', '.env.cn'));
 
 const cloudbase = require('@cloudbase/node-sdk');
 
@@ -318,6 +331,49 @@ async function initDatabase() {
   };
   await createCollection('hidden_messages', hiddenMessagesSample);
 
+  // 12. workspace_announcements 集合
+  const workspaceAnnouncementsSample = {
+    _id: generateUUID(),
+    workspace_id: generateUUID(),
+    title: '测试公告',
+    content: '这是测试公告内容',
+    is_pinned: false,
+    created_by: generateUUID(),
+    created_at: now,
+    updated_at: now,
+    region: 'cn'
+  };
+  await createCollection('workspace_announcements', workspaceAnnouncementsSample);
+
+  // 13. workspace_join_requests 集合
+  const workspaceJoinRequestsSample = {
+    _id: generateUUID(),
+    workspace_id: generateUUID(),
+    user_id: generateUUID(),
+    request_message: '请加入工作空间',
+    status: 'pending', // 'pending' | 'approved' | 'rejected'
+    reviewed_by: null,
+    reviewed_at: null,
+    created_at: now,
+    updated_at: now,
+    region: 'cn'
+  };
+  await createCollection('workspace_join_requests', workspaceJoinRequestsSample);
+
+  // 14. group_files 集合
+  const groupFilesSample = {
+    _id: generateUUID(),
+    conversation_id: generateUUID(),
+    file_name: 'test.txt',
+    file_size: 128,
+    file_type: 'text/plain',
+    file_url: 'https://example.com/test.txt',
+    uploaded_by: generateUUID(),
+    created_at: now,
+    region: 'cn'
+  };
+  await createCollection('group_files', groupFilesSample);
+
   // 检查是否有失败的集合
   const failedCollections = [];
   // 这里可以添加逻辑来跟踪失败的集合
@@ -349,6 +405,9 @@ async function initDatabase() {
   console.log('   - contacts: user_id, contact_user_id (复合唯一)');
   console.log('   - contact_requests: requester_id, recipient_id (复合唯一)');
   console.log('   - hidden_messages: user_id, message_id (复合唯一)');
+  console.log('   - workspace_announcements: workspace_id+created_at');
+  console.log('   - workspace_join_requests: workspace_id+status, user_id+workspace_id');
+  console.log('   - group_files: conversation_id+created_at, uploaded_by');
 }
 
 // 运行初始化
@@ -361,4 +420,3 @@ initDatabase()
     console.error('\n初始化失败:', error);
     process.exit(1);
   });
-

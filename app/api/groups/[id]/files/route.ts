@@ -5,6 +5,19 @@ import { getCloudBaseApp, getCloudBaseDb } from '@/lib/cloudbase/client'
 
 export const runtime = 'nodejs'
 
+function isCollectionMissingError(error: any): boolean {
+  const message = String(error?.message || '')
+  const code = error?.code || error?.errCode
+  return (
+    code === 'DATABASE_COLLECTION_NOT_EXIST' ||
+    code === 'COLLECTION_NOT_EXIST' ||
+    message.includes('DATABASE_COLLECTION_NOT_EXIST') ||
+    message.includes('COLLECTION_NOT_EXIST') ||
+    message.includes('Db or Table not exist') ||
+    message.includes('not exist')
+  )
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -41,13 +54,22 @@ export async function GET(
         return NextResponse.json({ error: 'Database not available' }, { status: 500 })
       }
 
-      const filesRes = await db.collection('group_files')
-        .where({
-          conversation_id: groupId,
-          region: 'cn'
-        })
-        .orderBy('created_at', 'desc')
-        .get()
+      let filesRes: any
+      try {
+        filesRes = await db.collection('group_files')
+          .where({
+            conversation_id: groupId,
+            region: 'cn'
+          })
+          .orderBy('created_at', 'desc')
+          .get()
+      } catch (error: any) {
+        if (isCollectionMissingError(error)) {
+          console.warn('[GROUP FILES GET] group_files collection not found, return empty list')
+          return NextResponse.json({ success: true, files: [], degraded: true })
+        }
+        throw error
+      }
 
       const files = filesRes.data || []
 
@@ -255,7 +277,24 @@ export async function POST(
         region: 'cn'
       }
 
-      const insertRes = await db.collection('group_files').add(fileRecord)
+      let insertRes: any
+      try {
+        insertRes = await db.collection('group_files').add(fileRecord)
+      } catch (error: any) {
+        if (isCollectionMissingError(error)) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'group_files collection is not initialized',
+              details: 'Please run scripts/cloudbase_setup.js to create CloudBase collections.',
+              code: error?.code || error?.errCode || 'DATABASE_COLLECTION_NOT_EXIST',
+            },
+            { status: 503 }
+          )
+        }
+        throw error
+      }
+
       const fileRecordId = insertRes.id || insertRes._id
 
       // Get uploader info

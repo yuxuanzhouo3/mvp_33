@@ -4,29 +4,31 @@ import { getDatabaseClientForUser } from '@/lib/database-router'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-
-    if (!currentUser) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Unauthorized',
-        },
-        { status: 401 }
-      )
-    }
-
     const dbClient = await getDatabaseClientForUser(request)
+    const isCloudbase = dbClient.type === 'cloudbase' && dbClient.region === 'cn'
 
     let subscriptionType: 'free' | 'monthly' | 'yearly' | null = 'free'
     let expiresAt: string | null = null
+    let currentUserId: string
 
-    if (dbClient.type === 'cloudbase') {
+    if (isCloudbase) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const currentUser = await verifyCloudBaseSession(request)
+      if (!currentUser) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Unauthorized',
+          },
+          { status: 401 }
+        )
+      }
+      currentUserId = currentUser.id
+
       // CN region: read from CloudBase users collection
       try {
         const { getUserById } = await import('@/lib/database/cloudbase/users')
-        const user = await getUserById(currentUser.id)
+        const user = await getUserById(currentUserId)
         if (user && (user as any).subscription_type) {
           const t = (user as any).subscription_type
           if (t === 'monthly' || t === 'yearly') {
@@ -44,12 +46,25 @@ export async function GET(request: NextRequest) {
         console.error('[SUBSCRIPTION] CloudBase read error:', err)
       }
     } else {
+      const supabase = dbClient.supabase || await createClient()
+      const { data: { user: currentUser } } = await supabase.auth.getUser()
+      if (!currentUser) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Unauthorized',
+          },
+          { status: 401 }
+        )
+      }
+      currentUserId = currentUser.id
+
       // Global region: read from Supabase users table
       try {
-        const { data, error } = await dbClient.supabase
+        const { data, error } = await supabase
           .from('users')
           .select('subscription_type, subscription_expires_at')
-          .eq('id', currentUser.id)
+          .eq('id', currentUserId)
           .maybeSingle()
 
         if (!error && data) {
@@ -86,7 +101,6 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-
 
 
 

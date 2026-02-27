@@ -17,12 +17,31 @@ export async function POST(request: NextRequest) {
   try {
     console.log('[FILE UPLOAD] 开始处理文件上传请求')
 
-    const supabase = await createClient()
+    const dbClient = await getDatabaseClientForUser(request)
+    const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
+    const isCloudbase = dbClient.type === 'cloudbase' && userRegion === 'cn'
 
-    // Get current user
-    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser()
-    if (authError || !currentUser) {
-      console.error('[FILE UPLOAD] 用户认证失败:', authError)
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null
+    let currentUser: { id: string } | null = null
+
+    if (isCloudbase) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) {
+        currentUser = { id: cloudBaseUser.id }
+      }
+    } else {
+      supabase = dbClient.supabase || await createClient()
+      const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
+      if (authError) {
+        console.error('[FILE UPLOAD] 用户认证失败:', authError)
+      }
+      if (supabaseUser) {
+        currentUser = { id: supabaseUser.id }
+      }
+    }
+
+    if (!currentUser) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -30,9 +49,6 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[FILE UPLOAD] 用户认证成功:', { userId: currentUser.id })
-
-    const dbClient = await getDatabaseClientForUser(request)
-    const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
 
     console.log('[FILE UPLOAD] 数据库客户端信息:', {
       type: dbClient.type,
@@ -286,6 +302,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Database client unavailable' },
+        { status: 500 }
+      )
+    }
+
     // Global region：走 Supabase Storage（你这边已经验证 OK 的逻辑）
     console.log('[FILE UPLOAD] 使用 Supabase 存储')
 
@@ -403,7 +426,6 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-
 
 
 

@@ -1,24 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getDatabaseClientForUser } from '@/lib/database-router'
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ conversationId: string }> }
 ) {
   try {
-    console.log('[API /nickname PUT] 开始处理请求')
+    const { conversationId } = await params
+    const body = await request.json()
+    const nickname = typeof body?.nickname === 'string' ? body.nickname : ''
+    const dbClient = await getDatabaseClientForUser(request)
+    const isCloudbase = dbClient.type === 'cloudbase' && dbClient.region === 'cn'
+
+    if (isCloudbase) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const user = await verifyCloudBaseSession(request)
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
+      const db = dbClient.cloudbase
+      if (!db) {
+        return NextResponse.json({ error: 'CloudBase not configured' }, { status: 500 })
+      }
+
+      const memberRes = await db.collection('conversation_members')
+        .where({
+          conversation_id: conversationId,
+          user_id: user.id,
+        })
+        .limit(1)
+        .get()
+
+      const membership = memberRes?.data?.[0]
+      if (!membership?._id) {
+        return NextResponse.json({ error: 'Conversation not found or user is not a member' }, { status: 404 })
+      }
+
+      await db.collection('conversation_members').doc(membership._id).update({
+        group_nickname: nickname || null,
+        updated_at: new Date().toISOString(),
+      })
+
+      return NextResponse.json({ success: true })
+    }
+
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    console.log('[API /nickname PUT] 用户认证', { userId: user?.id, hasUser: !!user })
-
     if (!user) {
-      console.log('[API /nickname PUT] 未授权')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const { nickname } = await request.json()
-    const { conversationId } = await params
 
     console.log('[API /nickname PUT] 请求参数', {
       conversationId,
@@ -62,14 +95,44 @@ export async function GET(
   { params }: { params: Promise<{ conversationId: string }> }
 ) {
   try {
+    const { conversationId } = await params
+    const dbClient = await getDatabaseClientForUser(request)
+    const isCloudbase = dbClient.type === 'cloudbase' && dbClient.region === 'cn'
+
+    if (isCloudbase) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const user = await verifyCloudBaseSession(request)
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
+      const db = dbClient.cloudbase
+      if (!db) {
+        return NextResponse.json({ error: 'CloudBase not configured' }, { status: 500 })
+      }
+
+      const memberRes = await db.collection('conversation_members')
+        .where({
+          conversation_id: conversationId,
+          user_id: user.id,
+        })
+        .limit(1)
+        .get()
+
+      const membership = memberRes?.data?.[0]
+      if (!membership) {
+        return NextResponse.json({ error: 'Conversation not found or user is not a member' }, { status: 404 })
+      }
+
+      return NextResponse.json({ nickname: membership.group_nickname || '' })
+    }
+
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const { conversationId } = await params
 
     const { data, error } = await supabase
       .from('conversation_members')

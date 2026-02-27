@@ -25,9 +25,27 @@ export async function PATCH(
     
     console.log('▶ Conversation action request:', { conversationId })
     
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
+    const dbClient = await getDatabaseClientForUser(request)
+    const isCloudbase = dbClient.type === 'cloudbase' && dbClient.region === 'cn'
+    const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
+
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null
+    let user: { id: string } | null = null
+
+    if (isCloudbase) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) {
+        user = { id: cloudBaseUser.id }
+      }
+    } else {
+      supabase = dbClient.supabase || await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (supabaseUser) {
+        user = { id: supabaseUser.id }
+      }
+    }
+
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -36,10 +54,6 @@ export async function PATCH(
     }
 
     console.log('🔍 Checking membership:', { conversationId, userId: user.id })
-
-    // Get database client first to determine which database to check membership
-    const dbClient = await getDatabaseClientForUser(request)
-    const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
     
     // Verify user is a member of the conversation (use appropriate database)
     let isMember = false
@@ -53,6 +67,7 @@ export async function PATCH(
             .where({
               conversation_id: conversationId,
               user_id: user.id,
+              region: 'cn',
             })
             .get()
           
@@ -127,7 +142,53 @@ export async function PATCH(
 
     // Handle CloudBase pin/unpin/hide/unhide
     if (dbClient.type === 'cloudbase' && userRegion === 'cn') {
-      if (action === 'pin') {
+      if (action === 'delete' || action === 'restore') {
+        const db = dbClient.cloudbase
+        if (!db) {
+          return NextResponse.json(
+            { error: 'CloudBase not configured' },
+            { status: 500 }
+          )
+        }
+
+        let membersRes = await db.collection('conversation_members')
+          .where({
+            conversation_id: conversationId,
+            user_id: user.id,
+            region: 'cn',
+          })
+          .get()
+
+        if (!membersRes.data || membersRes.data.length === 0) {
+          membersRes = await db.collection('conversation_members')
+            .where({
+              conversation_id: conversationId,
+              user_id: user.id,
+            })
+            .get()
+        }
+
+        if (!membersRes.data || membersRes.data.length === 0) {
+          return NextResponse.json(
+            { error: 'Failed to update conversation: membership not found' },
+            { status: 404 }
+          )
+        }
+
+        const membership = membersRes.data[0]
+        await db.collection('conversation_members')
+          .doc(membership._id)
+          .update({
+            deleted_at: action === 'delete' ? new Date().toISOString() : null,
+          })
+
+        return NextResponse.json({
+          success: true,
+          message: action === 'delete'
+            ? 'Conversation deleted for this user'
+            : 'Conversation restored for this user',
+        })
+      } else if (action === 'pin') {
         console.log('📌 Pinning conversation for user (CloudBase):', conversationId, user.id)
         const success = await pinConversationCN(conversationId, user.id)
         if (!success) {
@@ -310,6 +371,20 @@ export async function PATCH(
         })
       }
       // For other actions, fall through to Supabase logic (if applicable)
+    }
+
+    if (isCloudbase) {
+      return NextResponse.json(
+        { error: 'Invalid action. Use "delete", "restore", "read", "hide", "unhide", "pin" or "unpin"' },
+        { status: 400 }
+      )
+    }
+
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Database client unavailable' },
+        { status: 500 }
+      )
     }
 
     if (action === 'delete') {
@@ -529,7 +604,7 @@ export async function PATCH(
       })
     } else {
       return NextResponse.json(
-        { error: 'Invalid action. Use "delete", "restore", "read", "pin" or "unpin"' },
+        { error: 'Invalid action. Use "delete", "restore", "read", "hide", "unhide", "pin" or "unpin"' },
         { status: 400 }
       )
     }

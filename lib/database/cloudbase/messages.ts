@@ -6,6 +6,19 @@
 import { getCloudBaseDb } from '@/lib/cloudbase/client'
 import { MessageWithSender } from '@/lib/types'
 
+function isCollectionMissingError(error: any): boolean {
+  const message = String(error?.message || '')
+  const code = error?.code || error?.errCode
+  return (
+    code === 'DATABASE_COLLECTION_NOT_EXIST' ||
+    code === 'COLLECTION_NOT_EXIST' ||
+    message.includes('DATABASE_COLLECTION_NOT_EXIST') ||
+    message.includes('COLLECTION_NOT_EXIST') ||
+    message.includes('Db or Table not exist') ||
+    message.includes('not exist')
+  )
+}
+
 export async function getMessages(conversationId: string): Promise<MessageWithSender[]> {
   const db = getCloudBaseDb()
   if (!db) {
@@ -346,6 +359,11 @@ export async function hideMessage(messageId: string, userId: string): Promise<bo
 
     return true
   } catch (error) {
+    if (isCollectionMissingError(error)) {
+      // Graceful fallback: hiding is optional; if collection is missing, treat as no-op.
+      console.warn('hideMessage: hidden_messages collection not found, skip hide operation')
+      return true
+    }
     console.error('hideMessage error:', error)
     return false
   }
@@ -373,11 +391,15 @@ export async function unhideMessage(messageId: string, userId: string): Promise<
 
     return true
   } catch (error) {
+    if (isCollectionMissingError(error)) {
+      // Graceful fallback: unhide should not fail if collection is absent.
+      console.warn('unhideMessage: hidden_messages collection not found, skip unhide operation')
+      return true
+    }
     console.error('unhideMessage error:', error)
     return false
   }
 }
-
 
 
 

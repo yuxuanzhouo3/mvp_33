@@ -31,9 +31,27 @@ export async function PUT(
       )
     }
 
-    // Verify user is authenticated
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const dbClient = await getDatabaseClientForUser(request)
+    const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
+    const isCloudbase = dbClient.type === 'cloudbase' && userRegion === 'cn'
+
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null
+    let user: { id: string } | null = null
+
+    if (isCloudbase) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) {
+        user = { id: cloudBaseUser.id }
+      }
+    } else {
+      supabase = dbClient.supabase || await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (supabaseUser) {
+        user = { id: supabaseUser.id }
+      }
+    }
+
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -41,11 +59,8 @@ export async function PUT(
       )
     }
 
-    const dbClient = await getDatabaseClientForUser(request)
-    const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
-
     // CN: permission + update in CloudBase
-    if (dbClient.type === 'cloudbase' && userRegion === 'cn') {
+    if (isCloudbase) {
       // Ensure the message exists and user is sender
       const db = dbClient.cloudbase
       const res = await db.collection('messages').doc(messageId).get()
@@ -105,6 +120,13 @@ export async function PUT(
         success: true,
         message: updatedMessage,
       })
+    }
+
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Database client unavailable' },
+        { status: 500 }
+      )
     }
 
     // Verify user is the sender of the message, OR it's a call message and user is the recipient
@@ -262,9 +284,27 @@ export async function DELETE(
       )
     }
 
-    // Verify user is authenticated
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const dbClient = await getDatabaseClientForUser(request)
+    const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
+    const isCloudbase = dbClient.type === 'cloudbase' && userRegion === 'cn'
+
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null
+    let user: { id: string } | null = null
+
+    if (isCloudbase) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) {
+        user = { id: cloudBaseUser.id }
+      }
+    } else {
+      supabase = dbClient.supabase || await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (supabaseUser) {
+        user = { id: supabaseUser.id }
+      }
+    }
+
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -272,10 +312,7 @@ export async function DELETE(
       )
     }
 
-    const dbClient = await getDatabaseClientForUser(request)
-    const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
-
-    if (dbClient.type === 'cloudbase' && userRegion === 'cn') {
+    if (isCloudbase) {
       const db = dbClient.cloudbase
       const res = await db.collection('messages').doc(messageId).get()
       const m = res?.data || res
@@ -312,6 +349,13 @@ export async function DELETE(
         success: true,
         message: deletedMessage,
       })
+    }
+
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Database client unavailable' },
+        { status: 500 }
+      )
     }
 
     // Verify user is the sender of the message
@@ -392,8 +436,27 @@ export async function PATCH(
       )
     }
 
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const dbClient = await getDatabaseClientForUser(request)
+    const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
+    const isCloudbase = dbClient.type === 'cloudbase' && userRegion === 'cn'
+
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null
+    let user: { id: string } | null = null
+
+    if (isCloudbase) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) {
+        user = { id: cloudBaseUser.id }
+      }
+    } else {
+      supabase = dbClient.supabase || await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (supabaseUser) {
+        user = { id: supabaseUser.id }
+      }
+    }
+
     if (!user) {
       console.error('[MESSAGE RECALL] 用户未认证')
       return NextResponse.json(
@@ -402,17 +465,13 @@ export async function PATCH(
       )
     }
 
-
-    const dbClient = await getDatabaseClientForUser(request)
-    const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
-
     console.log('[MESSAGE RECALL] 数据库客户端:', {
       type: dbClient.type,
       region: userRegion
     })
 
     // CN recall / hide / unhide via CloudBase
-    if (dbClient.type === 'cloudbase' && userRegion === 'cn') {
+    if (isCloudbase) {
 
       const db = dbClient.cloudbase
       const res = await db.collection('messages').doc(messageId).get()
@@ -651,6 +710,13 @@ export async function PATCH(
       )
     }
 
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Database client unavailable' },
+        { status: 500 }
+      )
+    }
+
     // Handle recall action (Supabase)
     if (action === 'recall') {
 
@@ -801,4 +867,3 @@ export async function PATCH(
     )
   }
 }
-

@@ -7,9 +7,10 @@ import { addReaction as addReactionCN, removeReaction as removeReactionCN } from
 // POST /api/messages/[messageId]/reactions - Add reaction
 export async function POST(
   request: NextRequest,
-  { params }: { params: { messageId: string } }
+  { params }: { params: Promise<{ messageId: string }> | { messageId: string } }
 ) {
   try {
+    const resolvedParams = await Promise.resolve(params)
     const body = await request.json()
     const { emoji } = body
 
@@ -20,21 +21,20 @@ export async function POST(
       )
     }
 
-    // Verify user is authenticated
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
     const dbClient = await getDatabaseClientForUser(request)
     const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
 
     if (dbClient.type === 'cloudbase' && userRegion === 'cn') {
-      const message = await addReactionCN(params.messageId, emoji, user.id)
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const user = await verifyCloudBaseSession(request)
+      if (!user) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        )
+      }
+
+      const message = await addReactionCN(resolvedParams.messageId, emoji, user.id)
 
       if (!message) {
         return NextResponse.json(
@@ -49,7 +49,16 @@ export async function POST(
       })
     }
 
-    const message = await addReaction(params.messageId, emoji, user.id)
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const message = await addReaction(resolvedParams.messageId, emoji, user.id)
 
     if (!message) {
       return NextResponse.json(
@@ -74,9 +83,10 @@ export async function POST(
 // DELETE /api/messages/[messageId]/reactions - Remove reaction
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { messageId: string } }
+  { params }: { params: Promise<{ messageId: string }> | { messageId: string } }
 ) {
   try {
+    const resolvedParams = await Promise.resolve(params)
     const searchParams = request.nextUrl.searchParams
     const emoji = searchParams.get('emoji')
 
@@ -87,21 +97,20 @@ export async function DELETE(
       )
     }
 
-    // Verify user is authenticated
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
     const dbClient = await getDatabaseClientForUser(request)
     const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
 
     if (dbClient.type === 'cloudbase' && userRegion === 'cn') {
-      const message = await removeReactionCN(params.messageId, emoji, user.id)
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const user = await verifyCloudBaseSession(request)
+      if (!user) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        )
+      }
+
+      const message = await removeReactionCN(resolvedParams.messageId, emoji, user.id)
 
       if (!message) {
         return NextResponse.json(
@@ -116,7 +125,16 @@ export async function DELETE(
       })
     }
 
-    const message = await removeReaction(params.messageId, emoji, user.id)
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const message = await removeReaction(resolvedParams.messageId, emoji, user.id)
 
     if (!message) {
       return NextResponse.json(
@@ -137,4 +155,3 @@ export async function DELETE(
     )
   }
 }
-

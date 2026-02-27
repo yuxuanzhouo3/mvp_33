@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getDatabaseClientForUser } from '@/lib/database-router'
 import { updateUserSubscriptionAfterPayment } from '@/lib/payment/subscription-update'
-import { getCloudBaseDb } from '@/lib/cloudbase/client'
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,9 +23,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user from global system (primary) for authentication
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    // Get database client based on user IP and profile
+    const dbClient = await getDatabaseClientForUser(request)
+    const isCloudbase = dbClient.type === 'cloudbase' && dbClient.region === 'cn'
+
+    let user: { id: string } | null = null
+    if (isCloudbase) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) {
+        user = { id: cloudBaseUser.id }
+      }
+    } else {
+      const supabase = dbClient.supabase || await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (supabaseUser) {
+        user = { id: supabaseUser.id }
+      }
+    }
 
     if (!user) {
       return NextResponse.json(
@@ -37,9 +51,6 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
-
-    // Get database client based on user IP and profile
-    const dbClient = await getDatabaseClientForUser(request)
 
     // Find order in the appropriate database
     let order: any = null
@@ -158,4 +169,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

@@ -23,9 +23,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user from global system (primary) for authentication
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    // Get database client based on user IP and profile
+    // This automatically routes to CloudBase (CN) or Supabase (Global)
+    const dbClient = await getDatabaseClientForUser(request)
+    const isCloudbase = dbClient.type === 'cloudbase' && dbClient.region === 'cn'
+
+    let user: { id: string } | null = null
+    if (isCloudbase) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) {
+        user = { id: cloudBaseUser.id }
+      }
+    } else {
+      const supabase = dbClient.supabase || await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (supabaseUser) {
+        user = { id: supabaseUser.id }
+      }
+    }
 
     if (!user) {
       return NextResponse.json(
@@ -37,10 +53,6 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
-
-    // Get database client based on user IP and profile
-    // This automatically routes to CloudBase (CN) or Supabase (Global)
-    const dbClient = await getDatabaseClientForUser(request)
     
     // Validate payment method based on region
     // China region: only allow WeChat Pay and Alipay
@@ -279,4 +291,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

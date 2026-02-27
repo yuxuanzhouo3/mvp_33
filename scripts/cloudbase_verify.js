@@ -3,9 +3,22 @@
  * 用于检查在控制台手动创建的集合
  */
 
+const fs = require('fs');
 const path = require('path');
-const envPath = path.join(__dirname, '..', '.env');
-require('dotenv').config({ path: envPath });
+const dotenv = require('dotenv');
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  const parsed = dotenv.parse(fs.readFileSync(filePath));
+  for (const [key, value] of Object.entries(parsed)) {
+    if (!process.env[key]) {
+      process.env[key] = value;
+    }
+  }
+}
+
+loadEnvFile(path.join(__dirname, '..', '.env'));
+loadEnvFile(path.join(__dirname, '..', '.env.cn'));
 
 const cloudbase = require('@cloudbase/node-sdk');
 
@@ -30,7 +43,10 @@ const collections = [
   'contact_requests',
   'departments',
   'user_profiles',
-  'hidden_messages'
+  'hidden_messages',
+  'workspace_announcements',
+  'workspace_join_requests',
+  'group_files'
 ];
 
 async function verifyCollections() {
@@ -79,7 +95,8 @@ async function verifyCollections() {
     console.log('\n需要在控制台创建的集合:');
     results.notExists.forEach(name => console.log(`  - ${name}`));
     console.log('\n请在 CloudBase 控制台手动创建这些集合:');
-    console.log('https://tcb.cloud.tencent.com/dev?envId=cloud1-3giwb8x723267ff3#/db/doc/collection/');
+    const envId = process.env.CLOUDBASE_ENV_ID || '';
+    console.log(`https://tcb.cloud.tencent.com/dev?envId=${envId}#/db/doc/collection/`);
   }
   
   if (results.errors.length > 0) {
@@ -104,7 +121,6 @@ verifyCollections()
     console.error('\n验证失败:', error);
     process.exit(1);
   });
-
 
 
 

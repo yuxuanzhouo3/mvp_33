@@ -1,5 +1,18 @@
 import { getCloudBaseDb } from '@/lib/cloudbase/client'
 
+function isCollectionMissingError(error: any): boolean {
+  const message = String(error?.message || '')
+  const code = error?.code || error?.errCode
+  return (
+    code === 'DATABASE_COLLECTION_NOT_EXIST' ||
+    code === 'COLLECTION_NOT_EXIST' ||
+    message.includes('DATABASE_COLLECTION_NOT_EXIST') ||
+    message.includes('COLLECTION_NOT_EXIST') ||
+    message.includes('Db or Table not exist') ||
+    message.includes('not exist')
+  )
+}
+
 export interface CloudBaseWorkspaceAnnouncement {
   id: string
   workspace_id: string
@@ -48,15 +61,23 @@ export async function getWorkspaceAnnouncements(
     throw new Error('CloudBase not configured')
   }
 
-  const result = await db
-    .collection('workspace_announcements')
-    .where({
-      workspace_id: workspaceId,
-      region: 'cn',
-    })
-    .orderBy('is_pinned', 'desc')
-    .orderBy('created_at', 'desc')
-    .get()
+  let result: any
+  try {
+    result = await db
+      .collection('workspace_announcements')
+      .where({
+        workspace_id: workspaceId,
+        region: 'cn',
+      })
+      .orderBy('is_pinned', 'desc')
+      .orderBy('created_at', 'desc')
+      .get()
+  } catch (error: any) {
+    if (isCollectionMissingError(error)) {
+      return []
+    }
+    throw error
+  }
 
   const docs = result.data || []
 
@@ -101,7 +122,15 @@ export async function createWorkspaceAnnouncement(
     region: 'cn',
   }
 
-  const result = await db.collection('workspace_announcements').add(doc)
+  let result: any
+  try {
+    result = await db.collection('workspace_announcements').add(doc)
+  } catch (error: any) {
+    if (isCollectionMissingError(error)) {
+      throw new Error('workspace_announcements collection is not initialized')
+    }
+    throw error
+  }
   const announcementId = result.id || result._id
 
   const usersResult = await db.collection('users').where({ id: creatorId }).get()
@@ -134,7 +163,15 @@ export async function getWorkspaceAnnouncementById(
     throw new Error('CloudBase not configured')
   }
 
-  const result = await db.collection('workspace_announcements').doc(announcementId).get()
+  let result: any
+  try {
+    result = await db.collection('workspace_announcements').doc(announcementId).get()
+  } catch (error: any) {
+    if (isCollectionMissingError(error)) {
+      return null
+    }
+    throw error
+  }
   const doc = result?.data || result
   if (!doc || !doc._id) {
     return null
@@ -157,11 +194,18 @@ export async function updateWorkspaceAnnouncement(
     throw new Error('CloudBase not configured')
   }
 
-  await db.collection('workspace_announcements').doc(announcementId).update({
-    title,
-    content,
-    updated_at: new Date().toISOString(),
-  })
+  try {
+    await db.collection('workspace_announcements').doc(announcementId).update({
+      title,
+      content,
+      updated_at: new Date().toISOString(),
+    })
+  } catch (error: any) {
+    if (isCollectionMissingError(error)) {
+      throw new Error('workspace_announcements collection is not initialized')
+    }
+    throw error
+  }
 
   return getWorkspaceAnnouncementById(announcementId)
 }
@@ -174,7 +218,14 @@ export async function deleteWorkspaceAnnouncement(
     throw new Error('CloudBase not configured')
   }
 
-  await db.collection('workspace_announcements').doc(announcementId).remove()
+  try {
+    await db.collection('workspace_announcements').doc(announcementId).remove()
+  } catch (error: any) {
+    if (isCollectionMissingError(error)) {
+      return false
+    }
+    throw error
+  }
   return true
 }
 
