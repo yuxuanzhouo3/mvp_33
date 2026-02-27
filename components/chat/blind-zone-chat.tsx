@@ -126,6 +126,10 @@ export function BlindZoneChat({
       workspace_id: workspaceId,
       content,
       type: 'text',
+      metadata: {
+        avatar_seed: tempId,
+        client_id: tempId,
+      },
       is_deleted: false,
       created_at: now,
       updated_at: now,
@@ -139,6 +143,10 @@ export function BlindZoneChat({
         workspaceId,
         content,
         type: 'text',
+        metadata: {
+          avatar_seed: tempId,
+          client_id: tempId,
+        },
       }
       console.log('[盲区调试] handleSendMessage: 请求体 =', JSON.stringify(requestBody, null, 2))
 
@@ -156,7 +164,20 @@ export function BlindZoneChat({
 
       if (data.success && data.message) {
         console.log('[盲区调试] handleSendMessage: 发送成功，替换乐观消息')
-        setMessages(prev => prev.map(msg => (msg.id === tempId ? data.message : msg)))
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === tempId
+              ? {
+                  ...data.message,
+                  metadata: {
+                    ...(data.message.metadata || {}),
+                    avatar_seed: (data.message.metadata?.avatar_seed as string | undefined) || tempId,
+                    client_id: (data.message.metadata?.client_id as string | undefined) || tempId,
+                  },
+                }
+              : msg
+          )
+        )
       } else {
         console.log('[盲区调试] handleSendMessage: 发送失败, success =', data.success, 'error =', data.error)
         setMessages(prev => prev.filter(msg => msg.id !== tempId))
@@ -263,7 +284,7 @@ export function BlindZoneChat({
           <div className="space-y-3 px-4 py-4">
             {messages.map((msg) => (
               <div
-                key={msg.id}
+                key={msg.metadata?.client_id || msg.id}
                 className={cn(
                   "group py-2 border-l-2 border-indigo-500/30 pl-3 transition-colors",
                   msg.is_deleted && "opacity-50"
@@ -273,7 +294,13 @@ export function BlindZoneChat({
                   {/* DiceBear 匿名头像 */}
                   <Avatar className="h-8 w-8 shrink-0">
                     <AvatarImage
-                      src={msg.is_deleted ? undefined : generateBlindZoneAvatar(msg.id)}
+                      src={
+                        msg.is_deleted
+                          ? undefined
+                          : generateBlindZoneAvatar(
+                              msg.metadata?.avatar_seed || msg.metadata?.client_id || msg.id
+                            )
+                      }
                     />
                     <AvatarFallback className="bg-gray-700 text-gray-400 text-xs">
                       ?

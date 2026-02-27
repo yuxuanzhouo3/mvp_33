@@ -185,6 +185,8 @@ export interface BlindZoneMessage {
     file_url?: string
     file_name?: string
     mime_type?: string
+    avatar_seed?: string
+    client_id?: string
   }
   is_deleted: boolean
   deleted_by?: string  // 管理员ID
@@ -202,6 +204,8 @@ export interface BlindZoneMessageDisplay {
     file_url?: string
     file_name?: string
     mime_type?: string
+    avatar_seed?: string
+    client_id?: string
   }
   is_deleted: boolean
   created_at: string
