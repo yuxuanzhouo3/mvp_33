@@ -231,12 +231,8 @@ test.describe('Workspace Join Request - System Assistant Conversation', () => {
     await page.waitForLoadState('domcontentloaded')
     await page.waitForTimeout(3000)
 
-    // 查找系统助手会话（如果有）
-    const systemAssistantConv = page.locator(`
-      text=/系统助手|System Assistant/i,
-      [data-sender-id="${SYSTEM_ASSISTANT_ID}"]
-    `).first()
-
+    // 查找系统助手会话（如果有）- 使用正确的 selector 语法
+    const systemAssistantConv = page.locator('text=/系统助手|System Assistant/i').first()
     const systemAssistantVisible = await systemAssistantConv.count() > 0
 
     console.log(`SYS-CONV-01: 系统助手会话可见: ${systemAssistantVisible}`)

@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge'
 import { createClient } from '@/lib/supabase/client'
 import { getTranslation } from '@/lib/i18n'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { JoinWorkspaceDialog } from '@/components/workspace/join-workspace-dialog'
 
 interface WorkspaceHeaderProps {
   workspace: Workspace
@@ -47,12 +48,9 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
   const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(false)
   const [showJoinDialog, setShowJoinDialog] = useState(false)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
-  const [inviteCode, setInviteCode] = useState('')
   const [newWorkspaceName, setNewWorkspaceName] = useState('')
   const [newInviteCode, setNewInviteCode] = useState('')
   const [generatedInviteCode, setGeneratedInviteCode] = useState('')
-  const [isJoining, setIsJoining] = useState(false)
-  const [joinError, setJoinError] = useState('')
   const [isCreating, setIsCreating] = useState(false)
 
   // Invite code dialog state
@@ -187,6 +185,46 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
           } catch (e) { }
         }
       )
+      .on(
+        'broadcast',
+        { event: 'new_message' },
+        async (payload) => {
+          console.log('[WorkspaceHeader] Received broadcast new_message:', payload)
+
+          // Check if this broadcast is for current user
+          if (payload.user_id && payload.user_id !== currentUser.id) {
+            return
+          }
+
+          // Trigger conversation list refresh
+          try {
+            const cacheKey = `conversations_${currentUser.id}_${workspace.id}`
+
+            // Fetch latest conversations from API
+            const response = await fetch('/api/conversations')
+            const data = await response.json()
+
+            if (data.success && data.conversations) {
+              // Update cache
+              localStorage.setItem(cacheKey, JSON.stringify(data.conversations))
+
+              // Calculate new unread count
+              const count = data.conversations
+                .filter((conv: any) => conv.type === 'direct')
+                .reduce((sum: number, conv: any) => sum + (conv.unread_count || 0), 0)
+
+              setRealTimeUnreadCount(prev => prev !== count ? count : prev)
+
+              // Notify other components to refresh
+              window.dispatchEvent(new Event('conversationsUpdated'))
+
+              console.log('[WorkspaceHeader] Updated unread count from broadcast:', count)
+            }
+          } catch (e) {
+            console.error('[WorkspaceHeader] Failed to handle broadcast:', e)
+          }
+        }
+      )
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           await channel.track({ online_at: new Date().toISOString(), user_id: currentUser.id })
@@ -240,43 +278,34 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
     onWorkspaceChange?.(ws)
   }
 
-  const handleJoinWorkspace = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!inviteCode.trim()) return
-
-    setIsJoining(true)
-    setJoinError('')
+  const handleJoin = async (workspaceId: string): Promise<{ success: boolean; error?: string }> => {
+    console.log('[WorkspaceHeader] ========== handleJoin 开始 ==========')
+    console.log('[WorkspaceHeader] 目标工作区ID:', workspaceId)
 
     try {
-      const response = await fetch('/api/workspaces/join', {
+      console.log('[WorkspaceHeader] 准备发送 POST 请求到 /api/workspace-join-requests')
+
+      const response = await fetch('/api/workspace-join-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inviteCode: inviteCode.trim() }),
+        body: JSON.stringify({ workspaceId }),
       })
+
+      console.log('[WorkspaceHeader] 响应状态:', response.status, response.statusText)
+
       const data = await response.json()
+      console.log('[WorkspaceHeader] 响应数据:', JSON.stringify(data, null, 2))
 
       if (data.success) {
-        // 刷新工作区列表
-        const response = await fetch('/api/workspaces')
-        const data = await response.json()
-        if (data.success && data.workspaces) {
-          setWorkspaceList(data.workspaces)
-        }
-        setInviteCode('')
-        setShowJoinDialog(false)
+        console.log('[WorkspaceHeader] 申请成功!')
+        return { success: true }
       } else {
-        setJoinError(data.error || 'Invalid invite code')
+        console.log('[WorkspaceHeader] 申请失败:', data.error)
+        return { success: false, error: data.error || 'Failed to submit request' }
       }
-    } catch (error) {
-      // 模拟加入成功（前端演示用）
-      const mockWorkspace = { id: 'techcorp', name: 'TechCorp 总组', domain: 'techcorp' } as Workspace
-      if (!workspaceList.find(w => w.id === mockWorkspace.id)) {
-        setWorkspaceList([...workspaceList, mockWorkspace])
-      }
-      setInviteCode('')
-      setShowJoinDialog(false)
-    } finally {
-      setIsJoining(false)
+    } catch (error: any) {
+      console.error('[WorkspaceHeader] 请求异常:', error)
+      return { success: false, error: 'Failed to submit join request' }
     }
   }
 
@@ -526,52 +555,11 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
       </div>
 
       {/* 加入组织对话框 */}
-      <Dialog open={showJoinDialog} onOpenChange={setShowJoinDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <UserPlus className="h-5 w-5" />
-              {language === 'zh' ? '加入组织' : 'Join Organization'}
-            </DialogTitle>
-            <DialogDescription>
-              {language === 'zh' ? '请输入邀请码加入工作区' : 'Enter the invite code to join the workspace'}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleJoinWorkspace}>
-            <div className="py-4">
-              <Input
-                value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                placeholder={language === 'zh' ? '输入邀请码...' : 'Enter invite code...'}
-                className="text-center text-lg tracking-widest font-mono"
-                maxLength={8}
-                autoFocus
-              />
-              {joinError && (
-                <div className="mt-2 flex items-center gap-2 text-sm text-red-500">
-                  <AlertCircle className="h-4 w-4" />
-                  {joinError}
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowJoinDialog(false)}>
-                {language === 'zh' ? '取消' : 'Cancel'}
-              </Button>
-              <Button type="submit" disabled={!inviteCode.trim() || isJoining}>
-                {isJoining ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {language === 'zh' ? '加入中...' : 'Joining...'}
-                  </>
-                ) : (
-                  language === 'zh' ? '加入' : 'Join'
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <JoinWorkspaceDialog
+        open={showJoinDialog}
+        onOpenChange={setShowJoinDialog}
+        onJoin={handleJoin}
+      />
 
       {/* 创建新组织对话框 */}
       <Dialog open={showCreateDialog} onOpenChange={(open) => {

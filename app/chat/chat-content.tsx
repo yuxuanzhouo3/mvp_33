@@ -4534,6 +4534,25 @@ function ChatPageContent() {
     }
   }, [currentUser, currentWorkspace, loadConversations])
 
+  // Listen for conversationsUpdated event to refresh conversation list
+  // This is triggered by system assistant messages and other components
+  useEffect(() => {
+    if (!currentUser || !currentWorkspace) return
+
+    const handleConversationsUpdated = () => {
+      console.log('[ChatContent] Received conversationsUpdated event, refreshing conversations...')
+      loadConversations(currentUser.id, currentWorkspace.id, true).catch(error => {
+        console.error('[ChatContent] Failed to refresh conversations:', error)
+      })
+    }
+
+    window.addEventListener('conversationsUpdated', handleConversationsUpdated)
+
+    return () => {
+      window.removeEventListener('conversationsUpdated', handleConversationsUpdated)
+    }
+  }, [currentUser, currentWorkspace, loadConversations])
+
   // Listen for answer call and reject call events from message list
   useEffect(() => {
     if (!currentUser) return

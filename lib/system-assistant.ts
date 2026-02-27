@@ -330,4 +330,34 @@ async function sendSystemAssistantMessageIntl(
   if (convError) {
     console.error('Failed to update conversation last_message_at:', convError)
   }
+
+  // Broadcast notification to user - notify frontend to refresh conversation list
+  try {
+    // Get the user_id from conversation_members (the non-system-assistant member)
+    const { data: members } = await supabase
+      .from('conversation_members')
+      .select('user_id')
+      .eq('conversation_id', conversationId)
+      .neq('user_id', senderId)
+
+    if (members && members.length > 0) {
+      const userId = members[0].user_id
+      console.log('[SystemAssistant] Broadcasting new_message to user:', userId)
+
+      const channel = supabase.channel(`system-assistant-notification`)
+      await channel.send({
+        type: 'broadcast',
+        event: 'new_message',
+        payload: {
+          conversation_id: conversationId,
+          sender_id: senderId,
+          user_id: userId,
+          timestamp: timestamp,
+        }
+      })
+    }
+  } catch (broadcastError) {
+    console.error('[SystemAssistant] Failed to broadcast notification:', broadcastError)
+    // Don't fail the main flow if broadcast fails
+  }
 }

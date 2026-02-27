@@ -1,0 +1,49 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - button "中文" [ref=e3]:
+      - img
+      - text: 中文
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]: Sign In
+        - generic [ref=e8]: Enter your credentials to access your workspace
+      - generic [ref=e9]:
+        - button "Google" [ref=e11]:
+          - img
+          - text: Google
+        - generic [ref=e16]: Or continue with
+        - generic [ref=e17]:
+          - generic [ref=e18]:
+            - generic [ref=e19]: Email
+            - textbox "Email" [ref=e20]:
+              - /placeholder: you@company.com
+          - generic [ref=e21]:
+            - generic [ref=e22]: Password
+            - textbox "Password" [ref=e23]
+          - button "Sign In" [ref=e24]:
+            - img
+            - text: Sign In
+          - button "Quick Demo Login" [ref=e25]
+          - generic [ref=e28]:
+            - button "Forgot password?" [ref=e29]
+            - generic [ref=e30]:
+              - generic [ref=e31]: Don't have an account?
+              - button "Create one" [ref=e32]
+  - region "Notifications (F8)":
+    - list
+  - generic [ref=e37] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e38]:
+      - img [ref=e39]
+    - generic [ref=e42]:
+      - button "Open issues overlay" [ref=e43]:
+        - generic [ref=e44]:
+          - generic [ref=e45]: "0"
+          - generic [ref=e46]: "1"
+        - generic [ref=e47]: Issue
+      - button "Collapse issues badge" [ref=e48]:
+        - img [ref=e49]
+  - alert [ref=e51]
+```
