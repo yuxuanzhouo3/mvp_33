@@ -155,6 +155,7 @@ function ChatPageContent() {
   const selectedConversationIdsRef = useRef<Set<string>>(new Set())
 
   const conversationsRef = useRef<ConversationWithDetails[]>([])
+  const messagesByConversationRef = useRef<Map<string, MessageWithSender[]>>(new Map())
 
   const pendingConversationMapRef = useRef<Map<string, ConversationWithDetails>>(new Map())
 
@@ -266,6 +267,15 @@ function ChatPageContent() {
       console.log('🔒 Welded conversation unread_count to 0:', selectedConversationId)
     }
   }, [selectedConversationId])
+
+  useEffect(() => {
+    if (!selectedConversationId) return
+    messagesByConversationRef.current.set(selectedConversationId, messages)
+  }, [selectedConversationId, messages])
+
+  useEffect(() => {
+    messagesByConversationRef.current.clear()
+  }, [currentUser?.id, currentWorkspace?.id])
 
   useEffect(() => {
 
@@ -1263,98 +1273,59 @@ function ChatPageContent() {
       if (data.success) {
 
         console.log('Setting messages:', data.messages.length, 'messages')
+        const cachedMessages = messagesByConversationRef.current.get(conversationId) || []
+        let nextMessages: MessageWithSender[] = data.messages
 
-        setMessages(prev => {
+        if (cachedMessages.length > 0) {
+          const prevMap = new Map(cachedMessages.map(msg => [msg.id, msg]))
 
-          if (!prev || prev.length === 0) {
-
-            return data.messages
-
-          }
-
-          
-
-          const prevMap = new Map(prev.map(msg => [msg.id, msg]))
-
-          const merged = data.messages.map((msg: MessageWithSender) => {
-
+          nextMessages = data.messages.map((msg: MessageWithSender) => {
             const prevMsg = prevMap.get(msg.id)
-
             if (!prevMsg) {
-
               return msg
-
             }
-
-            
 
             // 如果之前是 blob 预览，就保留 blob 直到真实图片预加载完成
-
             const prevFileUrl = prevMsg.metadata?.file_url
-
             const prevThumbUrl = prevMsg.metadata?.thumbnail_url
-
             const newFileUrl = msg.metadata?.file_url
-
             const newThumbUrl = msg.metadata?.thumbnail_url
-
             const shouldKeepBlob = prevFileUrl?.startsWith('blob:')
 
-            
-
             if (shouldKeepBlob && prevMsg.metadata) {
-
               return {
-
                 ...msg,
-
                 metadata: {
-
                   ...msg.metadata,
-
                   file_url: prevFileUrl,
-
                   thumbnail_url: prevThumbUrl || newThumbUrl,
-
                   _real_file_url: newFileUrl || msg.metadata?._real_file_url,
-
                   _real_thumbnail_url: newThumbUrl || msg.metadata?._real_thumbnail_url,
-
                 },
-
               }
-
             }
-
-            
 
             // 否则合并 metadata，避免丢失 _real_* 等字段
-
             return {
-
               ...msg,
-
               metadata: {
-
                 ...prevMsg.metadata,
-
                 ...msg.metadata,
-
                 file_url: newFileUrl || prevFileUrl,
-
                 thumbnail_url: newThumbUrl || prevThumbUrl,
-
               },
-
             }
-
           })
+        }
 
-          
+        messagesByConversationRef.current.set(conversationId, nextMessages)
 
-          return merged
-
-        })
+        // Stale-request guard: if user has switched conversation, don't overwrite current panel.
+        if (selectedConversationIdRef.current === conversationId) {
+          setMessages(nextMessages)
+        } else {
+          console.log('⏭️ Skip stale messages update for conversation:', conversationId)
+        }
 
       } else {
 
@@ -1374,10 +1345,8 @@ function ChatPageContent() {
 
       pendingRequestsRef.current.delete(pendingKey)
 
-      if (!silent) {
-
-        setIsLoadingMessages(false) // Clear loading state
-
+      if (!silent && selectedConversationIdRef.current === conversationId) {
+        setIsLoadingMessages(false) // Clear loading state for current conversation only
       }
 
       // CRITICAL: After loading messages, ensure the currently selected conversation
@@ -3895,13 +3864,24 @@ function ChatPageContent() {
   }, [pathname, searchParams, currentWorkspace, loadSingleConversation, router])
 
   useEffect(() => {
-    if (selectedConversationId) {
-      // Debounce to avoid rapid calls
-      const timeoutId = setTimeout(() => {
-        loadMessages(selectedConversationId)
-      }, 100)
-      return () => clearTimeout(timeoutId)
+    if (!selectedConversationId) return
+
+    const cachedMessages = messagesByConversationRef.current.get(selectedConversationId)
+    if (cachedMessages && cachedMessages.length > 0) {
+      // Instant switch: render cached messages first, then silently refresh.
+      setMessages(cachedMessages)
+      setIsLoadingMessages(false)
+      loadMessages(selectedConversationId, { silent: true }).catch((error) => {
+        console.error('Failed to refresh cached messages:', error)
+      })
+      return
     }
+
+    setMessages([])
+    setIsLoadingMessages(true)
+    loadMessages(selectedConversationId).catch((error) => {
+      console.error('Failed to load messages for selected conversation:', error)
+    })
   }, [selectedConversationId, loadMessages])
 
   // 通话挂断后，立刻刷新当前会话的消息列表（显示最新的通话时长等）
@@ -7839,11 +7819,14 @@ function ChatPageContent() {
               // If switching to a different conversation, clear messages and show loading
 
               if (selectedConversationId !== conversationId) {
-
-                setMessages([]) // Clear old messages
-
-                setIsLoadingMessages(true) // Show loading state
-
+                const cachedMessages = messagesByConversationRef.current.get(conversationId)
+                if (cachedMessages && cachedMessages.length > 0) {
+                  setMessages(cachedMessages)
+                  setIsLoadingMessages(false)
+                } else {
+                  setMessages([]) // No cache yet, show loading state
+                  setIsLoadingMessages(true)
+                }
               }
 
               
@@ -7878,6 +7861,7 @@ function ChatPageContent() {
 
               // Update state immediately - this should be instant
 
+              selectedConversationIdRef.current = conversationId
               setSelectedConversationId(conversationId)
 
               // Update URL asynchronously (don't block)

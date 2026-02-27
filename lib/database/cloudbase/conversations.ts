@@ -208,6 +208,29 @@ export async function getUserConversations(userId: string): Promise<Conversation
     }
   })
 
+  // Build unread counts based on current user's last_read_at.
+  // Keep behavior consistent with Supabase: only count messages from others.
+  const unreadCountByConv = new Map<string, number>()
+  messageDocs.forEach((m: any) => {
+    const cid = m.conversation_id
+    if (!cid) return
+    if (m.sender_id === userId) return
+
+    const membership = currentUserMembershipByConv.get(cid)
+    const lastReadAt = membership?.last_read_at
+
+    if (!lastReadAt) {
+      unreadCountByConv.set(cid, (unreadCountByConv.get(cid) || 0) + 1)
+      return
+    }
+
+    const messageTs = Date.parse(m.created_at || '')
+    const readTs = Date.parse(lastReadAt)
+    if (Number.isNaN(readTs) || Number.isNaN(messageTs) || messageTs > readTs) {
+      unreadCountByConv.set(cid, (unreadCountByConv.get(cid) || 0) + 1)
+    }
+  })
+
   // 6) Expand member user details so前端可以正确显示名字和头像（避免 "User"/"Unknown User"）
   const allUserIds = Array.from(
     new Set(
@@ -301,7 +324,7 @@ export async function getUserConversations(userId: string): Promise<Conversation
       last_message_at:
         (lastMessageDoc?.created_at as string) || c.last_message_at || c.created_at,
       members,
-      unread_count: 0,
+      unread_count: unreadCountByConv.get(convId) || 0,
       is_pinned: isPinned, // Include pin status from conversation_members
       pinned_at: pinnedAt, // Include pinned_at timestamp for sorting
       last_message: lastMessageDoc
@@ -415,5 +438,4 @@ export async function unpinConversation(conversationId: string, userId: string):
     return false
   }
 }
-
 

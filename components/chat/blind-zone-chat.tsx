@@ -29,7 +29,7 @@ export function BlindZoneChat({
   const [messages, setMessages] = useState<BlindZoneMessageDisplay[]>([])
   const [inputText, setInputText] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [isSending, setIsSending] = useState(false)
+  const [pendingSendCount, setPendingSendCount] = useState(0)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const chatEndRef = useRef<HTMLDivElement>(null)
@@ -91,7 +91,16 @@ export function BlindZoneChat({
 
   // 滚动到底部
   const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const end = chatEndRef.current
+    if (!end) return
+
+    const viewport = end.closest('[data-slot="scroll-area-viewport"]') as HTMLElement | null
+    if (viewport) {
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' })
+      return
+    }
+
+    end.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }
 
   useEffect(() => {
@@ -100,15 +109,30 @@ export function BlindZoneChat({
 
   // 发送消息
   const handleSendMessage = async () => {
-    if (!inputText.trim() || isSending) {
-      console.log('[盲区调试] handleSendMessage: 跳过发送, inputText.trim() =', inputText.trim(), 'isSending =', isSending)
+    if (!inputText.trim()) {
+      console.log('[盲区调试] handleSendMessage: 跳过发送, inputText.trim() =', inputText.trim())
       return
     }
 
     const content = inputText.trim()
     console.log('[盲区调试] handleSendMessage: 准备发送消息, content =', content)
     setInputText('')
-    setIsSending(true)
+    setPendingSendCount(prev => prev + 1)
+
+    const now = new Date().toISOString()
+    const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const optimisticMessage: BlindZoneMessageDisplay = {
+      id: tempId,
+      workspace_id: workspaceId,
+      content,
+      type: 'text',
+      is_deleted: false,
+      created_at: now,
+      updated_at: now,
+    }
+
+    // Optimistic append: make the message appear immediately.
+    setMessages(prev => [...prev, optimisticMessage])
 
     try {
       const requestBody = {
@@ -131,14 +155,11 @@ export function BlindZoneChat({
       console.log('[盲区调试] handleSendMessage: 响应数据 =', JSON.stringify(data, null, 2))
 
       if (data.success && data.message) {
-        console.log('[盲区调试] handleSendMessage: 发送成功，添加消息到列表')
-        setMessages(prev => {
-          const newMessages = [...prev, data.message]
-          console.log('[盲区调试] handleSendMessage: 新消息列表长度 =', newMessages.length)
-          return newMessages
-        })
+        console.log('[盲区调试] handleSendMessage: 发送成功，替换乐观消息')
+        setMessages(prev => prev.map(msg => (msg.id === tempId ? data.message : msg)))
       } else {
         console.log('[盲区调试] handleSendMessage: 发送失败, success =', data.success, 'error =', data.error)
+        setMessages(prev => prev.filter(msg => msg.id !== tempId))
         // 显示错误提示
         let errorMsg = data.error || (language === 'zh' ? '发送失败' : 'Failed to send message')
         if (data.error === 'Workspace not found. Please select a valid workspace.') {
@@ -156,6 +177,7 @@ export function BlindZoneChat({
       }
     } catch (error) {
       console.error('[盲区调试] handleSendMessage: 异常错误 =', error)
+      setMessages(prev => prev.filter(msg => msg.id !== tempId))
       toast({
         title: language === 'zh' ? '发送失败' : 'Send Failed',
         description: language === 'zh' ? '网络错误，请重试' : 'Network error. Please try again.',
@@ -164,7 +186,7 @@ export function BlindZoneChat({
       // 恢复输入内容
       setInputText(content)
     } finally {
-      setIsSending(false)
+      setPendingSendCount(prev => Math.max(0, prev - 1))
       console.log('[盲区调试] handleSendMessage: 发送流程结束')
     }
   }
@@ -201,7 +223,7 @@ export function BlindZoneChat({
   if (!isOpen) return null
 
   return (
-    <div className="flex flex-col h-full bg-gray-900">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden bg-gray-900">
       {/* Header */}
       <div className="h-16 border-b border-gray-800 flex items-center justify-between px-6 bg-gray-900/80 backdrop-blur-md sticky top-0 z-10">
         <div className="flex items-center space-x-3">
@@ -227,18 +249,18 @@ export function BlindZoneChat({
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="flex-1 min-h-0 bg-gray-900">
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
+          <div className="flex items-center justify-center py-8 px-4">
             <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center text-gray-400">
+          <div className="flex flex-col items-center justify-center py-8 px-4 text-center text-gray-400">
             <EyeOff className="h-12 w-12 mb-4 opacity-30" />
             <p className="text-sm">{t('noBlindZoneMessages')}</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 px-4 py-4">
             {messages.map((msg) => (
               <div
                 key={msg.id}
@@ -312,16 +334,15 @@ export function BlindZoneChat({
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
             placeholder={t('typeAnonymousMessage')}
-            disabled={isSending}
             className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-2 text-white placeholder:text-gray-500"
           />
           <Button
             onClick={handleSendMessage}
-            disabled={!inputText.trim() || isSending}
+            disabled={!inputText.trim()}
             size="icon"
             className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
           >
-            {isSending ? (
+            {pendingSendCount > 0 ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Send size={18} />

@@ -258,6 +258,56 @@ export async function PATCH(
           message: 'Conversation unhidden',
           state: { is_hidden: false },
         })
+      } else if (action === 'read') {
+        console.log('📖 Marking conversation as read for user (CloudBase):', conversationId, user.id)
+        const db = dbClient.cloudbase
+        if (!db) {
+          return NextResponse.json(
+            { error: 'CloudBase not configured' },
+            { status: 500 }
+          )
+        }
+
+        // Find the membership (try with region filter first, then without for backward compatibility)
+        let membersRes = await db.collection('conversation_members')
+          .where({
+            conversation_id: conversationId,
+            user_id: user.id,
+            region: 'cn',
+          })
+          .get()
+
+        if (!membersRes.data || membersRes.data.length === 0) {
+          membersRes = await db.collection('conversation_members')
+            .where({
+              conversation_id: conversationId,
+              user_id: user.id,
+            })
+            .get()
+        }
+
+        if (!membersRes.data || membersRes.data.length === 0) {
+          console.error('❌ No membership found for read:', { conversationId, userId: user.id })
+          return NextResponse.json(
+            { error: 'Failed to mark as read: membership not found' },
+            { status: 404 }
+          )
+        }
+
+        const membership = membersRes.data[0]
+        const now = new Date().toISOString()
+
+        await db.collection('conversation_members')
+          .doc(membership._id)
+          .update({
+            last_read_at: now,
+          })
+
+        return NextResponse.json({
+          success: true,
+          message: 'Conversation marked as read',
+          state: { last_read_at: now },
+        })
       }
       // For other actions, fall through to Supabase logic (if applicable)
     }
@@ -491,4 +541,3 @@ export async function PATCH(
     )
   }
 }
-
