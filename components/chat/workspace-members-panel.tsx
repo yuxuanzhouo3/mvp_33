@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { User, Workspace } from '@/lib/types'
 import { Search, Users, Loader2, Shield, Clock, Trash2, MessageSquare, Phone, Video, ShieldOff } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
@@ -88,7 +88,9 @@ export function WorkspaceMembersPanel({
   const [activeTab, setActiveTab] = useState<'members' | 'pending'>('members')
   const [requests, setRequests] = useState<JoinRequest[]>([])
   const [isOperating, setIsOperating] = useState(false) // 操作中状态
+  const [requestsLoading, setRequestsLoading] = useState(false) // 申请列表加载中状态
   const [currentUserRole, setCurrentUserRole] = useState<MemberRole | null>(null) // 当前用户在工作区的角色
+  const isLoadingJoinRequestsRef = useRef(false)
 
   // 确认对话框状态
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -104,35 +106,95 @@ export function WorkspaceMembersPanel({
     loadWorkspaceMembers()
   }, [workspaceId])
 
-  // 切换到待审批 tab 时加载数据
-  useEffect(() => {
-    if (activeTab === 'pending' && workspaceId) {
-      loadJoinRequests()
-    }
-  }, [activeTab, workspaceId])
+  const loadJoinRequests = useCallback(async (options: { silent?: boolean } = {}) => {
+    const { silent = false } = options
+    if (!workspaceId || isLoadingJoinRequestsRef.current) return
 
-  const loadJoinRequests = async () => {
     try {
+      isLoadingJoinRequestsRef.current = true
+      if (!silent) {
+        setRequestsLoading(true)
+      }
       console.log('[WorkspaceMembersPanel] Loading join requests for workspace:', workspaceId)
-      const response = await fetch(`/api/workspace-join-requests?workspaceId=${workspaceId}&includeHistory=true`)
+      // 添加时间戳参数防止浏览器缓存
+      const url = `/api/workspace-join-requests?workspaceId=${workspaceId}&includeHistory=true&_t=${Date.now()}`
+      const response = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      })
       const data = await response.json()
 
       console.log('[WorkspaceMembersPanel] Join requests response:', data)
+      console.log('[WorkspaceMembersPanel] Requests count:', data.requests?.length)
 
       if (data.success) {
+        console.log('[WorkspaceMembersPanel] Setting requests:', data.requests?.map((r: JoinRequest) => ({ id: r.id, status: r.status })))
         setRequests(data.requests || [])
       } else {
         // 显示错误给用户，而不是静默处理
         console.error('[WorkspaceMembersPanel] Failed to load join requests:', data.error)
-        toast.error(data.error || (isZh ? '加载待审批申请失败' : 'Failed to load requests'))
+        if (!silent) {
+          toast.error(data.error || (isZh ? '加载待审批申请失败' : 'Failed to load requests'))
+        }
         setRequests([])
       }
     } catch (error) {
       console.error('[WorkspaceMembersPanel] Failed to load join requests:', error)
-      toast.error(isZh ? '加载待审批申请失败，请重试' : 'Failed to load join requests')
+      if (!silent) {
+        toast.error(isZh ? '加载待审批申请失败，请重试' : 'Failed to load join requests')
+      }
       setRequests([])
+    } finally {
+      isLoadingJoinRequestsRef.current = false
+      if (!silent) {
+        setRequestsLoading(false)
+      }
     }
-  }
+  }, [workspaceId, isZh])
+
+  // 待审批页签：首次进入立即拉取 + 可见态短轮询 + 事件触发刷新
+  useEffect(() => {
+    if (activeTab !== 'pending' || !workspaceId) return
+
+    const refreshSilently = () => {
+      if (document.visibilityState === 'visible') {
+        loadJoinRequests({ silent: true })
+      }
+    }
+
+    loadJoinRequests()
+
+    const interval = window.setInterval(refreshSilently, 5000)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadJoinRequests({ silent: true })
+      }
+    }
+
+    const handleWindowFocus = () => {
+      loadJoinRequests({ silent: true })
+    }
+
+    const handleExternalRefresh = () => {
+      loadJoinRequests({ silent: true })
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleWindowFocus)
+    window.addEventListener('pendingRequestsUpdated', handleExternalRefresh)
+    window.addEventListener('workspaceJoinRequestsUpdated', handleExternalRefresh)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleWindowFocus)
+      window.removeEventListener('pendingRequestsUpdated', handleExternalRefresh)
+      window.removeEventListener('workspaceJoinRequestsUpdated', handleExternalRefresh)
+    }
+  }, [activeTab, workspaceId, loadJoinRequests])
 
   const loadWorkspaceMembers = async () => {
     try {
@@ -188,14 +250,18 @@ export function WorkspaceMembersPanel({
       console.log('[WorkspaceMembersPanel] API 响应数据:', data)
 
       if (data.success) {
+        console.log('[WorkspaceMembersPanel] 批准成功，开始刷新列表...')
         // 重新加载列表，保留已处理记录
         await loadJoinRequests()
+        console.log('[WorkspaceMembersPanel] 列表刷新完成，设置选中ID:', request.id)
         setSelectedId(request.id)
         // 刷新成员列表
         loadWorkspaceMembers()
         toast.success(isZh ? '已批准加入申请' : 'Request approved')
         // 通知导航栏更新红点
         window.dispatchEvent(new Event('pendingRequestsUpdated'))
+        window.dispatchEvent(new Event('workspaceJoinRequestsUpdated'))
+        console.log('[WorkspaceMembersPanel] 批准流程完成')
       } else {
         console.error('[WorkspaceMembersPanel] 批准失败:', data.error)
         toast.error(data.error || (isZh ? '操作失败' : 'Operation failed'))
@@ -229,12 +295,16 @@ export function WorkspaceMembersPanel({
       console.log('[WorkspaceMembersPanel] API 响应数据:', data)
 
       if (data.success) {
+        console.log('[WorkspaceMembersPanel] 拒绝成功，开始刷新列表...')
         // 重新加载列表，保留已处理记录
         await loadJoinRequests()
+        console.log('[WorkspaceMembersPanel] 列表刷新完成，设置选中ID:', request.id)
         setSelectedId(request.id)
         toast.success(isZh ? '已拒绝申请' : 'Request rejected')
         // 通知导航栏更新红点
         window.dispatchEvent(new Event('pendingRequestsUpdated'))
+        window.dispatchEvent(new Event('workspaceJoinRequestsUpdated'))
+        console.log('[WorkspaceMembersPanel] 拒绝流程完成')
       } else {
         console.error('[WorkspaceMembersPanel] 拒绝失败:', data.error)
         toast.error(data.error || (isZh ? '操作失败' : 'Operation failed'))
@@ -566,12 +636,16 @@ export function WorkspaceMembersPanel({
                 )
               })
             )
+          ) : requestsLoading ? (
+            <div className="p-8 text-center">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" />
+              <p className="text-sm text-gray-400 mt-2">{isZh ? '加载中...' : 'Loading...'}</p>
+            </div>
+          ) : filteredRequests.length === 0 ? (
+            <div className="p-4 text-center text-gray-400 text-sm">
+              {isZh ? '暂无申请记录' : 'No requests'}
+            </div>
           ) : (
-            filteredRequests.length === 0 ? (
-              <div className="p-4 text-center text-gray-400 text-sm">
-                {isZh ? '暂无申请记录' : 'No requests'}
-              </div>
-            ) : (
               filteredRequests.map(r => (
                 <div
                   key={r.id}
@@ -605,7 +679,6 @@ export function WorkspaceMembersPanel({
                   </div>
                 </div>
               ))
-            )
           )}
         </div>
       </div>

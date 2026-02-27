@@ -298,6 +298,10 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
 
       if (data.success) {
         console.log('[WorkspaceHeader] 申请成功!')
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('workspaceJoinRequestsUpdated'))
+          window.dispatchEvent(new Event('pendingRequestsUpdated'))
+        }
         return { success: true }
       } else {
         console.log('[WorkspaceHeader] 申请失败:', data.error)

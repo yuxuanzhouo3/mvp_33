@@ -73,6 +73,10 @@ export function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) {
 
       if (data.success) {
         console.log('[WorkspaceSelector] 申请成功!')
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('workspaceJoinRequestsUpdated'))
+          window.dispatchEvent(new Event('pendingRequestsUpdated'))
+        }
         // 申请已发送，不刷新工作区列表（因为用户还未加入）
         // 返回成功，让对话框显示"申请已发送"
         return { success: true }

@@ -84,19 +84,50 @@ export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
   useEffect(() => {
     fetchPendingRequestsCount()
 
-    // 每 30 秒刷新一次
-    const interval = setInterval(fetchPendingRequestsCount, 30000)
+    let interval: ReturnType<typeof setInterval>
+    const setupInterval = () => {
+      if (interval) {
+        clearInterval(interval)
+      }
+
+      const refreshInterval = document.visibilityState === 'visible' ? 5000 : 15000
+      interval = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          fetchPendingRequestsCount()
+        }
+      }, refreshInterval)
+    }
+
+    setupInterval()
 
     // 监听自定义事件，当有新申请或审批操作时刷新
     const handleRefresh = () => {
       // 添加小延迟确保数据库已更新
       setTimeout(fetchPendingRequestsCount, 100)
     }
+
+    const handleVisibilityChange = () => {
+      setupInterval()
+      if (document.visibilityState === 'visible') {
+        fetchPendingRequestsCount()
+      }
+    }
+
+    const handleFocus = () => {
+      fetchPendingRequestsCount()
+    }
+
     window.addEventListener('pendingRequestsUpdated', handleRefresh)
+    window.addEventListener('workspaceJoinRequestsUpdated', handleRefresh)
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       clearInterval(interval)
       window.removeEventListener('pendingRequestsUpdated', handleRefresh)
+      window.removeEventListener('workspaceJoinRequestsUpdated', handleRefresh)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [fetchPendingRequestsCount])
 
