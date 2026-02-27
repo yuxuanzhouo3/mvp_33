@@ -25,6 +25,9 @@ interface JoinRequest {
   email: string
   reason: string
   time: string
+  status: 'pending' | 'approved' | 'rejected'
+  created_at?: string
+  reviewed_at?: string | null
   avatarColor: string
 }
 
@@ -111,7 +114,7 @@ export function WorkspaceMembersPanel({
   const loadJoinRequests = async () => {
     try {
       console.log('[WorkspaceMembersPanel] Loading join requests for workspace:', workspaceId)
-      const response = await fetch(`/api/workspace-join-requests?workspaceId=${workspaceId}`)
+      const response = await fetch(`/api/workspace-join-requests?workspaceId=${workspaceId}&includeHistory=true`)
       const data = await response.json()
 
       console.log('[WorkspaceMembersPanel] Join requests response:', data)
@@ -185,9 +188,9 @@ export function WorkspaceMembersPanel({
       console.log('[WorkspaceMembersPanel] API 响应数据:', data)
 
       if (data.success) {
-        // 从列表中移除
-        setRequests(prev => prev.filter(r => r.id !== request.id))
-        setSelectedId(null)
+        // 重新加载列表，保留已处理记录
+        await loadJoinRequests()
+        setSelectedId(request.id)
         // 刷新成员列表
         loadWorkspaceMembers()
         toast.success(isZh ? '已批准加入申请' : 'Request approved')
@@ -226,9 +229,9 @@ export function WorkspaceMembersPanel({
       console.log('[WorkspaceMembersPanel] API 响应数据:', data)
 
       if (data.success) {
-        // 从列表中移除
-        setRequests(prev => prev.filter(r => r.id !== request.id))
-        setSelectedId(null)
+        // 重新加载列表，保留已处理记录
+        await loadJoinRequests()
+        setSelectedId(request.id)
         toast.success(isZh ? '已拒绝申请' : 'Request rejected')
         // 通知导航栏更新红点
         window.dispatchEvent(new Event('pendingRequestsUpdated'))
@@ -434,6 +437,13 @@ export function WorkspaceMembersPanel({
       request.email.toLowerCase().includes(query)
     )
   })
+  const pendingRequestsCount = requests.filter(r => r.status === 'pending').length
+
+  const getRequestStatusText = (status: JoinRequest['status']) => {
+    if (status === 'approved') return isZh ? '已同意' : 'Approved'
+    if (status === 'rejected') return isZh ? '已拒绝' : 'Rejected'
+    return isZh ? '待审批' : 'Pending'
+  }
 
   // 获取选中的成员或申请
   const selectedMember = members.find(m => m.id === selectedId)
@@ -500,9 +510,9 @@ export function WorkspaceMembersPanel({
               className={`flex-1 pb-2 text-sm font-medium transition relative ${activeTab === 'pending' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}
             >
               {isZh ? '待审批' : 'Pending'}
-              {requests.length > 0 && (
+              {pendingRequestsCount > 0 && (
                 <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-red-500 text-[10px] leading-none text-white px-1.5 py-0.5 font-bold">
-                  {requests.length}
+                  {pendingRequestsCount}
                 </span>
               )}
             </button>
@@ -559,7 +569,7 @@ export function WorkspaceMembersPanel({
           ) : (
             filteredRequests.length === 0 ? (
               <div className="p-4 text-center text-gray-400 text-sm">
-                {isZh ? '暂无待审批申请' : 'No pending requests'}
+                {isZh ? '暂无申请记录' : 'No requests'}
               </div>
             ) : (
               filteredRequests.map(r => (
@@ -574,10 +584,25 @@ export function WorkspaceMembersPanel({
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm truncate">{r.name}</p>
                     <p className="text-[11px] text-gray-500 italic truncate">
-                      {isZh ? `申请加入 ${workspaceName}...` : `Request to join ${workspaceName}...`}
+                      {r.status === 'approved'
+                        ? (isZh ? `已同意加入 ${workspaceName}` : `Approved to join ${workspaceName}`)
+                        : r.status === 'rejected'
+                          ? (isZh ? `已拒绝加入 ${workspaceName}` : `Rejected to join ${workspaceName}`)
+                          : (isZh ? `申请加入 ${workspaceName}...` : `Request to join ${workspaceName}...`)}
                     </p>
                   </div>
-                  <div className="text-[10px] text-gray-400 whitespace-nowrap">{r.time}</div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`text-[10px] font-semibold ${
+                      r.status === 'approved'
+                        ? 'text-green-600'
+                        : r.status === 'rejected'
+                          ? 'text-red-500'
+                          : 'text-amber-500'
+                    }`}>
+                      {getRequestStatusText(r.status)}
+                    </span>
+                    <span className="text-[10px] text-gray-400 whitespace-nowrap">{r.time}</span>
+                  </div>
                 </div>
               ))
             )
@@ -618,17 +643,24 @@ export function WorkspaceMembersPanel({
                     <Shield size={18} />
                     <span>{isZh ? '权限角色' : 'Role'}</span>
                   </div>
-                  <span className="font-bold text-sm uppercase tracking-wider">
+                    <span className="font-bold text-sm uppercase tracking-wider">
                     {activeTab === 'members'
                       ? getRoleInfo(selectedMember?.role || 'member').text
-                      : (isZh ? '待审批' : 'Pending')
+                      : getRequestStatusText(selectedRequest?.status || 'pending')
                     }
                   </span>
                 </div>
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
                   <div className="flex items-center gap-3 text-gray-500 font-medium">
                     <Clock size={18} />
-                    <span>{activeTab === 'members' ? (isZh ? '加入时间' : 'Joined') : (isZh ? '申请时间' : 'Request Time')}</span>
+                    <span>
+                      {activeTab === 'members'
+                        ? (isZh ? '加入时间' : 'Joined')
+                        : (selectedRequest?.status === 'pending'
+                          ? (isZh ? '申请时间' : 'Request Time')
+                          : (isZh ? '处理时间' : 'Processed Time'))
+                      }
+                    </span>
                   </div>
                   <span className="font-bold text-sm">
                     {activeTab === 'members' ? selectedMember?.joinedAt : selectedRequest?.time}
@@ -716,22 +748,30 @@ export function WorkspaceMembersPanel({
                       </button>
                     )}
                   </>
-                ) : selectedRequest ? (
-                  <div className="flex gap-4">
-                    <button
-                      onClick={() => handleRejectRequest(selectedRequest)}
-                      disabled={isOperating}
-                      className="flex-1 py-4 border-2 border-gray-100 text-gray-400 font-bold rounded-2xl hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isOperating ? (isZh ? '处理中...' : 'Processing...') : (isZh ? '拒绝' : 'Reject')}
-                    </button>
-                    <button
-                      onClick={() => handleApproveRequest(selectedRequest)}
-                      disabled={isOperating}
-                      className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isOperating ? (isZh ? '处理中...' : 'Processing...') : (isZh ? '批准加入' : 'Approve')}
-                    </button>
+              ) : selectedRequest ? (
+                <div className="flex gap-4">
+                    {selectedRequest.status === 'pending' ? (
+                      <>
+                        <button
+                          onClick={() => handleRejectRequest(selectedRequest)}
+                          disabled={isOperating}
+                          className="flex-1 py-4 border-2 border-gray-100 text-gray-400 font-bold rounded-2xl hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isOperating ? (isZh ? '处理中...' : 'Processing...') : (isZh ? '拒绝' : 'Reject')}
+                        </button>
+                        <button
+                          onClick={() => handleApproveRequest(selectedRequest)}
+                          disabled={isOperating}
+                          className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isOperating ? (isZh ? '处理中...' : 'Processing...') : (isZh ? '批准加入' : 'Approve')}
+                        </button>
+                      </>
+                    ) : (
+                      <div className="w-full py-4 text-center text-sm text-gray-500 bg-gray-50 rounded-2xl">
+                        {isZh ? '该申请已处理，可在此保留历史记录' : 'This request has been processed and kept as history.'}
+                      </div>
+                    )}
                   </div>
                 ) : null}
               </div>

@@ -63,6 +63,16 @@ type ConversationsApiResponse = {
 
 }
 
+const SYSTEM_ASSISTANT_IDS = new Set([
+  'system-assistant',
+  '00000000-0000-0000-0000-000000000001',
+])
+
+const isSystemAssistantUserId = (userId?: string | null): boolean => {
+  if (!userId) return false
+  return SYSTEM_ASSISTANT_IDS.has(userId)
+}
+
 function ChatPageContent() {
 
   const router = useRouter()
@@ -1517,13 +1527,12 @@ function ChatPageContent() {
                       
                       // Find the other user (not current user)
                       const otherUser = conv.members.find((m: any) => (m.id || m) !== userId)
-                      if (!otherUser || !otherUser.id) {
+                      const otherUserId = typeof otherUser === 'string' ? otherUser : otherUser?.id
+                      if (!otherUserId) {
                         console.log('🗑️ [Cache] Filtering out direct conversation without other user:', conv.id)
                         return false
                       }
-                      
-                      const otherUserId = otherUser.id || otherUser
-                      
+
                       // CRITICAL: Allow self-conversations (where otherUser is the same as current user)
                       if (otherUserId === userId) {
                         console.log('✅ [Cache] Keeping self-conversation:', conv.id)
@@ -1531,7 +1540,7 @@ function ChatPageContent() {
                       }
                       
                       // If the other user is not in contacts, filter out this conversation
-                      if (!contactUserIds.has(otherUserId)) {
+                      if (!contactUserIds.has(otherUserId) && !isSystemAssistantUserId(otherUserId)) {
                         console.log('🗑️ [Cache] Filtering out direct conversation - user not in contacts:', {
                           conversationId: conv.id,
                           otherUserId: otherUserId,
@@ -1696,7 +1705,7 @@ function ChatPageContent() {
                               return true // Keep self-conversations
                             }
                             
-                            return otherUserId && contactUserIds.has(otherUserId)
+                            return !!otherUserId && (contactUserIds.has(otherUserId) || isSystemAssistantUserId(otherUserId))
                           }
                           return false // Filter out invalid direct conversations
                         }
@@ -2355,9 +2364,10 @@ function ChatPageContent() {
                   // If missing otherUserId, treat as invalid and delete
                   const noOther = !otherUserId
                   // If the other user is not in contacts list, mark this conversation as deleted
+                  const isSystemAssistantConversation = isSystemAssistantUserId(otherUserId)
                   const noContacts = contactCount === 0
                   const notInContacts = otherUserId && !contactUserIds.has(otherUserId)
-                  if ((noContacts || noOther || notInContacts) && !deletedConversations.includes(conv.id)) {
+                  if ((noOther || (!isSystemAssistantConversation && (noContacts || notInContacts))) && !deletedConversations.includes(conv.id)) {
                     conversationsToDelete.push(conv.id)
                     console.log(`🧹 Auto-marking conversation ${conv.id} as deleted (user ${otherUserId || 'unknown'} not in contacts or contact list empty)`, {
                       members: memberIds,
@@ -2377,7 +2387,14 @@ function ChatPageContent() {
 
               // If contact list is empty and nothing was marked yet, force delete all direct conversations
               if (contactCount === 0 && conversationsToDelete.length === 0) {
-                const allDirectIds = directAndGroups.filter(c => c.type === 'direct').map(c => c.id)
+                const allDirectIds = directAndGroups
+                  .filter(c => {
+                    if (c.type !== 'direct') return false
+                    const memberIds = (c.members || []).map((m: any) => (m.id || m)).filter(Boolean)
+                    const otherUserId = memberIds.find((id: string) => id !== userId)
+                    return !isSystemAssistantUserId(otherUserId)
+                  })
+                  .map(c => c.id)
                 conversationsToDelete.push(...allDirectIds)
                 console.log('🧹 No contacts at all, force-deleting all direct conversations', allDirectIds)
               }
@@ -7718,9 +7735,8 @@ function ChatPageContent() {
   // Check if this is a system assistant conversation (用户不能回复系统通知)
   const isSystemAssistantConversation = (() => {
     if (!displayConversation || displayConversation.type !== 'direct') return false
-    const systemAssistantIds = ['system-assistant', '00000000-0000-0000-0000-000000000001']
     return displayConversation.members?.some(
-      (m: any) => systemAssistantIds.includes(m.id || m) || systemAssistantIds.includes(m.user_id)
+      (m: any) => isSystemAssistantUserId((m.id || m.user_id || m) as string)
     ) || false
   })()
 

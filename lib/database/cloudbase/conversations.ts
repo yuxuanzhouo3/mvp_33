@@ -6,6 +6,11 @@
 import { getCloudBaseDb } from '@/lib/cloudbase/client'
 import { ConversationWithDetails, User } from '@/lib/types'
 
+const SYSTEM_ASSISTANT_IDS = new Set([
+  'system-assistant',
+  '00000000-0000-0000-0000-000000000001',
+])
+
 export type CloudBaseConversationType = 'direct' | 'channel' | 'group'
 
 interface CreateConversationInput {
@@ -272,7 +277,8 @@ export async function getUserConversations(userId: string): Promise<Conversation
     if (c.type === 'direct') {
       const other = memberEntries.find((m: any) => m.user_id !== userId)
       const otherUserId = other?.user_id
-      if (otherUserId && !contactUserIds.has(otherUserId)) {
+      const isSystemAssistantConversation = otherUserId && SYSTEM_ASSISTANT_IDS.has(otherUserId)
+      if (!isSystemAssistantConversation && otherUserId && !contactUserIds.has(otherUserId)) {
         console.log(`🧹 CloudBase API: filtering direct conversation ${convId} because user ${otherUserId} not in contacts of ${userId}`)
         return null
       }
@@ -409,7 +415,5 @@ export async function unpinConversation(conversationId: string, userId: string):
     return false
   }
 }
-
-
 
 

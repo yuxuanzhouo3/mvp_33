@@ -3,7 +3,7 @@ import { getDatabaseClient } from '@/lib/database-router'
 
 /**
  * 工作区加入申请 API
- * GET: 获取待审批列表 (需要 owner/admin 权限)
+ * GET: 获取加入申请列表 (默认仅待审批，可选携带历史)
  * POST: 创建申请 (邀请码流程)
  */
 
@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const workspaceId = searchParams.get('workspaceId')
+    const includeHistory = searchParams.get('includeHistory') === 'true'
 
     if (!workspaceId) {
       return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 })
@@ -46,14 +47,18 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Permission denied. Admin role required.' }, { status: 403 })
       }
 
-      // 获取待审批申请
+      // 获取申请（默认仅 pending，可选包含历史）
       try {
+        const whereQuery: any = {
+          workspace_id: workspaceId,
+        }
+        if (!includeHistory) {
+          whereQuery.status = 'pending'
+        }
+
         const requestsResult = await db
           .collection('workspace_join_requests')
-          .where({
-            workspace_id: workspaceId,
-            status: 'pending'
-          })
+          .where(whereQuery)
           .orderBy('created_at', 'desc')
           .get()
 
@@ -74,15 +79,20 @@ export async function GET(request: NextRequest) {
         )
 
         const formattedRequests = requests.map((r: any) => {
-          const user = usersMap.get(r.user_id) || {}
+          const user: any = usersMap.get(r.user_id) || {}
+          const status = (r.status || 'pending') as 'pending' | 'approved' | 'rejected'
+          const displayTimeSource = status === 'pending' ? r.created_at : (r.reviewed_at || r.created_at)
           return {
             id: r._id,
             user_id: r.user_id,
             name: user.full_name || user.username || 'Unknown',
             email: user.email || '',
             reason: r.reason || '',
-            time: formatTimeAgo(r.created_at),
-            avatarColor: getAvatarColor(user.full_name || user.username || 'U')
+            status,
+            created_at: r.created_at,
+            reviewed_at: r.reviewed_at || null,
+            time: formatTimeAgo(displayTimeSource),
+            avatarColor: getAvatarColor(user.full_name || user.username || 'U'),
           }
         })
 
@@ -116,13 +126,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Permission denied. Admin role required.' }, { status: 403 })
     }
 
-    // 获取待审批申请
-    const { data: requests, error } = await supabase
+    // 获取申请（默认仅 pending，可选包含历史）
+    let query = supabase
       .from('workspace_join_requests')
       .select(`
         id,
+        status,
         reason,
         created_at,
+        reviewed_at,
         user_id,
         users!workspace_join_requests_user_id_fkey (
           id,
@@ -132,23 +144,35 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('workspace_id', workspaceId)
-      .eq('status', 'pending')
       .order('created_at', { ascending: false })
+
+    if (!includeHistory) {
+      query = query.eq('status', 'pending')
+    }
+
+    const { data: requests, error } = await query
 
     if (error) {
       console.error('Error fetching join requests:', error)
       return NextResponse.json({ error: 'Failed to fetch requests' }, { status: 500 })
     }
 
-    const formattedRequests = (requests || []).map((r: any) => ({
-      id: r.id,
-      user_id: r.user_id,
-      name: r.users?.full_name || r.users?.username || 'Unknown',
-      email: r.users?.email || '',
-      reason: r.reason || '',
-      time: formatTimeAgo(r.created_at),
-      avatarColor: getAvatarColor(r.users?.full_name || r.users?.username || 'U')
-    }))
+    const formattedRequests = (requests || []).map((r: any) => {
+      const status = (r.status || 'pending') as 'pending' | 'approved' | 'rejected'
+      const displayTimeSource = status === 'pending' ? r.created_at : (r.reviewed_at || r.created_at)
+      return {
+        id: r.id,
+        user_id: r.user_id,
+        name: r.users?.full_name || r.users?.username || 'Unknown',
+        email: r.users?.email || '',
+        reason: r.reason || '',
+        status,
+        created_at: r.created_at,
+        reviewed_at: r.reviewed_at || null,
+        time: formatTimeAgo(displayTimeSource),
+        avatarColor: getAvatarColor(r.users?.full_name || r.users?.username || 'U')
+      }
+    })
 
     return NextResponse.json({ success: true, requests: formattedRequests })
   } catch (error: any) {
