@@ -154,9 +154,11 @@ export function WorkspaceMembersPanel({
     }
   }, [workspaceId, isZh])
 
-  // 待审批页签：首次进入立即拉取 + 可见态短轮询 + 事件触发刷新
+  // 全局同步待审批数据：
+  // 1) 组件进入后立即静默拉取，确保 Pending 红点与左侧导航一致
+  // 2) 不在 Pending 页签时也保持短轮询与事件刷新，避免出现"左侧有红点但页签无红点"
   useEffect(() => {
-    if (activeTab !== 'pending' || !workspaceId) return
+    if (!workspaceId) return
 
     const refreshSilently = () => {
       if (document.visibilityState === 'visible') {
@@ -164,9 +166,11 @@ export function WorkspaceMembersPanel({
       }
     }
 
-    loadJoinRequests()
+    refreshSilently()
 
-    const interval = window.setInterval(refreshSilently, 5000)
+    const interval = activeTab === 'pending'
+      ? null
+      : window.setInterval(refreshSilently, 5000)
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -188,11 +192,32 @@ export function WorkspaceMembersPanel({
     window.addEventListener('workspaceJoinRequestsUpdated', handleExternalRefresh)
 
     return () => {
-      clearInterval(interval)
+      if (interval) {
+        clearInterval(interval)
+      }
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('focus', handleWindowFocus)
       window.removeEventListener('pendingRequestsUpdated', handleExternalRefresh)
       window.removeEventListener('workspaceJoinRequestsUpdated', handleExternalRefresh)
+    }
+  }, [workspaceId, activeTab, loadJoinRequests])
+
+  // 待审批页签：首次进入显示加载态并开启可见态短轮询
+  useEffect(() => {
+    if (activeTab !== 'pending' || !workspaceId) return
+
+    const refreshSilently = () => {
+      if (document.visibilityState === 'visible') {
+        loadJoinRequests({ silent: true })
+      }
+    }
+
+    loadJoinRequests()
+
+    const interval = window.setInterval(refreshSilently, 5000)
+
+    return () => {
+      clearInterval(interval)
     }
   }, [activeTab, workspaceId, loadJoinRequests])
 
@@ -251,8 +276,14 @@ export function WorkspaceMembersPanel({
 
       if (data.success) {
         console.log('[WorkspaceMembersPanel] 批准成功，开始刷新列表...')
+        const reviewedAt = new Date().toISOString()
+        setRequests(prev => prev.map(r => (
+          r.id === request.id
+            ? { ...r, status: 'approved', reviewed_at: reviewedAt, time: (isZh ? '刚刚' : 'Just now') }
+            : r
+        )))
         // 重新加载列表，保留已处理记录
-        await loadJoinRequests()
+        await loadJoinRequests({ silent: true })
         console.log('[WorkspaceMembersPanel] 列表刷新完成，设置选中ID:', request.id)
         setSelectedId(request.id)
         // 刷新成员列表
@@ -296,8 +327,14 @@ export function WorkspaceMembersPanel({
 
       if (data.success) {
         console.log('[WorkspaceMembersPanel] 拒绝成功，开始刷新列表...')
+        const reviewedAt = new Date().toISOString()
+        setRequests(prev => prev.map(r => (
+          r.id === request.id
+            ? { ...r, status: 'rejected', reviewed_at: reviewedAt, time: (isZh ? '刚刚' : 'Just now') }
+            : r
+        )))
         // 重新加载列表，保留已处理记录
-        await loadJoinRequests()
+        await loadJoinRequests({ silent: true })
         console.log('[WorkspaceMembersPanel] 列表刷新完成，设置选中ID:', request.id)
         setSelectedId(request.id)
         toast.success(isZh ? '已拒绝申请' : 'Request rejected')

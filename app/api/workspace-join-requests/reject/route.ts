@@ -134,45 +134,74 @@ export async function POST(request: NextRequest) {
     }
 
     // INTL version: use Supabase
-    const supabase = dbClient.supabase!
-    const { data: { user } } = await supabase.auth.getUser()
+    console.log('[Reject API] 使用 Supabase 认证')
+    const supabase = dbClient.supabase
+    if (!supabase) {
+      console.error('[Reject API] 错误: Supabase 客户端不可用')
+      return NextResponse.json({ success: false, error: 'Database client not available' }, { status: 500 })
+    }
+
+    console.log('[Reject API] 获取当前用户...')
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    console.log('[Reject API] 用户认证结果:', user ? `用户ID: ${user.id}` : '未认证', '错误:', authError)
+
+    if (authError) {
+      console.error('[Reject API] 认证错误:', authError)
+      return NextResponse.json({ success: false, error: 'Auth error: ' + authError.message }, { status: 401 })
+    }
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      console.log('[Reject API] 错误: 用户未授权')
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
     // 检查是否为工作区管理员
-    const { data: memberCheck } = await supabase
+    console.log('[Reject API] 检查管理员权限, userId:', user.id, 'workspaceId:', workspaceId)
+    const { data: memberCheck, error: memberError } = await supabase
       .from('workspace_members')
       .select('role')
       .eq('workspace_id', workspaceId)
       .eq('user_id', user.id)
       .single()
 
+    console.log('[Reject API] 管理员检查结果:', memberCheck, '错误:', memberError)
+
+    if (memberError) {
+      console.error('[Reject API] 查询成员角色错误:', memberError)
+    }
+
     if (!memberCheck || !['owner', 'admin'].includes(memberCheck.role)) {
-      return NextResponse.json({ error: 'Permission denied. Admin role required.' }, { status: 403 })
+      console.log('[Reject API] 错误: 权限不足，需要管理员权限')
+      return NextResponse.json({ success: false, error: 'Permission denied. Admin role required.' }, { status: 403 })
     }
 
     // 获取申请信息
+    console.log('[Reject API] 获取申请信息, requestId:', requestId)
     const { data: joinRequest, error: fetchError } = await supabase
       .from('workspace_join_requests')
       .select('*')
       .eq('id', requestId)
       .single()
 
+    console.log('[Reject API] 申请信息:', joinRequest, '错误:', fetchError)
+
     if (fetchError || !joinRequest) {
-      return NextResponse.json({ error: 'Request not found' }, { status: 404 })
+      console.log('[Reject API] 错误: 申请不存在')
+      return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 })
     }
 
     if (joinRequest.status !== 'pending') {
-      return NextResponse.json({ error: 'Request already processed' }, { status: 400 })
+      console.log('[Reject API] 错误: 申请已处理, 当前状态:', joinRequest.status)
+      return NextResponse.json({ success: false, error: 'Request already processed' }, { status: 400 })
     }
 
     if (joinRequest.workspace_id !== workspaceId) {
-      return NextResponse.json({ error: 'Workspace mismatch' }, { status: 400 })
+      console.log('[Reject API] 错误: 工作区不匹配')
+      return NextResponse.json({ success: false, error: 'Workspace mismatch' }, { status: 400 })
     }
 
     // 更新申请状态
+    console.log('[Reject API] 更新申请状态为 rejected')
     const { error: updateError } = await supabase
       .from('workspace_join_requests')
       .update({
@@ -183,9 +212,11 @@ export async function POST(request: NextRequest) {
       .eq('id', requestId)
 
     if (updateError) {
-      console.error('Error updating request:', updateError)
-      return NextResponse.json({ error: 'Failed to update request' }, { status: 500 })
+      console.error('[Reject API] 更新申请状态错误:', updateError)
+      return NextResponse.json({ success: false, error: 'Failed to update request: ' + updateError.message }, { status: 500 })
     }
+
+    console.log('[Reject API] 拒绝操作成功完成')
 
     // 获取工作区信息用于通知
     const { data: workspace } = await supabase
