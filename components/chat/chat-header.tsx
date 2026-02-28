@@ -239,9 +239,6 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
                     </AvatarFallback>
                   </Avatar>
                 </button>
-                {display.status && (
-                  <span className={cn('absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background', getStatusColor(display.status))} />
-                )}
               </div>
             ) : (
               <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
