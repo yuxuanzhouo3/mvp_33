@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { User } from '@/lib/types'
@@ -16,8 +17,42 @@ interface QRCodeDialogProps {
 export function QRCodeDialog({ open, onOpenChange, currentUser }: QRCodeDialogProps) {
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
+  const [canonicalUserId, setCanonicalUserId] = useState(currentUser.id)
 
-  const qrCodeData = `orbitchat://add-friend?userId=${currentUser.id}`
+  useEffect(() => {
+    setCanonicalUserId(currentUser.id)
+  }, [currentUser.id])
+
+  useEffect(() => {
+    if (!open) return
+
+    let cancelled = false
+
+    const loadCanonicalProfile = async () => {
+      try {
+        const response = await fetch('/api/users/profile', { cache: 'no-store' })
+        let data: any = {}
+        try {
+          data = await response.json()
+        } catch {
+          data = {}
+        }
+        if (!cancelled && response.ok && data?.user?.id) {
+          setCanonicalUserId(String(data.user.id))
+        }
+      } catch {
+        // Keep local currentUser.id as fallback.
+      }
+    }
+
+    loadCanonicalProfile()
+
+    return () => {
+      cancelled = true
+    }
+  }, [open])
+
+  const qrCodeData = `orbitchat://add-friend?userId=${encodeURIComponent(canonicalUserId)}`
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

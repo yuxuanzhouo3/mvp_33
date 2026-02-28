@@ -95,15 +95,43 @@ export async function GET(
     // Supabase (global) users
     const supabase = await createClient()
 
-    const { data: user, error } = await supabase
+    let user: any = null
+
+    // Primary lookup by UUID id.
+    const { data: userById, error: errorById } = await supabase
       .from('users')
       .select('id, email, username, full_name, avatar_url, department, title, status, last_seen_at, region')
       .eq('id', userId)
       .eq('region', 'global')
-      .single()
+      .maybeSingle()
 
-    if (error || !user) {
-      console.error('Get user by ID error (supabase):', error)
+    if (userById) {
+      user = userById
+    } else {
+      // Backward compatibility for legacy QR payloads that encoded username/email as userId.
+      const { data: userByUsername } = await supabase
+        .from('users')
+        .select('id, email, username, full_name, avatar_url, department, title, status, last_seen_at, region')
+        .eq('username', userId)
+        .eq('region', 'global')
+        .maybeSingle()
+
+      if (userByUsername) {
+        user = userByUsername
+      } else {
+        const { data: userByEmail } = await supabase
+          .from('users')
+          .select('id, email, username, full_name, avatar_url, department, title, status, last_seen_at, region')
+          .eq('email', userId)
+          .eq('region', 'global')
+          .maybeSingle()
+
+        user = userByEmail || null
+      }
+    }
+
+    if (!user) {
+      console.error('Get user by ID error (supabase):', errorById, 'userId:', userId)
       return NextResponse.json(
         { error: 'User not found' },
         { status: 404 }

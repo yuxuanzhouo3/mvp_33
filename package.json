@@ -7,6 +7,8 @@
     "build": "next build",
     "build:cn": "cross-env-shell \"cp .env.cn .env.local && next build\"",
     "build:intl": "cross-env-shell \"cp .env.intl .env.local && next build\"",
+    "dev:cn": "cross-env-shell \"cp .env.cn .env.local && TURBOPACK=0 next dev -p 3000\"",
+    "dev:intl": "cross-env-shell \"cp .env.intl .env.local && TURBOPACK=0 next dev -p 3000\"",
     "dev": "cross-env TURBOPACK=0 next dev -p 3000",
     "lint": "eslint .",
     "start": "next start"
