@@ -46,10 +46,12 @@ interface AppNavigationProps {
   totalUnreadCount?: number
 }
 
-export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
+export function AppNavigation({ totalUnreadCount }: AppNavigationProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0)
+  const [contactPendingCount, setContactPendingCount] = useState(0)
+  const [chatUnreadCount, setChatUnreadCount] = useState(0)
 
   useEffect(() => {
     navItems.forEach((item) => {
@@ -104,9 +106,119 @@ export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
     }
   }, [])
 
+  // 获取联系人待处理请求数量（侧边栏联系人红点）
+  const fetchContactPendingCount = useCallback(async (forceRefresh = false) => {
+    try {
+      const userStr = localStorage.getItem('chat_app_current_user')
+      const user = userStr ? JSON.parse(userStr) : null
+      if (!user?.id) {
+        setContactPendingCount(0)
+        return
+      }
+
+      const cacheKey = `contact_pending_count_${user.id}`
+      const cacheTsKey = `contact_pending_count_ts_${user.id}`
+      const cachedCount = localStorage.getItem(cacheKey)
+      const cachedTs = localStorage.getItem(cacheTsKey)
+      const cacheTtl = 10 * 1000
+
+      if (!forceRefresh && cachedCount && cachedTs) {
+        const age = Date.now() - parseInt(cachedTs, 10)
+        if (age < cacheTtl) {
+          setContactPendingCount(parseInt(cachedCount, 10) || 0)
+          return
+        }
+      }
+
+      const response = await fetch('/api/contact-requests?type=received&status=pending')
+      const data = await response.json()
+
+      if (response.ok && data?.requests) {
+        const count = Array.isArray(data.requests) ? data.requests.length : 0
+        setContactPendingCount(count)
+        localStorage.setItem(cacheKey, count.toString())
+        localStorage.setItem(cacheTsKey, Date.now().toString())
+      } else {
+        setContactPendingCount(0)
+      }
+    } catch (error) {
+      console.error('[AppNavigation] Failed to fetch contact pending count:', error)
+      setContactPendingCount(0)
+    }
+  }, [])
+
+  // 获取聊天未读总数（不在聊天页时也能显示消息红点）
+  const fetchChatUnreadCount = useCallback(async (forceRefresh = false) => {
+    try {
+      const userStr = localStorage.getItem('chat_app_current_user')
+      const workspaceStr = localStorage.getItem('chat_app_current_workspace')
+      const user = userStr ? JSON.parse(userStr) : null
+      const workspace = workspaceStr ? JSON.parse(workspaceStr) : null
+
+      if (!user?.id || !workspace?.id) {
+        setChatUnreadCount(0)
+        return
+      }
+
+      const cacheKey = `nav_chat_unread_${user.id}_${workspace.id}`
+      const cacheTsKey = `nav_chat_unread_ts_${user.id}_${workspace.id}`
+      const cachedCount = localStorage.getItem(cacheKey)
+      const cachedTs = localStorage.getItem(cacheTsKey)
+      const cacheTtl = 8 * 1000
+
+      if (!forceRefresh && cachedCount && cachedTs) {
+        const age = Date.now() - parseInt(cachedTs, 10)
+        if (age < cacheTtl) {
+          setChatUnreadCount(parseInt(cachedCount, 10) || 0)
+          return
+        }
+      }
+
+      // 先用本地 conversations 缓存做快速更新
+      const convCacheKey = `conversations_${user.id}_${workspace.id}`
+      const convCacheRaw = localStorage.getItem(convCacheKey)
+      if (convCacheRaw) {
+        try {
+          const convs = JSON.parse(convCacheRaw)
+          if (Array.isArray(convs)) {
+            const count = convs.reduce((sum: number, conv: any) => sum + (conv.unread_count || 0), 0)
+            setChatUnreadCount(count)
+          }
+        } catch (error) {
+          console.warn('[AppNavigation] Failed to parse conversations cache:', error)
+        }
+      }
+
+      const response = await fetch(`/api/conversations?workspaceId=${workspace.id}`, {
+        cache: 'no-store',
+      })
+      const data = await response.json()
+      if (response.ok && data?.success && Array.isArray(data.conversations)) {
+        const count = data.conversations.reduce(
+          (sum: number, conv: any) => sum + (conv.unread_count || 0),
+          0
+        )
+        setChatUnreadCount(count)
+
+        localStorage.setItem(cacheKey, count.toString())
+        localStorage.setItem(cacheTsKey, Date.now().toString())
+
+        // 同步更新 conversations 缓存，便于其他页面复用
+        localStorage.setItem(convCacheKey, JSON.stringify(data.conversations))
+        localStorage.setItem(`conversations_timestamp_${user.id}_${workspace.id}`, Date.now().toString())
+      }
+    } catch (error) {
+      console.error('[AppNavigation] Failed to fetch chat unread count:', error)
+    }
+  }, [])
+
   // 初始化和定时刷新
   useEffect(() => {
     fetchPendingRequestsCount()
+    fetchContactPendingCount()
+    if (totalUnreadCount === undefined) {
+      fetchChatUnreadCount()
+    }
 
     let interval: ReturnType<typeof setInterval>
     const setupInterval = () => {
@@ -118,6 +230,10 @@ export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
       interval = setInterval(() => {
         if (document.visibilityState === 'visible') {
           fetchPendingRequestsCount()
+          fetchContactPendingCount()
+          if (totalUnreadCount === undefined) {
+            fetchChatUnreadCount()
+          }
         }
       }, refreshInterval)
     }
@@ -129,6 +245,10 @@ export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
       // 添加小延迟确保数据库已更新
       setTimeout(() => {
         fetchPendingRequestsCount(true)
+        fetchContactPendingCount(true)
+        if (totalUnreadCount === undefined) {
+          fetchChatUnreadCount(true)
+        }
       }, 100)
     }
 
@@ -136,15 +256,25 @@ export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
       setupInterval()
       if (document.visibilityState === 'visible') {
         fetchPendingRequestsCount(true)
+        fetchContactPendingCount(true)
+        if (totalUnreadCount === undefined) {
+          fetchChatUnreadCount(true)
+        }
       }
     }
 
     const handleFocus = () => {
       fetchPendingRequestsCount(true)
+      fetchContactPendingCount(true)
+      if (totalUnreadCount === undefined) {
+        fetchChatUnreadCount(true)
+      }
     }
 
     window.addEventListener('pendingRequestsUpdated', handleRefresh)
     window.addEventListener('workspaceJoinRequestsUpdated', handleRefresh)
+    window.addEventListener('friend-requests-updated', handleRefresh)
+    window.addEventListener('conversationsUpdated', handleRefresh)
     window.addEventListener('focus', handleFocus)
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
@@ -152,10 +282,12 @@ export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
       clearInterval(interval)
       window.removeEventListener('pendingRequestsUpdated', handleRefresh)
       window.removeEventListener('workspaceJoinRequestsUpdated', handleRefresh)
+      window.removeEventListener('friend-requests-updated', handleRefresh)
+      window.removeEventListener('conversationsUpdated', handleRefresh)
       window.removeEventListener('focus', handleFocus)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [fetchPendingRequestsCount])
+  }, [fetchPendingRequestsCount, fetchContactPendingCount, fetchChatUnreadCount, totalUnreadCount])
 
   const isActive = (href: string) => {
     return pathname === href || pathname?.startsWith(href + '/')
@@ -166,7 +298,10 @@ export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
       {navItems.map((item) => {
         const Icon = item.icon
         const active = isActive(item.href)
-        const showChatBadge = item.href === '/chat' && totalUnreadCount > 0
+        const effectiveChatUnreadCount =
+          typeof totalUnreadCount === 'number' ? totalUnreadCount : chatUnreadCount
+        const showChatBadge = item.href === '/chat' && effectiveChatUnreadCount > 0
+        const showContactBadge = item.href === '/contacts' && contactPendingCount > 0
         const showPendingBadge = item.href === '/workspace-members' && pendingRequestsCount > 0
 
         return (
@@ -185,7 +320,15 @@ export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
                   variant="destructive"
                   className="absolute right-2 h-5 px-2 flex items-center justify-center text-xs font-medium"
                 >
-                  {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
+                  {effectiveChatUnreadCount > 99 ? '99+' : effectiveChatUnreadCount}
+                </Badge>
+              )}
+              {showContactBadge && (
+                <Badge
+                  variant="destructive"
+                  className="absolute right-2 h-5 min-w-5 px-1.5 flex items-center justify-center text-xs font-medium"
+                >
+                  {contactPendingCount > 99 ? '99+' : contactPendingCount}
                 </Badge>
               )}
               {showPendingBadge && (

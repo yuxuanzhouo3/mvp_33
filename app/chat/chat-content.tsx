@@ -3976,7 +3976,7 @@ function ChatPageContent() {
 
     // This reduces server load while still keeping data relatively fresh
 
-    const POLL_INTERVAL = 10000 // 10 seconds
+    const POLL_INTERVAL = 5000 // 5 seconds
 
     
 

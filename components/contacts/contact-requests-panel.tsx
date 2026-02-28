@@ -48,6 +48,12 @@ export function ContactRequestsPanel({
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
 
+  const emitPendingRequestsUpdated = (requests: ContactRequest[]) => {
+    window.dispatchEvent(new CustomEvent('friend-requests-updated', {
+      detail: { requests },
+    }))
+  }
+
   const loadRequests = async (status: 'pending' | 'all', showLoading = false) => {
     try {
       if (showLoading || !hasInitiallyLoaded) {
@@ -62,6 +68,7 @@ export function ContactRequestsPanel({
 
         if (status === 'pending') {
           setPendingRequests(requests)
+          emitPendingRequestsUpdated(requests)
           if (onPendingCountChange) {
             onPendingCountChange(requests.length)
           }
@@ -130,7 +137,11 @@ export function ContactRequestsPanel({
     try {
       setProcessingIds(prev => new Set(prev).add(requestId))
 
-      setPendingRequests(prev => prev.filter(r => r.id !== requestId))
+      setPendingRequests(prev => {
+        const next = prev.filter(r => r.id !== requestId)
+        emitPendingRequestsUpdated(next)
+        return next
+      })
 
       const response = await fetch(`/api/contact-requests/${requestId}`, {
         method: 'PATCH',
@@ -200,7 +211,11 @@ export function ContactRequestsPanel({
 
     try {
       setProcessingIds(prev => new Set(prev).add(requestId))
-      setPendingRequests(prev => prev.filter(r => r.id !== requestId))
+      setPendingRequests(prev => {
+        const next = prev.filter(r => r.id !== requestId)
+        emitPendingRequestsUpdated(next)
+        return next
+      })
 
       const response = await fetch(`/api/contact-requests/${requestId}`, {
         method: 'PATCH',
