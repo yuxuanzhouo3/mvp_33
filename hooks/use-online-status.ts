@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { IS_DOMESTIC_VERSION } from '@/config'
 
 export function useOnlineStatus(userId?: string) {
   const [isOnline, setIsOnline] = useState(false)
@@ -12,7 +13,7 @@ export function useOnlineStatus(userId?: string) {
       return
     }
 
-    const isGlobal = process.env.NEXT_PUBLIC_FORCE_GLOBAL_DATABASE !== 'false'
+    const isGlobal = !IS_DOMESTIC_VERSION
 
     if (isGlobal) {
       let supabase: any
@@ -48,7 +49,7 @@ export function useOnlineStatus(userId?: string) {
             if (user?.last_seen_at) {
               const lastSeen = new Date(user.last_seen_at).getTime()
               const now = Date.now()
-              setIsOnline(now - lastSeen < 120000)
+              setIsOnline(now - lastSeen < 60000)
             } else {
               setIsOnline(false)
             }
@@ -59,7 +60,7 @@ export function useOnlineStatus(userId?: string) {
       }
 
       checkOnlineStatus()
-      const interval = setInterval(checkOnlineStatus, 30000)
+      const interval = setInterval(checkOnlineStatus, 15000)
 
       return () => clearInterval(interval)
     }
