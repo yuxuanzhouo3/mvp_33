@@ -9,14 +9,28 @@ import { getDatabaseClientForUser } from '@/lib/database-router'
  */
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    const { IS_DOMESTIC_VERSION } = await import('@/config')
+    let currentUser: any = null
+    let supabase: any = null
+
+    if (IS_DOMESTIC_VERSION) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (!cloudBaseUser) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      currentUser = cloudBaseUser
+    } else {
+      supabase = await createClient()
+      const {
+        data: { user: supabaseUser },
+        error: authError,
+      } = await supabase.auth.getUser()
+
+      if (authError || !supabaseUser) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      currentUser = supabaseUser
     }
 
     // Handle both JSON and Blob (from sendBeacon) requests
@@ -66,7 +80,7 @@ export async function PUT(request: NextRequest) {
           status, 
           updated_at: new Date().toISOString() 
         })
-        .eq('id', user.id)
+        .eq('id', currentUser.id)
         .select()
         .single()
 
@@ -78,7 +92,7 @@ export async function PUT(request: NextRequest) {
         )
       }
 
-      console.log(`[USER_STATUS] Successfully updated user status to ${status} for user ${user.id}`)
+      console.log(`[USER_STATUS] Successfully updated user status to ${status} for user ${currentUser.id}`)
       return NextResponse.json({
         success: true,
         user: updatedUser,
@@ -87,8 +101,8 @@ export async function PUT(request: NextRequest) {
       // For CloudBase users, update status in CloudBase
       try {
         const { updateUser: updateCloudBaseUser } = await import('@/lib/cloudbase/database')
-        const updatedUser = await updateCloudBaseUser(user.id, { status })
-        console.log(`[USER_STATUS] Successfully updated CloudBase user status to ${status} for user ${user.id}`)
+        const updatedUser = await updateCloudBaseUser(currentUser.id, { status })
+        console.log(`[USER_STATUS] Successfully updated CloudBase user status to ${status} for user ${currentUser.id}`)
         return NextResponse.json({
           success: true,
           user: updatedUser,
@@ -109,4 +123,3 @@ export async function PUT(request: NextRequest) {
     )
   }
 }
-
