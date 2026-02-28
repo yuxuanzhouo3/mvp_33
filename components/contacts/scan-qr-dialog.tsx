@@ -29,8 +29,29 @@ export function ScanQRDialog({ open, onOpenChange, onAddContact }: ScanQRDialogP
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const parseQRCode = (data: string): string | null => {
-    const match = data.match(/orbitchat:\/\/add-friend\?userId=(.+)/)
-    return match ? match[1] : null
+    const match = data.match(/orbitchat:\/\/add-friend\?userId=([^&]+)/)
+    if (!match) return null
+    try {
+      return decodeURIComponent(match[1])
+    } catch {
+      return match[1]
+    }
+  }
+
+  const fetchScannedUser = async (userId: string): Promise<User | null> => {
+    const response = await fetch(`/api/users/${encodeURIComponent(userId)}`, {
+      cache: 'no-store',
+    })
+    let data: any = {}
+    try {
+      data = await response.json()
+    } catch {
+      data = {}
+    }
+    if (!response.ok || !data.user) {
+      return null
+    }
+    return data.user as User
   }
 
   const startScanning = async () => {
@@ -74,16 +95,13 @@ export function ScanQRDialog({ open, onOpenChange, onAddContact }: ScanQRDialogP
           setLoading(true)
 
           try {
-            const response = await fetch(`/api/users/search?q=${encodeURIComponent(userId)}`)
-            const data = await response.json()
-
-            if (!response.ok || !data.users || data.users.length === 0) {
+            const user = await fetchScannedUser(userId)
+            if (!user) {
               setError(t('userNotFound'))
               setLoading(false)
               return
             }
-
-            setScannedUser(data.users[0])
+            setScannedUser(user)
           } catch (err) {
             setError(t('networkError'))
           } finally {
@@ -160,21 +178,17 @@ export function ScanQRDialog({ open, onOpenChange, onAddContact }: ScanQRDialogP
       }
 
       console.log('[扫码] 开始查询用户信息，userId:', userId)
-      const response = await fetch(`/api/users/${encodeURIComponent(userId)}`)
-      console.log('[扫码] API 响应状态:', response.status, response.statusText)
+      const user = await fetchScannedUser(userId)
 
-      const data = await response.json()
-      console.log('[扫码] API 响应数据:', data)
-
-      if (!response.ok || !data.user) {
+      if (!user) {
         console.error('[扫码] 用户未找到')
         setError(t('userNotFound'))
         setLoading(false)
         return
       }
 
-      console.log('[扫码] 找到用户:', data.user)
-      setScannedUser(data.user)
+      console.log('[扫码] 找到用户:', user)
+      setScannedUser(user)
       console.log('[扫码] 用户信息已设置')
     } catch (err: any) {
       console.error('[扫码] 图片扫描失败')

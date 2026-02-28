@@ -220,12 +220,14 @@ export async function GET(request: NextRequest) {
       console.log(`[Contact Requests API] Request IDs: ${requests.map(r => r.id).join(', ')}`)
     }
 
-    const filteredRequests = (requests || []).filter((request) => {
+    const filteredRequests = (requests || []).filter((request: any) => {
       if (type === 'sent') {
-        const region = request.recipient?.region || 'global'
+        const recipient = Array.isArray(request.recipient) ? request.recipient[0] : request.recipient
+        const region = recipient?.region || 'global'
         return region === currentRegion
       }
-      const region = request.requester?.region || 'global'
+      const requester = Array.isArray(request.requester) ? request.requester[0] : request.requester
+      const region = requester?.region || 'global'
       return region === currentRegion
     })
 
@@ -331,6 +333,22 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      const normalizedRecipientId = String(recipientUser.id || '').trim()
+      if (!normalizedRecipientId) {
+        return NextResponse.json(
+          { error: 'User not found' },
+          { status: 404 }
+        )
+      }
+
+      // Re-check self-add with normalized ID (legacy QR may carry CloudBase _id).
+      if (normalizedRecipientId === currentUser.id) {
+        return NextResponse.json(
+          { error: 'Cannot send request to yourself' },
+          { status: 400 }
+        )
+      }
+
       if ((recipientUser.region || 'cn') !== currentRegion) {
         return NextResponse.json(
           { error: 'You can only send contact requests to users in the same region' },
@@ -340,10 +358,10 @@ export async function POST(request: NextRequest) {
 
       // --- Check if contact already exists (with legacy fallbacks) ---
       const contactQueries = [
-        { user_id: currentUser.id, contact_user_id: recipient_id, region: 'cn' },
-        { user_id: currentUser.id, contact_user_id: recipient_id }, // fallback for legacy docs without region
-        { user_id: recipient_id, contact_user_id: currentUser.id, region: 'cn' }, // reverse
-        { user_id: recipient_id, contact_user_id: currentUser.id }, // reverse fallback
+        { user_id: currentUser.id, contact_user_id: normalizedRecipientId, region: 'cn' },
+        { user_id: currentUser.id, contact_user_id: normalizedRecipientId }, // fallback for legacy docs without region
+        { user_id: normalizedRecipientId, contact_user_id: currentUser.id, region: 'cn' }, // reverse
+        { user_id: normalizedRecipientId, contact_user_id: currentUser.id }, // reverse fallback
       ]
 
       let contactExists = false
@@ -388,7 +406,7 @@ export async function POST(request: NextRequest) {
         .collection('contact_requests')
         .where({
           requester_id: currentUser.id,
-          recipient_id,
+          recipient_id: normalizedRecipientId,
           status: cmd.in(['pending', 'accepted']),
           region: 'cn',
         })
@@ -404,14 +422,14 @@ export async function POST(request: NextRequest) {
           )
         } else {
           // accepted but no contacts now — clean it and allow re-send
-          await cleanupRequests(currentUser.id, recipient_id)
+          await cleanupRequests(currentUser.id, normalizedRecipientId)
         }
       }
 
       const existingReqAsRecipient = await db
         .collection('contact_requests')
         .where({
-          requester_id: recipient_id,
+          requester_id: normalizedRecipientId,
           recipient_id: currentUser.id,
           status: cmd.in(['pending', 'accepted']),
           region: 'cn',
@@ -431,14 +449,14 @@ export async function POST(request: NextRequest) {
           )
         } else {
           // accepted but no contacts now — clean it and allow re-send
-          await cleanupRequests(recipient_id, currentUser.id)
+          await cleanupRequests(normalizedRecipientId, currentUser.id)
         }
       }
 
       const now = new Date().toISOString()
       const insertRes = await db.collection('contact_requests').add({
         requester_id: currentUser.id,
-        recipient_id,
+        recipient_id: normalizedRecipientId,
         message: message || null,
         status: 'pending',
         created_at: now,
@@ -451,7 +469,7 @@ export async function POST(request: NextRequest) {
       console.log('[POST /api/contact-requests] 数据库写入成功:', {
         requestId,
         requester_id: currentUser.id,
-        recipient_id,
+        recipient_id: normalizedRecipientId,
         status: 'pending',
         region: 'cn'
       })
@@ -461,7 +479,7 @@ export async function POST(request: NextRequest) {
         request: {
           id: requestId,
           requester_id: currentUser.id,
-          recipient_id,
+          recipient_id: normalizedRecipientId,
           message: message || null,
           status: 'pending',
           created_at: now,
@@ -471,6 +489,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Global / Supabase users → keep existing Supabase logic
+    const supabase = await createClient()
     const { data: profile, error: profileError } = await supabase
       .from('users')
       .select('region')
@@ -552,18 +571,17 @@ export async function POST(request: NextRequest) {
     // This function will forcefully delete the request, even if it's accepted
     const cleanupStaleRequest = async (requestId: string): Promise<boolean> => {
       try {
-        const { error, count } = await supabase
+        const { error } = await supabase
           .from('contact_requests')
           .delete()
           .eq('id', requestId)
-          .select('*', { count: 'exact', head: true })
         
         if (error) {
           console.error('❌ Failed to cleanup stale request:', error)
           return false
         }
         
-        console.log('✅ Successfully cleaned up stale request:', requestId, 'deleted count:', count)
+        console.log('✅ Successfully cleaned up stale request:', requestId)
         return true
       } catch (error: any) {
         console.error('❌ Exception while cleaning up stale request:', error)

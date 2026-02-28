@@ -210,7 +210,7 @@ export function ContactsPanel({
         if (typeof window !== 'undefined') {
           const cached = localStorage.getItem(cacheKey)
           const cachedTs = localStorage.getItem(cacheTsKey)
-          const ttl = 5 * 60 * 1000 // 5 分钟
+          const ttl = 1000
           if (cached && cachedTs && Date.now() - parseInt(cachedTs, 10) < ttl) {
             const count = parseInt(cached, 10)
             if (!Number.isNaN(count)) {
@@ -244,12 +244,12 @@ export function ContactsPanel({
     // 立即加载一次
     loadInitialPendingCount()
     
-    // 页面可见时，每 30 秒刷新一次；不可见时 60 秒，避免频繁刷新带来观感问题
+    // 页面可见时秒级刷新，保证新的好友申请尽快可见。
     let interval: NodeJS.Timeout
     
     const setupInterval = () => {
       const isVisible = document.visibilityState === 'visible'
-      const refreshInterval = isVisible ? 30000 : 60000
+      const refreshInterval = isVisible ? 2000 : 10000
       
       if (interval) {
         clearInterval(interval)

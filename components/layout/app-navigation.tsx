@@ -120,7 +120,7 @@ export function AppNavigation({ totalUnreadCount }: AppNavigationProps) {
       const cacheTsKey = `contact_pending_count_ts_${user.id}`
       const cachedCount = localStorage.getItem(cacheKey)
       const cachedTs = localStorage.getItem(cacheTsKey)
-      const cacheTtl = 10 * 1000
+      const cacheTtl = 1000
 
       if (!forceRefresh && cachedCount && cachedTs) {
         const age = Date.now() - parseInt(cachedTs, 10)
@@ -226,7 +226,7 @@ export function AppNavigation({ totalUnreadCount }: AppNavigationProps) {
         clearInterval(interval)
       }
 
-      const refreshInterval = document.visibilityState === 'visible' ? 5000 : 15000
+      const refreshInterval = document.visibilityState === 'visible' ? 2000 : 10000
       interval = setInterval(() => {
         if (document.visibilityState === 'visible') {
           fetchPendingRequestsCount()

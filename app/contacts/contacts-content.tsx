@@ -25,8 +25,9 @@ import { Button } from '@/components/ui/button'
 function ContactsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
-  const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null)
+  const [currentUser, setCurrentUser] = useState<User | null>(() => mockAuth.getCurrentUser())
+  const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(() => mockAuth.getCurrentWorkspace())
+  const [isAuthLoading, setIsAuthLoading] = useState(() => !(mockAuth.getCurrentUser() && mockAuth.getCurrentWorkspace()))
   const [contacts, setContacts] = useState<User[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [initialUserId, setInitialUserId] = useState<string | null>(null)
@@ -225,6 +226,7 @@ function ContactsPageContent() {
 
         if (!user || !workspace) {
           console.error('❌ [CONTACTS PAGE] CN region - Missing user or workspace, redirecting to login')
+          setIsAuthLoading(false)
           router.push('/login')
           return
         }
@@ -232,6 +234,7 @@ function ContactsPageContent() {
         console.log('✅ [CONTACTS PAGE] CN region - User and workspace verified')
         setCurrentUser(user)
         setCurrentWorkspace(workspace)
+        setIsAuthLoading(false)
 
         // Get userId from URL parameter
         const userId = searchParams.get('userId')
@@ -248,6 +251,7 @@ function ContactsPageContent() {
 
         if (!hasSession) {
           console.error('❌ [CONTACTS PAGE] No valid Supabase session - redirecting to login')
+          setIsAuthLoading(false)
           router.push('/login')
           return
         }
@@ -262,6 +266,7 @@ function ContactsPageContent() {
 
         if (!user || !workspace) {
           console.error('❌ [CONTACTS PAGE] Missing user or workspace, redirecting to login')
+          setIsAuthLoading(false)
           router.push('/login')
           return
         }
@@ -269,6 +274,7 @@ function ContactsPageContent() {
         console.log('✅ [CONTACTS PAGE] User and workspace verified')
         setCurrentUser(user)
         setCurrentWorkspace(workspace)
+        setIsAuthLoading(false)
 
         // Get userId from URL parameter
         const userId = searchParams.get('userId')
@@ -400,8 +406,12 @@ function ContactsPageContent() {
     }
   }, [currentUser, currentWorkspace])
 
-  if (!currentUser || !currentWorkspace) {
-    return null
+  if (isAuthLoading || !currentUser || !currentWorkspace) {
+    return (
+      <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">
+        Loading...
+      </div>
+    )
   }
 
   const handleStartChat = async (userId: string) => {
@@ -871,10 +881,6 @@ function ContactsPageContent() {
     }
   }
 
-  if (!currentUser || !currentWorkspace) {
-    return null
-  }
-
   return (
     <>
       <div className="flex h-screen flex-col">
@@ -908,7 +914,6 @@ function ContactsPageContent() {
                 // Instead, do a background refresh without showing loading
                 loadContacts(false, false) // forceRefresh = false, showLoading = false (silent refresh)
               }}
-              isLoading={isLoading}
               initialUserId={initialUserId}
             />
           </div>

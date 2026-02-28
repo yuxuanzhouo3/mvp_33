@@ -28,25 +28,44 @@ export async function GET(
       const db = dbClient.cloudbase
 
       try {
-        const result = await db
+        let matchedUser: any = null
+
+        // Primary lookup by logical id field.
+        const byIdResult = await db
           .collection('users')
           .where({
             id: userId,
-            region: 'cn'
+            region: 'cn',
           })
           .limit(1)
           .get()
 
-        const rawUsers = result?.data || []
+        if (byIdResult?.data && byIdResult.data.length > 0) {
+          matchedUser = byIdResult.data[0]
+        }
 
-        if (rawUsers.length === 0) {
+        // Legacy fallback: QR code may contain CloudBase document _id.
+        if (!matchedUser) {
+          try {
+            const byDocIdResult = await db.collection('users').doc(userId).get()
+            const docData = (byDocIdResult as any)?.data || null
+            if (docData && (docData.region || 'cn') === 'cn') {
+              matchedUser = docData
+            }
+          } catch (docLookupError) {
+            // Ignore and keep final not found response below.
+            console.warn('[GET /api/users/[id]] CloudBase doc lookup failed:', docLookupError)
+          }
+        }
+
+        if (!matchedUser) {
           return NextResponse.json(
             { error: 'User not found' },
             { status: 404 }
           )
         }
 
-        const user = rawUsers[0]
+        const user = matchedUser
         const formattedUser = {
           id: user.id || user._id,
           email: user.email,

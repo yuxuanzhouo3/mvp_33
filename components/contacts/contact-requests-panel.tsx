@@ -95,17 +95,44 @@ export function ContactRequestsPanel({
     loadRequests('pending')
     loadRequests('all')
 
-    const interval = setInterval(() => {
+    let interval: ReturnType<typeof setInterval>
+
+    const setupInterval = () => {
+      if (interval) {
+        clearInterval(interval)
+      }
+
+      const pollInterval = document.visibilityState === 'visible' ? 2000 : 10000
+      interval = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          loadRequests('pending', false)
+          if (activeTab === 'history') {
+            loadRequests('all', false)
+          }
+        }
+      }, pollInterval)
+    }
+
+    const handleVisibilityChange = () => {
+      setupInterval()
       if (document.visibilityState === 'visible') {
         loadRequests('pending', false)
         if (activeTab === 'history') {
           loadRequests('all', false)
         }
       }
-    }, 30000)
+    }
 
-    return () => clearInterval(interval)
-  }, [])
+    setupInterval()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      if (interval) {
+        clearInterval(interval)
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [activeTab])
 
   useEffect(() => {
     if (activeTab === 'history' && historyRequests.length === 0) {

@@ -7703,7 +7703,11 @@ function ChatPageContent() {
 
   if (!currentUser || !currentWorkspace) {
 
-    return null
+    return (
+      <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">
+        Loading...
+      </div>
+    )
 
   }
 

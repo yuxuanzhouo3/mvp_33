@@ -351,7 +351,11 @@ export default function ChannelsPage() {
   }, [])
 
   if (!currentUser || !currentWorkspace) {
-    return null
+    return (
+      <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">
+        Loading...
+      </div>
+    )
   }
 
   const selectedChannel = conversations.find(c => c.id === selectedChannelId)

@@ -79,15 +79,27 @@ export async function getUserById(userId: string): Promise<User | null> {
       return null
     }
 
-    // Query by 'id' field (Supabase Auth user ID) instead of document _id
+    // Primary lookup by logical id field.
     const result = await db.collection('users')
       .where({
         id: userId
       })
+      .limit(1)
       .get()
 
     if (result.data && result.data.length > 0) {
       return normalizeCloudBaseUser(result.data[0])
+    }
+
+    // Legacy fallback: some old records may still use CloudBase _id as external user ID.
+    try {
+      const docResult = await db.collection('users').doc(userId).get()
+      const docData = (docResult as any)?.data || null
+      if (docData) {
+        return normalizeCloudBaseUser(docData)
+      }
+    } catch (docLookupError) {
+      console.warn('[CloudBase getUserById] Fallback _id lookup failed:', docLookupError)
     }
 
     return null
