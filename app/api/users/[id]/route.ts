@@ -56,6 +56,7 @@ export async function GET(
           department: user.department || undefined,
           title: user.title || undefined,
           status: user.status || 'offline',
+          last_seen_at: user.last_seen_at || null,
           region: user.region || 'cn',
         }
 
@@ -77,7 +78,7 @@ export async function GET(
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, email, username, full_name, avatar_url, department, title, status, region')
+      .select('id, email, username, full_name, avatar_url, department, title, status, last_seen_at, region')
       .eq('id', userId)
       .eq('region', 'global')
       .single()
