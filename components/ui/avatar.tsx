@@ -18,7 +18,7 @@ function Avatar({
   showOnlineStatus,
   ...props
 }: AvatarProps) {
-  const isOnline = useOnlineStatus(userId)
+  const isOnline = useOnlineStatus(showOnlineStatus ? userId : undefined)
 
   return (
     <AvatarPrimitive.Root
@@ -30,6 +30,12 @@ function Avatar({
       {...props}
     >
       {props.children}
+      {showOnlineStatus && isOnline && (
+        <span
+          className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-green-500 ring-2 ring-white"
+          aria-label="在线"
+        />
+      )}
     </AvatarPrimitive.Root>
   )
 }
