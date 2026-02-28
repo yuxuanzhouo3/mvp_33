@@ -12,39 +12,25 @@ import { Loader2 } from 'lucide-react'
 
 function WorkspaceMembersPageContent() {
   const router = useRouter()
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
-  const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [currentUser, setCurrentUser] = useState<User | null>(() => mockAuth.getCurrentUser())
+  const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(() => mockAuth.getCurrentWorkspace())
+  const [isLoading, setIsLoading] = useState(() => !(mockAuth.getCurrentUser() && mockAuth.getCurrentWorkspace()))
   const [totalUnreadCount, setTotalUnreadCount] = useState(0)
   const isMobile = useIsMobile()
 
   // Load current user and workspace
   useEffect(() => {
-    async function loadInitialData() {
-      try {
-        const user = await mockAuth.getCurrentUser()
-        if (!user) {
-          router.push('/login')
-          return
-        }
-        setCurrentUser(user)
+    const user = mockAuth.getCurrentUser()
+    const workspace = mockAuth.getCurrentWorkspace()
 
-        // Get current workspace from mockAuth (same as contacts page)
-        const workspace = mockAuth.getCurrentWorkspace()
-        if (!workspace) {
-          console.error('No workspace found')
-          router.push('/login')
-          return
-        }
-        setCurrentWorkspace(workspace)
-      } catch (error) {
-        console.error('Failed to load initial data:', error)
-      } finally {
-        setIsLoading(false)
-      }
+    if (!user || !workspace) {
+      router.push('/login')
+      return
     }
 
-    loadInitialData()
+    setCurrentUser(user)
+    setCurrentWorkspace(workspace)
+    setIsLoading(false)
   }, [router])
 
   // Start a chat with a workspace member

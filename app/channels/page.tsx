@@ -19,12 +19,22 @@ import { getTranslation } from '@/lib/i18n'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { cn } from '@/lib/utils'
 
+const CHANNELS_CACHE_TTL = 60 * 1000
+
+function getChannelsCacheKey(userId: string, workspaceId: string) {
+  return `channels_page_conversations_${userId}_${workspaceId}`
+}
+
+function getChannelsCacheTsKey(userId: string, workspaceId: string) {
+  return `channels_page_conversations_ts_${userId}_${workspaceId}`
+}
+
 export default function ChannelsPage() {
   const router = useRouter()
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
-  const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null)
+  const [currentUser, setCurrentUser] = useState<User | null>(() => mockAuth.getCurrentUser())
+  const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(() => mockAuth.getCurrentWorkspace())
   const [conversations, setConversations] = useState<ConversationWithDetails[]>([])
-  const [isConversationsLoading, setIsConversationsLoading] = useState(true)
+  const [isConversationsLoading, setIsConversationsLoading] = useState(() => !!(mockAuth.getCurrentUser() && mockAuth.getCurrentWorkspace()))
   const [selectedChannelId, setSelectedChannelId] = useState<string>()
   const [messages, setMessages] = useState<MessageWithSender[]>([])
   const [showChannelInfo, setShowChannelInfo] = useState(false)
@@ -38,6 +48,7 @@ export default function ChannelsPage() {
   useEffect(() => {
     const user = mockAuth.getCurrentUser()
     const workspace = mockAuth.getCurrentWorkspace()
+    let hasFreshCache = false
 
     if (!user || !workspace) {
       router.push('/login')
@@ -47,9 +58,42 @@ export default function ChannelsPage() {
     setCurrentUser(user)
     setCurrentWorkspace(workspace)
 
-    // Load conversations from API
-    loadConversations(user.id, workspace.id)
+    // Render cached channels immediately to avoid loading flicker when switching pages.
+    try {
+      const cacheKey = getChannelsCacheKey(user.id, workspace.id)
+      const cacheTsKey = getChannelsCacheTsKey(user.id, workspace.id)
+      const cachedData = localStorage.getItem(cacheKey)
+      const cachedTs = localStorage.getItem(cacheTsKey)
+
+      if (cachedData && cachedTs) {
+        const age = Date.now() - parseInt(cachedTs, 10)
+        if (age < CHANNELS_CACHE_TTL) {
+          const parsed = JSON.parse(cachedData) as ConversationWithDetails[]
+          setConversations(parsed)
+          setIsConversationsLoading(false)
+          hasFreshCache = true
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to read channels cache:', error)
+    }
+
+    // Refresh in background. Only show loading if no cache is available.
+    loadConversations(user.id, workspace.id, { showLoading: !hasFreshCache })
   }, [router])
+
+  useEffect(() => {
+    if (!currentUser || !currentWorkspace || isConversationsLoading) return
+
+    try {
+      const cacheKey = getChannelsCacheKey(currentUser.id, currentWorkspace.id)
+      const cacheTsKey = getChannelsCacheTsKey(currentUser.id, currentWorkspace.id)
+      localStorage.setItem(cacheKey, JSON.stringify(conversations))
+      localStorage.setItem(cacheTsKey, Date.now().toString())
+    } catch (error) {
+      console.warn('Failed to persist channels cache:', error)
+    }
+  }, [conversations, currentUser, currentWorkspace, isConversationsLoading])
 
   useEffect(() => {
     if (selectedChannelId) {
@@ -68,8 +112,15 @@ export default function ChannelsPage() {
     return () => clearInterval(interval)
   }, [selectedChannelId])
 
-  const loadConversations = async (userId: string, workspaceId: string) => {
-    setIsConversationsLoading(true)
+  const loadConversations = async (
+    userId: string,
+    workspaceId: string,
+    options: { showLoading?: boolean } = {}
+  ) => {
+    const { showLoading = true } = options
+    if (showLoading) {
+      setIsConversationsLoading(true)
+    }
     try {
       const response = await fetch(`/api/conversations?workspaceId=${workspaceId}`)
       const data = await response.json()
@@ -247,7 +298,7 @@ export default function ChannelsPage() {
       const result = await response.json()
       if (result.success && result.conversation) {
         // Reload conversations to get full details
-        await loadConversations(currentUser.id, currentWorkspace.id)
+        await loadConversations(currentUser.id, currentWorkspace.id, { showLoading: false })
         
         // Select the new channel
         setSelectedChannelId(result.conversation.id)

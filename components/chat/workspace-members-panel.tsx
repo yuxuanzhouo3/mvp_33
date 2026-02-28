@@ -75,6 +75,14 @@ const getRoleWeight = (role: MemberRole): number => {
   return roleWeights[role] ?? 4
 }
 
+const MEMBERS_CACHE_TTL = 60 * 1000
+
+const getMembersCacheKey = (userId: string, workspaceId: string) =>
+  `workspace_members_${userId}_${workspaceId}`
+
+const getMembersCacheTsKey = (userId: string, workspaceId: string) =>
+  `workspace_members_ts_${userId}_${workspaceId}`
+
 export function WorkspaceMembersPanel({
   currentUser,
   workspaceId,
@@ -101,10 +109,6 @@ export function WorkspaceMembersPanel({
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
   const isZh = language === 'zh'
-
-  useEffect(() => {
-    loadWorkspaceMembers()
-  }, [workspaceId])
 
   const loadJoinRequests = useCallback(async (options: { silent?: boolean } = {}) => {
     const { silent = false } = options
@@ -221,9 +225,13 @@ export function WorkspaceMembersPanel({
     }
   }, [activeTab, workspaceId, loadJoinRequests])
 
-  const loadWorkspaceMembers = async () => {
+  const loadWorkspaceMembers = useCallback(async (options: { showLoading?: boolean } = {}) => {
+    const { showLoading = true } = options
+
     try {
-      setIsLoading(true)
+      if (showLoading) {
+        setIsLoading(true)
+      }
       const params = new URLSearchParams()
       if (workspaceId) {
         params.set('workspaceId', workspaceId)
@@ -241,10 +249,26 @@ export function WorkspaceMembersPanel({
         }))
         setMembers(membersWithRoles)
 
-        // 获取当前用户角色
         if (data.currentUserRole) {
           console.log('[WorkspaceMembersPanel] 当前用户角色:', data.currentUserRole)
-          setCurrentUserRole(data.currentUserRole as MemberRole)
+        }
+        setCurrentUserRole((data.currentUserRole ?? null) as MemberRole | null)
+
+        if (workspaceId && currentUser?.id) {
+          try {
+            const cacheKey = getMembersCacheKey(currentUser.id, workspaceId)
+            const cacheTsKey = getMembersCacheTsKey(currentUser.id, workspaceId)
+            localStorage.setItem(
+              cacheKey,
+              JSON.stringify({
+                members: membersWithRoles,
+                currentUserRole: data.currentUserRole ?? null,
+              })
+            )
+            localStorage.setItem(cacheTsKey, Date.now().toString())
+          } catch (error) {
+            console.warn('[WorkspaceMembersPanel] Failed to cache members:', error)
+          }
         }
       }
     } catch (error) {
@@ -252,7 +276,37 @@ export function WorkspaceMembersPanel({
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [workspaceId, currentUser?.id])
+
+  useEffect(() => {
+    if (!workspaceId || !currentUser?.id) return
+    let hasFreshCache = false
+
+    try {
+      const cacheKey = getMembersCacheKey(currentUser.id, workspaceId)
+      const cacheTsKey = getMembersCacheTsKey(currentUser.id, workspaceId)
+      const cachedData = localStorage.getItem(cacheKey)
+      const cachedTs = localStorage.getItem(cacheTsKey)
+
+      if (cachedData && cachedTs) {
+        const age = Date.now() - parseInt(cachedTs, 10)
+        if (age < MEMBERS_CACHE_TTL) {
+          const parsed = JSON.parse(cachedData) as {
+            members: MemberWithRole[]
+            currentUserRole: MemberRole | null
+          }
+          setMembers(parsed.members || [])
+          setCurrentUserRole(parsed.currentUserRole)
+          setIsLoading(false)
+          hasFreshCache = true
+        }
+      }
+    } catch (error) {
+      console.warn('[WorkspaceMembersPanel] Failed to read members cache:', error)
+    }
+
+    loadWorkspaceMembers({ showLoading: !hasFreshCache })
+  }, [workspaceId, currentUser?.id, loadWorkspaceMembers])
 
   // 批准申请
   const handleApproveRequest = async (request: JoinRequest) => {

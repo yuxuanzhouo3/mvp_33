@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { MessageSquare, Users, Hash, Settings, Building2 } from 'lucide-react'
@@ -48,10 +48,17 @@ interface AppNavigationProps {
 
 export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0)
 
+  useEffect(() => {
+    navItems.forEach((item) => {
+      router.prefetch(item.href)
+    })
+  }, [router])
+
   // 获取待审批申请数量
-  const fetchPendingRequestsCount = useCallback(async () => {
+  const fetchPendingRequestsCount = useCallback(async (forceRefresh = false) => {
     try {
       // 从 localStorage 获取当前工作区
       const workspaceStr = localStorage.getItem('chat_app_current_workspace')
@@ -66,11 +73,28 @@ export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
         return
       }
 
+      const cacheKey = `pending_requests_count_${workspace.id}`
+      const cacheTsKey = `pending_requests_count_ts_${workspace.id}`
+      const cachedCount = localStorage.getItem(cacheKey)
+      const cachedTs = localStorage.getItem(cacheTsKey)
+      const cacheTtl = 10 * 1000
+
+      if (!forceRefresh && cachedCount && cachedTs) {
+        const age = Date.now() - parseInt(cachedTs, 10)
+        if (age < cacheTtl) {
+          setPendingRequestsCount(parseInt(cachedCount, 10) || 0)
+          return
+        }
+      }
+
       const response = await fetch(`/api/workspace-join-requests?workspaceId=${workspace.id}`)
       const data = await response.json()
 
       if (data.success && data.requests) {
-        setPendingRequestsCount(data.requests.length)
+        const count = data.requests.length
+        setPendingRequestsCount(count)
+        localStorage.setItem(cacheKey, count.toString())
+        localStorage.setItem(cacheTsKey, Date.now().toString())
       } else {
         setPendingRequestsCount(0)
       }
@@ -103,18 +127,20 @@ export function AppNavigation({ totalUnreadCount = 0 }: AppNavigationProps) {
     // 监听自定义事件，当有新申请或审批操作时刷新
     const handleRefresh = () => {
       // 添加小延迟确保数据库已更新
-      setTimeout(fetchPendingRequestsCount, 100)
+      setTimeout(() => {
+        fetchPendingRequestsCount(true)
+      }, 100)
     }
 
     const handleVisibilityChange = () => {
       setupInterval()
       if (document.visibilityState === 'visible') {
-        fetchPendingRequestsCount()
+        fetchPendingRequestsCount(true)
       }
     }
 
     const handleFocus = () => {
-      fetchPendingRequestsCount()
+      fetchPendingRequestsCount(true)
     }
 
     window.addEventListener('pendingRequestsUpdated', handleRefresh)
