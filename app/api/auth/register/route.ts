@@ -7,15 +7,15 @@ import { createCloudBaseSession, setCloudBaseSessionCookie } from '@/lib/cloudba
 import { User } from '@/lib/types'
 import { v4 as uuidv4 } from 'uuid'
 import { hashPassword } from '@/lib/utils/password'
-import { IS_DOMESTIC_VERSION } from '@/config'
+import { IS_DOMESTIC_VERSION, getDeploymentRegion } from '@/config'
 import { verificationCodeService } from '@/lib/email/verification-code-service'
 
 export async function POST(request: NextRequest) {
   try {
     console.log('[REGISTER] ===== Registration request started =====')
     console.log('[REGISTER] Environment variables:', {
-      DEFAULT_LANGUAGE: process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE,
-      FORCE_GLOBAL_DATABASE: process.env.FORCE_GLOBAL_DATABASE,
+      DEPLOYMENT_REGION: process.env.DEPLOYMENT_REGION,
+      RESOLVED_REGION: getDeploymentRegion(),
       IS_DOMESTIC_VERSION,
       CLOUDBASE_ENV_ID: process.env.CLOUDBASE_ENV_ID ? 'configured' : 'missing',
     })
@@ -473,4 +473,3 @@ async function handleCloudBaseRegister(
     )
   }
 }
-

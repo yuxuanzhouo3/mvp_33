@@ -4,6 +4,7 @@ import { getUserConversations } from '@/lib/database/supabase/conversations'
 import { ConversationWithDetails } from '@/lib/types'
 import { getDatabaseClientForUser } from '@/lib/database-router'
 import { getUserConversations as getUserConversationsCN, createConversation as createConversationCN } from '@/lib/database/cloudbase/conversations'
+import { IS_DOMESTIC_VERSION, getDeploymentRegion } from '@/config'
 
 /**
  * Get user conversations
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
     const workspaceId = searchParams.get('workspaceId')
     const conversationId = searchParams.get('conversationId')
 
-    const deploymentRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION
+    const deploymentRegion = getDeploymentRegion()
 
     // For China region, get user from localStorage (client-side auth)
     let user: any = null
@@ -55,9 +56,8 @@ export async function GET(request: NextRequest) {
       userRegion: userRegion,
       conversationId: conversationId,
       workspaceId: workspaceId,
-      FORCE_GLOBAL_DATABASE: process.env.FORCE_GLOBAL_DATABASE,
-      NEXT_PUBLIC_FORCE_GLOBAL: process.env.NEXT_PUBLIC_FORCE_GLOBAL,
-      NEXT_PUBLIC_DEFAULT_LANGUAGE: process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE
+      deploymentRegion,
+      isDomestic: IS_DOMESTIC_VERSION
     })
 
     // If conversationId is provided, get single conversation
@@ -378,8 +378,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-
-    const { IS_DOMESTIC_VERSION } = await import('@/config')
 
     let currentUser: any = null
     let supabase: any = null  // 在外部声明，供后续代码使用
@@ -1153,4 +1151,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

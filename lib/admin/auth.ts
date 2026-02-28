@@ -11,6 +11,7 @@ import {
   setAdminSessionCookie,
   createAdminSession,
 } from "./session";
+import { getDeploymentRegion } from "@/config";
 import type {
   AdminUser,
   LoginCredentials,
@@ -64,9 +65,8 @@ export async function adminLogin(
     console.log("[adminLogin] User Agent:", userAgent);
     console.log("[adminLogin] 环境变量:");
     console.log("[adminLogin] - NODE_ENV:", process.env.NODE_ENV);
-    console.log("[adminLogin] - NEXT_PUBLIC_DEFAULT_LANGUAGE:", process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE);
-    console.log("[adminLogin] - FORCE_GLOBAL_DATABASE:", process.env.FORCE_GLOBAL_DATABASE);
-    console.log("[adminLogin] - NEXT_PUBLIC_DEPLOYMENT_REGION:", process.env.NEXT_PUBLIC_DEPLOYMENT_REGION);
+    console.log("[adminLogin] - DEPLOYMENT_REGION:", process.env.DEPLOYMENT_REGION);
+    console.log("[adminLogin] - resolved region:", getDeploymentRegion());
     console.log("[adminLogin] - SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30) + "...");
     console.log("[adminLogin] - CLOUDBASE_ENV_ID:", process.env.CLOUDBASE_ENV_ID);
 

@@ -5,6 +5,7 @@ import { getCloudBaseDb } from '@/lib/cloudbase/client';
 import { verificationCodeService } from '@/lib/email/verification-code-service';
 import { emailService } from '@/lib/email/email-service';
 import { getRegisterVerificationTemplate } from '@/lib/email/templates';
+import { getDeploymentRegion } from '@/config';
 
 const schema = z.object({
   email: z.string().email('邮箱格式不正确'),
@@ -16,9 +17,8 @@ export async function POST(request: NextRequest) {
 
     // 调试日志
     console.log('[send-register-code] 环境变量:', {
-      NEXT_PUBLIC_DEPLOYMENT_REGION: process.env.NEXT_PUBLIC_DEPLOYMENT_REGION,
-      NEXT_PUBLIC_DEFAULT_LANGUAGE: process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE,
-      FORCE_GLOBAL_DATABASE: process.env.FORCE_GLOBAL_DATABASE,
+      DEPLOYMENT_REGION: process.env.DEPLOYMENT_REGION,
+      RESOLVED_REGION: getDeploymentRegion(),
     });
 
     const isChina = isChinaRegion();

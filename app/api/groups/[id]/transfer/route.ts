@@ -2,16 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { transferOwnership as transferOwnershipSupabase } from '@/lib/database/supabase/group-members'
 import { transferOwnership as transferOwnershipCloudbase } from '@/lib/database/cloudbase/group-members'
-
-const isCloudBase = process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE === 'zh' && !process.env.FORCE_GLOBAL_DATABASE
+import { IS_DOMESTIC_VERSION } from '@/config'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    let user: { id: string } | null = null
+    if (IS_DOMESTIC_VERSION) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) user = { id: cloudBaseUser.id }
+    } else {
+      const supabase = await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (supabaseUser) user = { id: supabaseUser.id }
+    }
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -24,7 +31,7 @@ export async function POST(
       return NextResponse.json({ error: 'newOwnerId is required' }, { status: 400 })
     }
 
-    const success = isCloudBase
+    const success = IS_DOMESTIC_VERSION
       ? await transferOwnershipCloudbase(id, user.id, newOwnerId)
       : await transferOwnershipSupabase(id, user.id, newOwnerId)
 

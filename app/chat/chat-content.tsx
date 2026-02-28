@@ -52,6 +52,7 @@ import { cn } from '@/lib/utils'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
 import { SessionValidator } from '@/components/auth/session-validator'
+import { IS_DOMESTIC_VERSION } from '@/config'
 
 type ConversationsApiResponse = {
 
@@ -286,7 +287,7 @@ function ChatPageContent() {
   useEffect(() => {
     if (!currentUser) return
 
-    const isGlobal = process.env.NEXT_PUBLIC_FORCE_GLOBAL_DATABASE !== 'false'
+    const isGlobal = !IS_DOMESTIC_VERSION
 
     if (isGlobal) {
       let supabase: any

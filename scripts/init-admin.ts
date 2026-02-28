@@ -25,8 +25,7 @@ if (result.error) {
   process.exit(1);
 }
 console.log("✅ 环境变量加载成功");
-console.log("- NEXT_PUBLIC_DEFAULT_LANGUAGE:", process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE);
-console.log("- FORCE_GLOBAL_DATABASE:", process.env.FORCE_GLOBAL_DATABASE);
+console.log("- DEPLOYMENT_REGION:", process.env.DEPLOYMENT_REGION);
 console.log("- CLOUDBASE_ENV_ID:", process.env.CLOUDBASE_ENV_ID ? "已设置" : "未设置");
 console.log("- NEXT_PUBLIC_SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL ? "已设置" : "未设置");
 

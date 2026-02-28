@@ -78,7 +78,7 @@ export async function middleware(request: NextRequest) {
   // 域名验证（防止错误部署）
   // ============================================================================
   const host = request.headers.get('host');
-  const expectedRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION;
+  const expectedRegion = process.env.DEPLOYMENT_REGION;
 
   if (expectedRegion === 'CN' && host && !host.includes('mornscience.top')) {
     console.warn(`[DEPLOYMENT WARNING] CN build accessed via wrong domain: ${host}`);

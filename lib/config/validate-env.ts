@@ -1,6 +1,7 @@
 /**
  * 环境变量验证
  */
+import { getDeploymentRegion, isDomesticDeployment } from '@/config'
 
 interface ValidationResult {
   valid: boolean;
@@ -12,20 +13,16 @@ interface ValidationResult {
  */
 export function validateEnvironmentConfig(): ValidationResult {
   const errors: string[] = [];
+  const deploymentRegion = getDeploymentRegion();
+  const isDomestic = isDomesticDeployment();
 
   console.log('[ValidateEnv] ========== 开始环境配置验证 ==========');
-  console.log('[ValidateEnv] FORCE_GLOBAL_DATABASE:', process.env.FORCE_GLOBAL_DATABASE);
-  console.log('[ValidateEnv] NEXT_PUBLIC_DEFAULT_LANGUAGE:', process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE);
+  console.log('[ValidateEnv] DEPLOYMENT_REGION:', process.env.DEPLOYMENT_REGION || '(未设置)');
+  console.log('[ValidateEnv] resolved deployment region:', deploymentRegion);
   console.log('[ValidateEnv] NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? '已设置' : '未设置');
   console.log('[ValidateEnv] SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '已设置' : '未设置');
   console.log('[ValidateEnv] CLOUDBASE_ENV_ID:', process.env.CLOUDBASE_ENV_ID ? '已设置' : '未设置');
 
-  // 计算 IS_DOMESTIC_VERSION（与 config/index.ts 保持一致）
-  const envDefaultLang = (process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE || "en").toLowerCase();
-  const defaultLanguage = envDefaultLang === "zh" ? "zh" : "en";
-  const isDomestic = process.env.FORCE_GLOBAL_DATABASE === "true" ? false : defaultLanguage === "zh";
-
-  console.log('[ValidateEnv] 计算结果 - defaultLanguage:', defaultLanguage);
   console.log('[ValidateEnv] 计算结果 - isDomestic:', isDomestic);
 
   if (isDomestic) {

@@ -11,6 +11,7 @@ import { User, Workspace } from '@/lib/types'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { IS_DOMESTIC_VERSION } from '@/config'
 import {
   Dialog,
   DialogContent,
@@ -202,7 +203,7 @@ function ContactsPageContent() {
     let isMounted = true
     
     const checkAuth = async () => {
-      const deploymentRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION
+      const deploymentRegion = IS_DOMESTIC_VERSION ? 'CN' : 'INTL'
 
       console.log('🔍 [CONTACTS PAGE] checkAuth - Deployment region:', deploymentRegion)
 

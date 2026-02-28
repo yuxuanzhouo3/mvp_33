@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getGroupMembers as getGroupMembersSupabase, addGroupMembers as addGroupMembersSupabase } from '@/lib/database/supabase/group-members'
 import { getGroupMembers as getGroupMembersCloudbase, addGroupMembers as addGroupMembersCloudbase } from '@/lib/database/cloudbase/group-members'
-
-const isCloudBase = process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE === 'zh' && !process.env.FORCE_GLOBAL_DATABASE
+import { IS_DOMESTIC_VERSION } from '@/config'
 
 export async function GET(
   request: NextRequest,
@@ -11,8 +10,16 @@ export async function GET(
 ) {
   try {
     console.log('[API /api/groups/[id]/members GET] 开始处理请求')
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    let user: { id: string } | null = null
+    if (IS_DOMESTIC_VERSION) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) user = { id: cloudBaseUser.id }
+    } else {
+      const supabase = await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (supabaseUser) user = { id: supabaseUser.id }
+    }
 
     if (!user) {
       console.log('[API /api/groups/[id]/members GET] 未授权')
@@ -21,7 +28,7 @@ export async function GET(
 
     const { id } = await params
     console.log('[API /api/groups/[id]/members GET] 调用 getGroupMembers', { groupId: id, userId: user.id })
-    const members = isCloudBase
+    const members = IS_DOMESTIC_VERSION
       ? await getGroupMembersCloudbase(id)
       : await getGroupMembersSupabase(id)
     console.log('[API /api/groups/[id]/members GET] getGroupMembers 返回', { count: members.length })
@@ -38,8 +45,16 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    let user: { id: string } | null = null
+    if (IS_DOMESTIC_VERSION) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) user = { id: cloudBaseUser.id }
+    } else {
+      const supabase = await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (supabaseUser) user = { id: supabaseUser.id }
+    }
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -48,7 +63,7 @@ export async function POST(
     const { id } = await params
     const { userIds } = await request.json()
 
-    const success = isCloudBase
+    const success = IS_DOMESTIC_VERSION
       ? await addGroupMembersCloudbase(id, userIds, user.id)
       : await addGroupMembersSupabase(id, userIds, user.id)
 

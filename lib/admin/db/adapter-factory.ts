@@ -6,19 +6,18 @@
 import { CloudBaseAdminAdapter } from "../cloudbase-adapter";
 import { SupabaseAdminAdapter } from "../supabase-adapter";
 import type { AdminDatabaseAdapter } from "../types";
+import { getDeploymentRegion } from "@/config";
 
 /**
  * 获取管理后台数据库适配器
  */
 export function getAdminAdapter(): AdminDatabaseAdapter {
-  const forceGlobal = process.env.FORCE_GLOBAL_DATABASE === "true";
-
-  if (forceGlobal) {
-    console.log("[AdapterFactory] 使用 Supabase 适配器（强制全球数据库）");
+  const isDomestic = getDeploymentRegion() === "CN";
+  if (!isDomestic) {
+    console.log("[AdapterFactory] 使用 Supabase 适配器（INTL）");
     return new SupabaseAdminAdapter();
   }
 
-  // 默认使用 CloudBase
-  console.log("[AdapterFactory] 使用 CloudBase 适配器");
+  console.log("[AdapterFactory] 使用 CloudBase 适配器（CN）");
   return new CloudBaseAdminAdapter();
 }

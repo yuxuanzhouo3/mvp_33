@@ -2,23 +2,30 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getGroupInfo as getGroupInfoSupabase, updateGroupSettings as updateGroupSettingsSupabase, deleteGroup as deleteGroupSupabase } from '@/lib/database/supabase/groups'
 import { getGroupInfo as getGroupInfoCloudbase, updateGroupSettings as updateGroupSettingsCloudbase, deleteGroup as deleteGroupCloudbase } from '@/lib/database/cloudbase/groups'
-
-const isCloudBase = process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE === 'zh' && !process.env.FORCE_GLOBAL_DATABASE
+import { IS_DOMESTIC_VERSION } from '@/config'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    let user: { id: string } | null = null
+    if (IS_DOMESTIC_VERSION) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) user = { id: cloudBaseUser.id }
+    } else {
+      const supabase = await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (supabaseUser) user = { id: supabaseUser.id }
+    }
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id } = await params
-    const group = isCloudBase
+    const group = IS_DOMESTIC_VERSION
       ? await getGroupInfoCloudbase(id)
       : await getGroupInfoSupabase(id)
 
@@ -37,8 +44,16 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    let user: { id: string } | null = null
+    if (IS_DOMESTIC_VERSION) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) user = { id: cloudBaseUser.id }
+    } else {
+      const supabase = await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (supabaseUser) user = { id: supabaseUser.id }
+    }
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -48,7 +63,7 @@ export async function PUT(
     const updates = await request.json()
     console.log('[PUT /api/groups/[id]] 更新群设置', { groupId: id, updates, userId: user.id })
 
-    const success = isCloudBase
+    const success = IS_DOMESTIC_VERSION
       ? await updateGroupSettingsCloudbase(id, updates)
       : await updateGroupSettingsSupabase(id, updates)
 
@@ -73,15 +88,23 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    let user: { id: string } | null = null
+    if (IS_DOMESTIC_VERSION) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) user = { id: cloudBaseUser.id }
+    } else {
+      const supabase = await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (supabaseUser) user = { id: supabaseUser.id }
+    }
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id } = await params
-    const success = isCloudBase
+    const success = IS_DOMESTIC_VERSION
       ? await deleteGroupCloudbase(id)
       : await deleteGroupSupabase(id)
 

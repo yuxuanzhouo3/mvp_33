@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCloudBaseDb } from '@/lib/cloudbase/client'
 import { getWorkspaceByInviteCode } from '@/lib/cloudbase/workspaces'
+import { getDeploymentRegion } from '@/config'
 
 /**
  * Join a workspace (add user to workspace_members)
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { workspace_id, inviteCode } = body
 
-    const deploymentRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION
+    const deploymentRegion = getDeploymentRegion()
 
     // 如果提供了邀请码，先通过邀请码获取工作区ID
     let targetWorkspaceId = workspace_id

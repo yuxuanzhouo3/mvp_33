@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCloudBaseDb } from '@/lib/cloudbase/client'
 import { getWorkspaceByInviteCode } from '@/lib/cloudbase/workspaces'
+import { getDeploymentRegion } from '@/config'
 
 /**
  * Lookup a workspace by invite code (preview only, does not join)
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
     }
 
     const normalizedCode = inviteCode.toUpperCase().trim()
-    const deploymentRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION
+    const deploymentRegion = getDeploymentRegion()
 
     console.log('[Lookup] 标准化后的邀请码:', JSON.stringify(normalizedCode))
     console.log('[Lookup] 标准化后长度:', normalizedCode.length)

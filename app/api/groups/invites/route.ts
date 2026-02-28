@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCloudBaseDb } from '@/lib/cloudbase/client'
-
-const isCloudBase = process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE === 'zh' && !process.env.FORCE_GLOBAL_DATABASE
+import { IS_DOMESTIC_VERSION } from '@/config'
 
 export async function GET(request: Request) {
   try {
-    const { IS_DOMESTIC_VERSION } = await import('@/config')
     let user: any = null
 
     if (IS_DOMESTIC_VERSION) {

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getWorkspaces, createWorkspace as createCloudBaseWorkspace } from '@/lib/cloudbase/workspaces'
 import { getCloudBaseUser } from '@/lib/cloudbase/auth'
 import { v4 as uuidv4 } from 'uuid'
+import { getDeploymentRegion } from '@/config'
 
 /**
  * Get user's workspaces
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
   console.log(`[${requestId}] Timestamp:`, new Date().toISOString())
 
   try {
-    const deploymentRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION
+    const deploymentRegion = getDeploymentRegion()
     console.log(`[${requestId}] Deployment region:`, deploymentRegion)
 
     // For China region, use CloudBase
@@ -137,7 +138,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const deploymentRegion = process.env.NEXT_PUBLIC_DEPLOYMENT_REGION
+    const deploymentRegion = getDeploymentRegion()
 
     // For China region, use CloudBase
     if (deploymentRegion === 'CN') {

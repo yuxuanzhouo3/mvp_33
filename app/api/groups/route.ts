@@ -2,15 +2,26 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createGroup as createGroupSupabase } from '@/lib/database/supabase/groups'
 import { createGroup as createGroupCloudbase } from '@/lib/database/cloudbase/groups'
-
-const isCloudBase = process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE === 'zh' && !process.env.FORCE_GLOBAL_DATABASE
+import { IS_DOMESTIC_VERSION } from '@/config'
 
 export async function POST(request: NextRequest) {
   try {
     console.log('[API /api/groups POST] 开始处理创建群聊请求')
 
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    let user: { id: string; email?: string | null } | null = null
+    if (IS_DOMESTIC_VERSION) {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (cloudBaseUser) {
+        user = { id: cloudBaseUser.id, email: cloudBaseUser.email }
+      }
+    } else {
+      const supabase = await createClient()
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      if (supabaseUser) {
+        user = { id: supabaseUser.id, email: supabaseUser.email }
+      }
+    }
 
     if (!user) {
       console.error('[API /api/groups POST] 未授权 - 用户未登录')
@@ -36,11 +47,11 @@ export async function POST(request: NextRequest) {
 
     console.error('[API /api/groups POST] 调用 createGroup 函数', {
       params: JSON.stringify({ userId: user.id, userIds, workspaceId }),
-      database: isCloudBase ? 'CloudBase' : 'Supabase'
+      database: IS_DOMESTIC_VERSION ? 'CloudBase' : 'Supabase'
     })
 
     // 根据环境变量选择数据库
-    const result = isCloudBase
+    const result = IS_DOMESTIC_VERSION
       ? await createGroupCloudbase(user.id, userIds, workspaceId)
       : await createGroupSupabase(user.id, userIds, workspaceId)
 
