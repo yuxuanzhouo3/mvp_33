@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect } from 'react'
+import { IS_DOMESTIC_VERSION } from '@/config'
 
 export function useHeartbeat(userId?: string) {
   useEffect(() => {
     if (!userId) return
 
-    const isGlobal = process.env.NEXT_PUBLIC_FORCE_GLOBAL_DATABASE !== 'false'
+    const isGlobal = !IS_DOMESTIC_VERSION
     if (isGlobal) return
 
     const sendHeartbeat = async () => {
@@ -22,7 +23,7 @@ export function useHeartbeat(userId?: string) {
     }
 
     sendHeartbeat()
-    const interval = setInterval(sendHeartbeat, 60000)
+    const interval = setInterval(sendHeartbeat, 30000)
 
     return () => clearInterval(interval)
   }, [userId])
