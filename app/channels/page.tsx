@@ -24,6 +24,7 @@ export default function ChannelsPage() {
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null)
   const [conversations, setConversations] = useState<ConversationWithDetails[]>([])
+  const [isConversationsLoading, setIsConversationsLoading] = useState(true)
   const [selectedChannelId, setSelectedChannelId] = useState<string>()
   const [messages, setMessages] = useState<MessageWithSender[]>([])
   const [showChannelInfo, setShowChannelInfo] = useState(false)
@@ -68,6 +69,7 @@ export default function ChannelsPage() {
   }, [selectedChannelId])
 
   const loadConversations = async (userId: string, workspaceId: string) => {
+    setIsConversationsLoading(true)
     try {
       const response = await fetch(`/api/conversations?workspaceId=${workspaceId}`)
       const data = await response.json()
@@ -82,6 +84,8 @@ export default function ChannelsPage() {
       }
     } catch (error) {
       console.error('Failed to load conversations:', error)
+    } finally {
+      setIsConversationsLoading(false)
     }
   }
 
@@ -334,6 +338,7 @@ export default function ChannelsPage() {
         >
           <ChannelsPanel
             conversations={conversations}
+            isLoading={isConversationsLoading}
             onSelectChannel={(id) => {
               setSelectedChannelId(id)
               if (isMobile) setSidebarOpen(false)

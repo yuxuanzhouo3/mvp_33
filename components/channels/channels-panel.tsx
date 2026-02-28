@@ -20,6 +20,7 @@ import {
 
 interface ChannelsPanelProps {
   conversations: ConversationWithDetails[]
+  isLoading?: boolean
   onSelectChannel: (id: string) => void
   onCreateChannel: () => void
   selectedChannelId?: string
@@ -31,6 +32,7 @@ interface ChannelsPanelProps {
 
 export function ChannelsPanel({
   conversations,
+  isLoading = false,
   onSelectChannel,
   onCreateChannel,
   selectedChannelId,
@@ -301,9 +303,16 @@ export function ChannelsPanel({
           )}
 
           {/* Empty state */}
-          {filteredChannels.length === 0 && filteredGroups.length === 0 && (
+          {!isLoading && filteredChannels.length === 0 && filteredGroups.length === 0 && (
             <div className="text-center py-8 text-sm text-muted-foreground">
               {t('noChannelsOrGroupsFound')}
+            </div>
+          )}
+
+          {/* Loading state */}
+          {isLoading && (
+            <div className="text-center py-8 text-sm text-muted-foreground">
+              {t('loadingConversations')}
             </div>
           )}
         </div>
