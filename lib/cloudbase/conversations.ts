@@ -46,7 +46,11 @@ export async function createConversationCN(input: CreateConversationInput): Prom
   }))
 
   if (memberDocs.length > 0) {
-    await db.collection('conversation_members').add(memberDocs)
+    // Insert members one by one for CloudBase compatibility.
+    // Some environments do not reliably support array payloads for add().
+    for (const memberDoc of memberDocs) {
+      await db.collection('conversation_members').add(memberDoc)
+    }
   }
 
   return {
@@ -83,14 +87,33 @@ export async function getUserConversationsCN(userId: string): Promise<Conversati
   if (!convIds.length) return []
 
   // 2) fetch conversations
-  const convRes = await db.collection('conversations')
+  // New records use `id` (UUID) as membership reference, while some legacy
+  // records may still use `_id`. Query both and merge.
+  const convByIdRes = await db.collection('conversations')
+    .where({
+      id: db.command.in(convIds),
+      region: 'cn',
+    })
+    .get()
+
+  const convByDocIdRes = await db.collection('conversations')
     .where({
       _id: db.command.in(convIds),
       region: 'cn',
     })
     .get()
 
-  const convs = convRes.data || []
+  const mergedConvMap = new Map<string, any>()
+  ;(convByIdRes.data || []).forEach((c: any) => {
+    const key = c.id || c._id
+    if (key) mergedConvMap.set(key, c)
+  })
+  ;(convByDocIdRes.data || []).forEach((c: any) => {
+    const key = c.id || c._id
+    if (key && !mergedConvMap.has(key)) mergedConvMap.set(key, c)
+  })
+
+  const convs = Array.from(mergedConvMap.values())
 
   // 3) fetch members for these conversations
   const allMembersRes = await db.collection('conversation_members')

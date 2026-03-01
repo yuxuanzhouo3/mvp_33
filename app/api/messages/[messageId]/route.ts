@@ -105,6 +105,35 @@ export async function PUT(
           }
 
           isRecipient = membershipRows.some((row: any) => !row.deleted_at)
+
+          // Fallback for legacy/direct conversations where conversation_members
+          // was not written correctly in older CloudBase flows.
+          if (!isRecipient) {
+            const callerId = String(m?.metadata?.caller_id || '')
+            if (callerId && callerId !== String(user.id)) {
+              const contactsRes = await db.collection('contacts')
+                .where({
+                  user_id: String(user.id),
+                  contact_user_id: callerId,
+                  region: 'cn',
+                })
+                .limit(1)
+                .get()
+
+              const reverseContactsRes = await db.collection('contacts')
+                .where({
+                  user_id: callerId,
+                  contact_user_id: String(user.id),
+                  region: 'cn',
+                })
+                .limit(1)
+                .get()
+
+              isRecipient =
+                (Array.isArray(contactsRes?.data) && contactsRes.data.length > 0) ||
+                (Array.isArray(reverseContactsRes?.data) && reverseContactsRes.data.length > 0)
+            }
+          }
         } catch (error) {
           console.error('Failed to check conversation membership:', error)
         }
