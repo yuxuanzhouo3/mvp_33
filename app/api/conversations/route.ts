@@ -461,21 +461,22 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // 3. 检查 Workspace 成员关系
-        // 获取默认 workspace（techcorp）
-        const DEFAULT_WORKSPACE_ID = 'techcorp'
-        const senderInWorkspace = await chatService.checkWorkspaceMembership(currentUser.id, DEFAULT_WORKSPACE_ID)
-        const targetInWorkspace = await chatService.checkWorkspaceMembership(otherUserId, DEFAULT_WORKSPACE_ID)
+        // 3. 检查是否满足 "同工作区 或 好友关系"
+        const senderWorkspaces = await chatService.getUserWorkspaces(currentUser.id)
+        const targetWorkspaces = await chatService.getUserWorkspaces(otherUserId)
+        const commonWorkspaces = senderWorkspaces.filter((ws: string) => targetWorkspaces.includes(ws))
+        const isFriend = await userService.checkFriendRelation(currentUser.id, otherUserId)
 
-        if (!senderInWorkspace || !targetInWorkspace) {
-          console.log('[CN] Workspace membership check failed:', {
+        if (commonWorkspaces.length === 0 && !isFriend) {
+          console.log('[CN] Permission check failed: no common workspace and not friends', {
             senderId: currentUser.id,
             targetId: otherUserId,
-            senderInWorkspace,
-            targetInWorkspace,
+            senderWorkspaces,
+            targetWorkspaces,
+            isFriend,
           })
           return NextResponse.json(
-            { error: 'Both users must be members of the same workspace', code: 'WORKSPACE_MISMATCH' },
+            { error: 'Users must share a workspace or be contacts', code: 'PERMISSION_DENIED' },
             { status: 403 }
           )
         }
@@ -484,6 +485,8 @@ export async function POST(request: NextRequest) {
           currentUserId: currentUser.id,
           targetUserId: otherUserId,
           skipContactCheck: skip_contact_check,
+          commonWorkspaces,
+          isFriend,
         })
       }
 
@@ -546,63 +549,35 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 3. 检查 Workspace 成员关系
+      // 3. 检查是否满足 "同工作区 或 好友关系"
       // 获取发送者和接收者的 Workspace 列表，检查是否有交集
       const senderWorkspaces = await chatService.getUserWorkspaces(currentUser.id)
       const targetWorkspaces = await chatService.getUserWorkspaces(otherUserId)
+      const isFriend = await userService.checkFriendRelation(currentUser.id, otherUserId)
 
       console.log('[INTL] Workspace check:', {
         senderId: currentUser.id,
         targetId: otherUserId,
         senderWorkspaces,
         targetWorkspaces,
+        isFriend,
       })
 
       // 找到共同的 Workspace
       const commonWorkspaces = senderWorkspaces.filter((ws: string) => targetWorkspaces.includes(ws))
 
-      if (commonWorkspaces.length === 0) {
-        console.log('[INTL] Workspace membership check failed - no common workspace:', {
+      if (commonWorkspaces.length === 0 && !isFriend) {
+        console.log('[INTL] Permission check failed: no common workspace and not friends:', {
           senderId: currentUser.id,
           targetId: otherUserId,
           senderWorkspaces,
           targetWorkspaces,
+          isFriend,
         })
-
-        // 如果目标用户没有 workspace，尝试将其添加到发送者的 workspace
-        if (targetWorkspaces.length === 0 && senderWorkspaces.length > 0) {
-          console.log('[INTL] Target user has no workspace, adding to sender workspace:', senderWorkspaces[0])
-          const supabase = await createClient()
-          const { error: addError } = await supabase
-            .from('workspace_members')
-            .insert({
-              workspace_id: senderWorkspaces[0],
-              user_id: otherUserId,
-              role: 'member',
-            })
-
-          if (addError) {
-            console.error('[INTL] Failed to add target user to workspace:', addError)
-          } else {
-            console.log('[INTL] Successfully added target user to workspace')
-            // 重新获取 workspace 列表
-            const updatedTargetWorkspaces = await chatService.getUserWorkspaces(otherUserId)
-            const updatedCommonWorkspaces = senderWorkspaces.filter((ws: string) => updatedTargetWorkspaces.includes(ws))
-            if (updatedCommonWorkspaces.length > 0) {
-              console.log('[INTL] Now have common workspace after adding:', updatedCommonWorkspaces)
-            } else {
-              return NextResponse.json(
-                { error: 'Both users must be members of the same workspace', code: 'WORKSPACE_MISMATCH' },
-                { status: 403 }
-              )
-            }
-          }
-        } else {
-          return NextResponse.json(
-            { error: 'Both users must be members of the same workspace', code: 'WORKSPACE_MISMATCH' },
-            { status: 403 }
-          )
-        }
+        return NextResponse.json(
+          { error: 'Users must share a workspace or be contacts', code: 'PERMISSION_DENIED' },
+          { status: 403 }
+        )
       }
 
       console.log('[POST /api/conversations] Slack mode check passed:', {
@@ -610,6 +585,7 @@ export async function POST(request: NextRequest) {
         targetUserId: otherUserId,
         skipContactCheck: skip_contact_check,
         commonWorkspaces,
+        isFriend,
       })
     }
 
