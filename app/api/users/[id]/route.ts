@@ -25,6 +25,12 @@ export async function GET(
 
     // CloudBase (China) users
     if (dbClient.type === 'cloudbase' && dbClient.cloudbase && currentRegion === 'cn') {
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const currentUser = await verifyCloudBaseSession(request)
+      if (!currentUser) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+
       const db = dbClient.cloudbase
 
       try {
@@ -94,6 +100,13 @@ export async function GET(
 
     // Supabase (global) users
     const supabase = await createClient()
+    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser()
+    if (authError || !currentUser) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
 
     let user: any = null
 

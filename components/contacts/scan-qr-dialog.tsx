@@ -42,6 +42,9 @@ export function ScanQRDialog({ open, onOpenChange, onAddContact }: ScanQRDialogP
     const response = await fetch(`/api/users/${encodeURIComponent(userId)}`, {
       cache: 'no-store',
     })
+    if (response.status === 401) {
+      throw new Error('UNAUTHORIZED')
+    }
     let data: any = {}
     try {
       data = await response.json()
@@ -102,8 +105,12 @@ export function ScanQRDialog({ open, onOpenChange, onAddContact }: ScanQRDialogP
               return
             }
             setScannedUser(user)
-          } catch (err) {
-            setError(t('networkError'))
+          } catch (err: any) {
+            if (err?.message === 'UNAUTHORIZED') {
+              setError(language === 'zh' ? '登录状态已过期，请重新登录后再试' : 'Session expired. Please sign in again.')
+            } else {
+              setError(t('networkError'))
+            }
           } finally {
             setLoading(false)
           }
@@ -196,7 +203,11 @@ export function ScanQRDialog({ open, onOpenChange, onAddContact }: ScanQRDialogP
       console.error('[扫码] 错误消息:', err?.message)
       console.error('[扫码] 错误堆栈:', err?.stack)
       console.error('[扫码] 完整错误对象:', err)
-      setError(t('invalidQRCode'))
+      if (err?.message === 'UNAUTHORIZED') {
+        setError(language === 'zh' ? '登录状态已过期，请重新登录后再试' : 'Session expired. Please sign in again.')
+      } else {
+        setError(t('invalidQRCode'))
+      }
     } finally {
       console.log('[扫码] 进入 finally 块')
       setLoading(false)
