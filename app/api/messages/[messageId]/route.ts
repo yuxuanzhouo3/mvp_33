@@ -84,10 +84,27 @@ export async function PUT(
       if (isCallMessage && isUpdatingCallStatus && !isSender) {
         // Check if user is a member of the conversation
         try {
+          // First try exact lookup.
+          // Some CloudBase environments may miss a compound index on (conversation_id, user_id),
+          // so we keep a fallback query to avoid false negatives.
           const convRes = await db.collection('conversation_members')
-            .where({ conversation_id: m.conversation_id, user_id: user.id })
+            .where({
+              conversation_id: m.conversation_id,
+              user_id: String(user.id),
+            })
             .get()
-          isRecipient = convRes && convRes.data && convRes.data.length > 0
+
+          let membershipRows = Array.isArray(convRes?.data) ? convRes.data : []
+
+          if (membershipRows.length === 0) {
+            const fallbackRes = await db.collection('conversation_members')
+              .where({ conversation_id: m.conversation_id })
+              .get()
+            const fallbackRows = Array.isArray(fallbackRes?.data) ? fallbackRes.data : []
+            membershipRows = fallbackRows.filter((row: any) => String(row.user_id) === String(user.id))
+          }
+
+          isRecipient = membershipRows.some((row: any) => !row.deleted_at)
         } catch (error) {
           console.error('Failed to check conversation membership:', error)
         }

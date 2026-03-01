@@ -11,6 +11,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const { IS_DOMESTIC_VERSION } = await import('@/config')
     let currentUser: any = null
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null
 
     if (IS_DOMESTIC_VERSION) {
       const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
@@ -20,7 +21,7 @@ export async function PATCH(request: NextRequest) {
       }
       currentUser = cloudBaseUser
     } else {
-      const supabase = await createClient()
+      supabase = await createClient()
       const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
       if (authError || !supabaseUser) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -82,6 +83,12 @@ export async function PATCH(request: NextRequest) {
     } else {
       // Update in Supabase
       console.log('[PROFILE UPDATE] Updating user in Supabase:', currentUser.id, updates)
+      if (!supabase) {
+        return NextResponse.json(
+          { error: 'Supabase client not initialized' },
+          { status: 500 }
+        )
+      }
       
       // First, check if user exists in Supabase
       const { data: existingUser, error: checkError } = await supabase
@@ -169,6 +176,7 @@ export async function GET(request: NextRequest) {
   try {
     const { IS_DOMESTIC_VERSION } = await import('@/config')
     let currentUser: any = null
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null
 
     if (IS_DOMESTIC_VERSION) {
       const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
@@ -178,7 +186,7 @@ export async function GET(request: NextRequest) {
       }
       currentUser = cloudBaseUser
     } else {
-      const supabase = await createClient()
+      supabase = await createClient()
       const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
       if (authError || !supabaseUser) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -202,6 +210,12 @@ export async function GET(request: NextRequest) {
       }
     } else {
       // Get from Supabase
+      if (!supabase) {
+        return NextResponse.json(
+          { error: 'Supabase client not initialized' },
+          { status: 500 }
+        )
+      }
       const { data, error } = await supabase
         .from('users')
         .select('*')
