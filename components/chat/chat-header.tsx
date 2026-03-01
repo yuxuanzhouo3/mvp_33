@@ -20,7 +20,7 @@ import { useIsMobile } from '@/hooks/use-mobile'
 import { cn } from '@/lib/utils'
 import { useSubscription } from '@/hooks/use-subscription'
 import { LimitAlert } from '@/components/subscription/limit-alert'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 interface ChatHeaderProps {
   conversation: ConversationWithDetails
@@ -41,8 +41,45 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
   const { language } = useSettings()
   const { limits } = useSubscription()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const autoCallHandledRef = useRef<string | null>(null)
   const isMobile = useIsMobile()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
+
+  // Auto start call when entering chat from contacts/workspace-members with call params.
+  useEffect(() => {
+    const callType = searchParams.get('callType')
+    const autoCall = searchParams.get('autoCall')
+    const conversationId = searchParams.get('conversation')
+
+    if (autoCall !== '1') {
+      autoCallHandledRef.current = null
+      return
+    }
+    if (conversationId !== conversation.id) return
+    if (callType !== 'voice' && callType !== 'video') return
+
+    const requestKey = `${conversation.id}:${callType}`
+    if (autoCallHandledRef.current === requestKey) return
+    autoCallHandledRef.current = requestKey
+
+    if (callType === 'video') {
+      if (!limits.canUseVideoCall) {
+        setShowVideoLimitAlert(true)
+      } else {
+        setShowVideoCall(true)
+      }
+    } else {
+      setShowVoiceCall(true)
+    }
+
+    const nextParams = new URLSearchParams(searchParams.toString())
+    nextParams.delete('autoCall')
+    nextParams.delete('callType')
+    nextParams.delete('userId')
+    const nextQuery = nextParams.toString()
+    router.replace(nextQuery ? `/chat?${nextQuery}` : '/chat')
+  }, [conversation.id, limits.canUseVideoCall, router, searchParams])
   
   // 监听来自消息列表的接听/拒绝通话事件
   useEffect(() => {

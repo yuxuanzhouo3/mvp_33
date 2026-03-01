@@ -42,6 +42,8 @@ interface ContactsPanelProps {
   users: User[]
   currentUser: User
   onStartChat: (userId: string) => void
+  onStartVoiceCall?: (userId: string) => void
+  onStartVideoCall?: (userId: string) => void
   onAddContact?: (userId: string, message?: string) => void
   onAddManualContact?: (contactData: ManualContactData) => void
   onDeleteContact?: (userId: string) => void
@@ -55,6 +57,8 @@ export function ContactsPanel({
   users, 
   currentUser, 
   onStartChat,
+  onStartVoiceCall,
+  onStartVideoCall,
   onAddContact,
   onAddManualContact,
   onDeleteContact,
@@ -646,8 +650,15 @@ export function ContactsPanel({
                 <Button 
                   variant="outline"
                   onClick={() => {
-                    // TODO: Implement call functionality
-                    alert('Call feature coming soon!')
+                    if (selectedUser.id === currentUser.id) {
+                      alert(language === 'zh' ? '暂不支持给自己发起语音通话' : 'Voice calls to yourself are not supported')
+                      return
+                    }
+                    if (onStartVoiceCall) {
+                      onStartVoiceCall(selectedUser.id)
+                      return
+                    }
+                    alert(language === 'zh' ? '语音通话功能暂未接入' : 'Voice call is not configured')
                   }}
                 >
                   <Phone className="h-4 w-4 mr-2" />
@@ -656,8 +667,15 @@ export function ContactsPanel({
                 <Button 
                   variant="outline"
                   onClick={() => {
-                    // TODO: Implement video call functionality
-                    alert('Video call feature coming soon!')
+                    if (selectedUser.id === currentUser.id) {
+                      alert(language === 'zh' ? '暂不支持给自己发起视频通话' : 'Video calls to yourself are not supported')
+                      return
+                    }
+                    if (onStartVideoCall) {
+                      onStartVideoCall(selectedUser.id)
+                      return
+                    }
+                    alert(language === 'zh' ? '视频通话功能暂未接入' : 'Video call is not configured')
                   }}
                 >
                   <Video className="h-4 w-4 mr-2" />

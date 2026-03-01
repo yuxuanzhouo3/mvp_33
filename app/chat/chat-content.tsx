@@ -3431,9 +3431,16 @@ function ChatPageContent() {
             setMessages([])
             setIsLoadingMessages(true)
 
-            // Update URL with conversation ID
-            console.log('🔗 Updating URL to:', `/chat?conversation=${data.conversation.id}`)
-            router.replace(`/chat?conversation=${data.conversation.id}`)
+            // Update URL with conversation ID.
+            // Keep call params when this navigation comes from contacts/workspace call buttons.
+            const callType = searchParams.get('callType')
+            const shouldAutoCall = searchParams.get('autoCall') === '1'
+            const nextUrl =
+              shouldAutoCall && (callType === 'voice' || callType === 'video')
+                ? `/chat?conversation=${data.conversation.id}&callType=${callType}&autoCall=1`
+                : `/chat?conversation=${data.conversation.id}`
+            console.log('🔗 Updating URL to:', nextUrl)
+            router.replace(nextUrl)
 
             // Mark conversation as processed to prevent duplicate processing
             processedConversationRef.current = data.conversation.id
@@ -3708,11 +3715,18 @@ function ChatPageContent() {
 
             
 
-            // Update URL with conversation ID
+            // Update URL with conversation ID.
+            // Keep call params when this navigation comes from contacts/workspace call buttons.
+            const callType = searchParams.get('callType')
+            const shouldAutoCall = searchParams.get('autoCall') === '1'
+            const nextUrl =
+              shouldAutoCall && (callType === 'voice' || callType === 'video')
+                ? `/chat?conversation=${data.conversation.id}&callType=${callType}&autoCall=1`
+                : `/chat?conversation=${data.conversation.id}`
 
-            console.log('🔗 Updating URL to:', `/chat?conversation=${data.conversation.id}`)
+            console.log('🔗 Updating URL to:', nextUrl)
 
-            router.replace(`/chat?conversation=${data.conversation.id}`)
+            router.replace(nextUrl)
 
             
 

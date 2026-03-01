@@ -35,7 +35,26 @@ function WorkspaceMembersPageContent() {
 
   // Start a chat with a workspace member
   // 采用与联系人页面相同的异步跳转策略：先查缓存，找不到就直接跳转让聊天页创建会话
-  const handleStartChat = useCallback(async (userId: string) => {
+  const buildChatUrl = useCallback((params: {
+    conversationId?: string
+    userId?: string
+    callType?: 'voice' | 'video'
+  }) => {
+    const query = new URLSearchParams()
+    if (params.conversationId) {
+      query.set('conversation', params.conversationId)
+    }
+    if (params.userId) {
+      query.set('userId', params.userId)
+    }
+    if (params.callType) {
+      query.set('callType', params.callType)
+      query.set('autoCall', '1')
+    }
+    return `/chat?${query.toString()}`
+  }, [])
+
+  const handleStartChat = useCallback(async (userId: string, callType?: 'voice' | 'video') => {
     if (!currentUser || !currentWorkspace) return
 
     try {
@@ -57,7 +76,7 @@ function WorkspaceMembersPageContent() {
             // Conversation exists - jump immediately
             console.log('[WorkspaceMembers] Found conversation in cache, jumping:', existingConv.id)
             sessionStorage.setItem('pending_conversation', JSON.stringify(existingConv))
-            router.push(`/chat?conversation=${existingConv.id}`)
+            router.push(buildChatUrl({ conversationId: existingConv.id, callType }))
             return
           }
         } catch (error) {
@@ -69,11 +88,19 @@ function WorkspaceMembersPageContent() {
       console.log('[WorkspaceMembers] Jumping to chat page, will create conversation there for userId:', userId)
 
       // Jump immediately - chat page will handle conversation creation
-      router.push(`/chat?userId=${userId}`)
+      router.push(buildChatUrl({ userId, callType }))
     } catch (error) {
       console.error('[WorkspaceMembers] Error in handleStartChat:', error)
     }
-  }, [currentUser, currentWorkspace, router])
+  }, [buildChatUrl, currentUser, currentWorkspace, router])
+
+  const handleStartVoiceCall = useCallback((userId: string) => {
+    void handleStartChat(userId, 'voice')
+  }, [handleStartChat])
+
+  const handleStartVideoCall = useCallback((userId: string) => {
+    void handleStartChat(userId, 'video')
+  }, [handleStartChat])
 
   // 处理工作区切换
   const handleWorkspaceChange = useCallback((newWorkspace: Workspace) => {
@@ -107,6 +134,8 @@ function WorkspaceMembersPageContent() {
                 workspaceId={currentWorkspace.id}
                 workspace={currentWorkspace}
                 onStartChat={handleStartChat}
+                onStartVoiceCall={handleStartVoiceCall}
+                onStartVideoCall={handleStartVideoCall}
               />
             )}
           </div>

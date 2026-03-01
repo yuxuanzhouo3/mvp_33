@@ -12,11 +12,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Mic, MicOff, Phone, Volume2, VolumeX } from 'lucide-react'
 import { User } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { AgoraClient } from '@/lib/agora/client'
+import { TrtcClient } from '@/lib/trtc/client'
 
-// Generate a short channel name that fits Agora's requirements (keep well under 64 bytes)
+// Generate a short channel name that fits call room requirements.
 function generateChannelName(userId1: string, userId2: string, conversationId?: string): string {
-  const maxLen = 30 // keep margin from Agora's 64-byte limit and avoid token server validation issues
+  const maxLen = 30 // keep margin from room ID conversion and URL-safe transport
   // Use conversationId if available (shorter and more stable)
   if (conversationId) {
     // Take first 32 chars of conversationId and add a short suffix
@@ -41,6 +41,7 @@ interface VoiceCallDialogProps {
   conversationId: string
   callMessageId?: string // 如果是接听通话，传入通话消息ID
   isIncoming?: boolean // 是否是来电
+  autoAnswer?: boolean // 从消息列表点击接听时自动接听
   isGroup?: boolean
   groupName?: string
   groupMembers?: User[]
@@ -55,6 +56,7 @@ export function VoiceCallDialog({
   conversationId,
   callMessageId,
   isIncoming = false,
+  autoAnswer = false,
   isGroup = false,
   groupName,
   groupMembers = [],
@@ -67,7 +69,7 @@ export function VoiceCallDialog({
   const [remoteUserJoined, setRemoteUserJoined] = useState(false) // 跟踪远程用户是否已加入
   const callStartTimeRef = useRef<number | null>(null)
   
-  const agoraClientRef = useRef<AgoraClient | null>(null)
+  const agoraClientRef = useRef<TrtcClient | null>(null)
   const callMessageIdRef = useRef<string | undefined>(callMessageId)
   const uniqueUidRef = useRef<string | null>(null) // Store unique UID for this call session
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -171,17 +173,12 @@ export function VoiceCallDialog({
       const uniqueNumericUid = Math.floor(timestamp / 1000) * 100000 + random
       uniqueUidRef.current = `${currentUser.id}_${uniqueNumericUid}`
       
-      if (isIncoming && callMessageId) {
-        // 来电且已有 callMessageId：说明已经点击了接听，直接开始连接
-        callMessageIdRef.current = callMessageId
-        setCallStatus('calling')
-        // Start connecting immediately
-        initializeCall().catch(error => {
-          console.error('Failed to initialize call:', error)
-          setCallStatus('ended')
-        })
-      } else if (isIncoming) {
-        // 来电但还没有 callMessageId：显示接听界面
+      if (isIncoming) {
+        // 来电场景：默认显示响铃界面。
+        // 如果来自消息列表点击“接听”，会在 autoAnswer effect 中自动执行接听流程。
+        if (callMessageId) {
+          callMessageIdRef.current = callMessageId
+        }
         setCallStatus('ringing')
       } else {
         // 发起通话：发送邀请
@@ -200,6 +197,16 @@ export function VoiceCallDialog({
       uniqueUidRef.current = null
     }
   }, [open, isIncoming, callMessageId])
+
+  // 从消息列表点击“Answer”时，自动接听（语音）
+  useEffect(() => {
+    if (!open) return
+    if (!isIncoming) return
+    if (!autoAnswer) return
+    if (!callMessageIdRef.current && !callMessageId) return
+    handleAnswerCall()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isIncoming, autoAnswer, callMessageId])
 
   // 发送通话邀请消息
   const sendCallInvitation = async () => {
@@ -370,19 +377,11 @@ export function VoiceCallDialog({
           : generateChannelName(currentUser.id, recipient.id, conversationId)
       }
       
-      // Validate channel name length (Agora requires max 64 bytes)
+      // Validate channel name length before converting to roomId
       if (channelName.length > 64) {
         console.error('Channel name too long:', channelName.length, 'bytes')
         // Truncate to 64 chars
         channelName = channelName.substring(0, 64)
-      }
-      
-      // 获取 App ID
-      const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID
-      if (!appId) {
-        console.error('Agora App ID not configured')
-        setCallStatus('ended')
-        return
       }
 
       // Clean up any existing client first to avoid conflicts
@@ -407,27 +406,37 @@ export function VoiceCallDialog({
       // Store the UID string for reference
       uniqueUidRef.current = `${currentUser.id}_${numericUid}`
 
-      // 获取 Token（生产环境）
+      let appId = process.env.NEXT_PUBLIC_TRTC_SDK_APP_ID
+
+      // 获取 TRTC userSig
       let token: string | undefined
       try {
-        const tokenResponse = await fetch('/api/agora/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            channelName,
-            uid: numericUid,
-          }),
-        })
+        const tokenResponse = await fetch(`/api/trtc/user-sig?userId=${encodeURIComponent(String(numericUid))}`)
         const tokenData = await tokenResponse.json()
-        if (tokenData.success) {
-          token = tokenData.token
+        if (tokenResponse.ok && tokenData?.userSig) {
+          token = tokenData.userSig
+          if (!appId && tokenData?.sdkAppId) {
+            appId = String(tokenData.sdkAppId)
+          }
         }
       } catch (error) {
-        console.warn('Failed to get token, using App ID only (test mode):', error)
+        console.warn('Failed to get TRTC userSig:', error)
       }
 
-      // 创建 Agora 客户端（纯音频模式）
-      const client = new AgoraClient({
+      if (!appId) {
+        console.error('TRTC SDKAppID not configured')
+        setCallStatus('ended')
+        return
+      }
+
+      if (!token) {
+        console.error('TRTC userSig not configured')
+        setCallStatus('ended')
+        return
+      }
+
+      // 创建 TRTC 客户端（纯音频模式）
+      const client = new TrtcClient({
         appId,
         token,
         channel: channelName,
@@ -763,10 +772,6 @@ export function VoiceCallDialog({
                     ) : (
                       'Waiting for other user...'
                     )
-                  ) : callStatus === 'calling' ? (
-                    'Calling...'
-                  ) : callStatus === 'ringing' ? (
-                    'Ringing...'
                   ) : callStatus === 'ended' ? (
                     'Call ended'
                   ) : (

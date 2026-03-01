@@ -36,6 +36,8 @@ interface WorkspaceMembersPanelProps {
   workspaceId?: string
   workspace?: Workspace
   onStartChat: (userId: string) => void
+  onStartVoiceCall?: (userId: string) => void
+  onStartVideoCall?: (userId: string) => void
 }
 
 // 成员角色类型
@@ -87,7 +89,9 @@ export function WorkspaceMembersPanel({
   currentUser,
   workspaceId,
   workspace,
-  onStartChat
+  onStartChat,
+  onStartVoiceCall,
+  onStartVideoCall
 }: WorkspaceMembersPanelProps) {
   const [members, setMembers] = useState<MemberWithRole[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -853,8 +857,15 @@ export function WorkspaceMembersPanel({
                   </button>
                   <button
                     onClick={() => {
-                      // TODO: 实现电话功能
-                      toast.info(isZh ? '电话功能即将推出！' : 'Call feature coming soon!')
+                      if (!selectedMember || selectedMember.id === currentUser.id) {
+                        toast.info(isZh ? '暂不支持给自己发起语音通话' : 'Voice calls to yourself are not supported')
+                        return
+                      }
+                      if (onStartVoiceCall) {
+                        onStartVoiceCall(selectedMember.id)
+                        return
+                      }
+                      toast.info(isZh ? '语音通话功能暂未接入' : 'Voice call is not configured')
                     }}
                     className="flex-1 flex items-center justify-center gap-2 py-3 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition"
                   >
@@ -863,8 +874,15 @@ export function WorkspaceMembersPanel({
                   </button>
                   <button
                     onClick={() => {
-                      // TODO: 实现视频功能
-                      toast.info(isZh ? '视频功能即将推出！' : 'Video call feature coming soon!')
+                      if (!selectedMember || selectedMember.id === currentUser.id) {
+                        toast.info(isZh ? '暂不支持给自己发起视频通话' : 'Video calls to yourself are not supported')
+                        return
+                      }
+                      if (onStartVideoCall) {
+                        onStartVideoCall(selectedMember.id)
+                        return
+                      }
+                      toast.info(isZh ? '视频通话功能暂未接入' : 'Video call is not configured')
                     }}
                     className="flex-1 flex items-center justify-center gap-2 py-3 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition"
                   >

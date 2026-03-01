@@ -414,7 +414,26 @@ function ContactsPageContent() {
     )
   }
 
-  const handleStartChat = async (userId: string) => {
+  const buildChatUrl = useCallback((params: {
+    conversationId?: string
+    userId?: string
+    callType?: 'voice' | 'video'
+  }) => {
+    const query = new URLSearchParams()
+    if (params.conversationId) {
+      query.set('conversation', params.conversationId)
+    }
+    if (params.userId) {
+      query.set('userId', params.userId)
+    }
+    if (params.callType) {
+      query.set('callType', params.callType)
+      query.set('autoCall', '1')
+    }
+    return `/chat?${query.toString()}`
+  }, [])
+
+  const handleStartChat = async (userId: string, callType?: 'voice' | 'video') => {
     if (!currentUser || !currentWorkspace) return
     
     try {
@@ -436,7 +455,7 @@ function ContactsPageContent() {
 
             if (selfConv) {
               console.log('✅ Self conversation found in cache, jumping immediately:', selfConv.id)
-              router.push(`/chat?conversation=${selfConv.id}`)
+              router.push(buildChatUrl({ conversationId: selfConv.id, callType }))
               return
             }
           } catch (error) {
@@ -487,7 +506,7 @@ function ContactsPageContent() {
             }
           }
 
-          router.push(`/chat?conversation=${data.conversation.id}`)
+          router.push(buildChatUrl({ conversationId: data.conversation.id, callType }))
           return
         } else {
           console.error('Failed to create self conversation:', data.error)
@@ -516,7 +535,7 @@ function ContactsPageContent() {
             console.log('✅ Conversation found in cache, jumping immediately:', existingConv.id)
             // Pre-store conversation for instant display on chat page
             sessionStorage.setItem('pending_conversation', JSON.stringify(existingConv))
-            router.push(`/chat?conversation=${existingConv.id}`)
+            router.push(buildChatUrl({ conversationId: existingConv.id, callType }))
             return
           }
         } catch (error) {
@@ -534,12 +553,20 @@ function ContactsPageContent() {
       }
       
       // Jump immediately - chat page will handle conversation creation
-      router.push(`/chat?userId=${userId}`)
+      router.push(buildChatUrl({ userId, callType }))
       return
     } catch (error) {
       console.error('Error in handleStartChat:', error)
     }
   }
+
+  const handleStartVoiceCall = useCallback((userId: string) => {
+    void handleStartChat(userId, 'voice')
+  }, [handleStartChat])
+
+  const handleStartVideoCall = useCallback((userId: string) => {
+    void handleStartChat(userId, 'video')
+  }, [handleStartChat])
 
   // Legacy code - keeping for reference but not used anymore
   const _legacyCreateConversation = async (userId: string) => {
@@ -897,6 +924,8 @@ function ContactsPageContent() {
               users={contacts}
               currentUser={currentUser}
               onStartChat={handleStartChat}
+              onStartVoiceCall={handleStartVoiceCall}
+              onStartVideoCall={handleStartVideoCall}
               onAddContact={handleAddContact}
               onAddManualContact={handleAddManualContact}
               onDeleteContact={handleDeleteContact}

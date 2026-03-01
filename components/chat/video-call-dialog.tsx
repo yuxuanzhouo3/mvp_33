@@ -12,11 +12,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Mic, MicOff, Phone, Video, VideoOff, Monitor } from 'lucide-react'
 import { User } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { AgoraClient } from '@/lib/agora/client'
+import { TrtcClient } from '@/lib/trtc/client'
 
-// Generate a short channel name that fits Agora's requirements (keep well under 64 bytes)
+// Generate a short channel name that fits call room requirements.
 function generateChannelName(userId1: string, userId2: string, conversationId?: string): string {
-  const maxLen = 30 // keep margin from Agora's 64-byte limit and avoid token server validation issues
+  const maxLen = 30 // keep margin from room ID conversion and URL-safe transport
   // Use conversationId if available (shorter and more stable)
   if (conversationId) {
     // Take first 32 chars of conversationId and add a short suffix
@@ -72,7 +72,7 @@ export function VideoCallDialog({
   const [hasRemoteVideo, setHasRemoteVideo] = useState(false) // 跟踪远程视频是否已加载
   const callStartTimeRef = useRef<number | null>(null)
   
-  const agoraClientRef = useRef<AgoraClient | null>(null)
+  const agoraClientRef = useRef<TrtcClient | null>(null)
   const localVideoRef = useRef<HTMLDivElement>(null)
   const remoteVideoRef = useRef<HTMLDivElement>(null)
   const callMessageIdRef = useRef<string | undefined>(callMessageId)
@@ -102,6 +102,25 @@ export function VideoCallDialog({
     const combined = randomHigh ^ timestamp ^ perfCounter
     const finalUid = (combined % 0xFFFFFF00) + userIdHash // Ensure 32-bit, avoid 0
     return Math.max(1, Math.min(finalUid, 0xFFFFFFFF)) // Clamp to 32-bit unsigned, avoid 0
+  }
+
+  const fetchTrtcCredentials = async (uid: number | string, preferredAppId?: string) => {
+    const response = await fetch(`/api/trtc/user-sig?userId=${encodeURIComponent(String(uid))}`)
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok || !data?.userSig) {
+      throw new Error(data?.error || 'Failed to get TRTC userSig')
+    }
+
+    const resolvedAppId = preferredAppId || (data?.sdkAppId ? String(data.sdkAppId) : '')
+    if (!resolvedAppId) {
+      throw new Error('TRTC SDKAppID not configured')
+    }
+
+    return {
+      appId: resolvedAppId,
+      userSig: String(data.userSig),
+    }
   }
 
   useEffect(() => {
@@ -539,22 +558,15 @@ export function VideoCallDialog({
           : generateChannelName(currentUser.id, recipient.id, conversationId)
       }
       
-      // Validate channel name length (Agora requires max 64 bytes)
+      // Validate channel name length before converting to roomId
       if (channelName.length > 64) {
         console.error('Channel name too long:', channelName.length, 'bytes')
         // Truncate to 64 chars
         channelName = channelName.substring(0, 64)
       }
-      
+
       // 获取 App ID
-      const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID
-      if (!appId) {
-        const errorMsg = 'Agora App ID not configured'
-        console.error(errorMsg)
-        setCallStatus('ended')
-        onOpenChange(false)
-        throw new Error(errorMsg)
-      }
+      let appId = process.env.NEXT_PUBLIC_TRTC_SDK_APP_ID || ''
 
       // Clean up any existing client first to avoid conflicts
       // Don't wait for leave() to complete - let join() handle cleanup internally
@@ -572,28 +584,13 @@ export function VideoCallDialog({
       uniqueUidRef.current = `${currentUser.id}_${numericUid}`
       console.log('[initializeCall] 初始 UID 生成:', numericUid, 'for user:', currentUser.id)
 
-      // 获取 Token（生产环境）
-      let token: string | undefined
-      try {
-        const tokenResponse = await fetch('/api/agora/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            channelName,
-            uid: numericUid,
-          }),
-        })
-        const tokenData = await tokenResponse.json()
-        if (tokenData.success) {
-          token = tokenData.token
-        }
-      } catch (error) {
-        console.warn('Failed to get token, using App ID only (test mode):', error)
-        // 测试环境可以不使用 Token
-      }
+      // 获取 TRTC userSig
+      const credentials = await fetchTrtcCredentials(numericUid, appId)
+      appId = credentials.appId
+      let token: string | undefined = credentials.userSig
 
-      // 创建 Agora 客户端
-      let client = new AgoraClient({
+      // 创建 TRTC 客户端
+      let client = new TrtcClient({
         appId,
         token,
         channel: channelName,
@@ -992,26 +989,13 @@ export function VideoCallDialog({
             uniqueUidRef.current = `${currentUser.id}_${currentNumericUid}`
             console.log('[initializeCall] 生成新 UID:', currentNumericUid)
             
-            // 重新获取 Token
-            try {
-              const tokenResponse = await fetch('/api/agora/token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  channelName,
-                  uid: currentNumericUid,
-                }),
-              })
-              const tokenData = await tokenResponse.json()
-              if (tokenData.success) {
-                currentToken = tokenData.token
-              }
-            } catch (error) {
-              console.warn('Failed to get new token, using App ID only:', error)
-            }
+            // 重新获取 TRTC userSig
+            const retryCredentials = await fetchTrtcCredentials(currentNumericUid, appId)
+            appId = retryCredentials.appId
+            currentToken = retryCredentials.userSig
             
             // 创建新客户端并重新设置回调
-            currentClient = new AgoraClient({
+            currentClient = new TrtcClient({
               appId,
               token: currentToken,
               channel: channelName,
