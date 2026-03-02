@@ -1,16 +1,9 @@
 import type { Metadata } from "next";
-import { Inter } from 'next/font/google';
 import "./globals.css";
 import { SettingsProvider } from '@/lib/settings-context';
 import { RegionProvider } from '@/lib/region-context';
 import { Toaster } from '@/components/ui/toaster';
 import { DEFAULT_LANGUAGE } from '@/config';
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "Enterprise Chat - Company Communication Platform",
@@ -25,9 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang={DEFAULT_LANGUAGE}>
-      <body
-        className={`${inter.variable} font-sans antialiased`}
-      >
+      <body className="font-sans antialiased">
         <RegionProvider>
           <SettingsProvider>
             {children}
