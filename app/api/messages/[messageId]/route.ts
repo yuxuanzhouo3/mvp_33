@@ -64,20 +64,41 @@ export async function PUT(
       // Ensure the message exists and user is sender
       const db = dbClient.cloudbase
       const res = await db.collection('messages').doc(messageId).get()
-      const m = res?.data || res
+      const rawMessage = (res as any)?.data ?? res
+      let m: any = null
+
+      if (Array.isArray(rawMessage)) {
+        m = rawMessage[0] || null
+      } else if (rawMessage && typeof rawMessage === 'object') {
+        m = rawMessage
+      }
+
       if (!m) {
         return NextResponse.json(
           { error: 'Message not found' },
           { status: 404 }
         )
       }
+
+      const messageMetadata =
+        typeof m.metadata === 'string'
+          ? (() => {
+              try {
+                return JSON.parse(m.metadata)
+              } catch {
+                return {}
+              }
+            })()
+          : (m.metadata || {})
+      const conversationId = String(m.conversation_id || m.conversationId || '')
+
       // Convert both to string for comparison
       const messageSenderId = String(m.sender_id || '')
       const currentUserId = String(user.id || '')
       const isSender = messageSenderId === currentUserId
       
       // For call messages, allow recipient to update call status
-      const isCallMessage = m.type === 'system' && m.metadata?.call_type
+      const isCallMessage = m.type === 'system' && !!messageMetadata?.call_type
       const isUpdatingCallStatus = metadata && (metadata.call_status === 'answered' || metadata.call_status === 'missed' || metadata.call_status === 'cancelled' || metadata.call_status === 'ended')
       let isRecipient = false
       
@@ -89,7 +110,7 @@ export async function PUT(
           // so we keep a fallback query to avoid false negatives.
           const convRes = await db.collection('conversation_members')
             .where({
-              conversation_id: m.conversation_id,
+              conversation_id: conversationId,
               user_id: String(user.id),
             })
             .get()
@@ -98,7 +119,7 @@ export async function PUT(
 
           if (membershipRows.length === 0) {
             const fallbackRes = await db.collection('conversation_members')
-              .where({ conversation_id: m.conversation_id })
+              .where({ conversation_id: conversationId })
               .get()
             const fallbackRows = Array.isArray(fallbackRes?.data) ? fallbackRes.data : []
             membershipRows = fallbackRows.filter((row: any) => String(row.user_id) === String(user.id))
@@ -109,13 +130,12 @@ export async function PUT(
           // Fallback for legacy/direct conversations where conversation_members
           // was not written correctly in older CloudBase flows.
           if (!isRecipient) {
-            const callerId = String(m?.metadata?.caller_id || '')
+            const callerId = String(messageMetadata?.caller_id || '')
             if (callerId && callerId !== String(user.id)) {
               const contactsRes = await db.collection('contacts')
                 .where({
                   user_id: String(user.id),
                   contact_user_id: callerId,
-                  region: 'cn',
                 })
                 .limit(1)
                 .get()
@@ -124,7 +144,6 @@ export async function PUT(
                 .where({
                   user_id: callerId,
                   contact_user_id: String(user.id),
-                  region: 'cn',
                 })
                 .limit(1)
                 .get()
