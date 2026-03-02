@@ -132,6 +132,14 @@ export async function PUT(
               isRecipient =
                 (Array.isArray(contactsRes?.data) && contactsRes.data.length > 0) ||
                 (Array.isArray(reverseContactsRes?.data) && reverseContactsRes.data.length > 0)
+
+              // Final fallback: use service-level friend relation check,
+              // which is tolerant to legacy contact records.
+              if (!isRecipient) {
+                const { getUserService } = await import('@/lib/services')
+                const userService = getUserService()
+                isRecipient = await userService.checkFriendRelation(String(user.id), callerId)
+              }
             }
           }
         } catch (error) {

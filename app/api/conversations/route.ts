@@ -18,22 +18,20 @@ export async function GET(request: NextRequest) {
 
     const deploymentRegion = getDeploymentRegion()
 
-    // For China region, get user from localStorage (client-side auth)
+    // Authenticate request
     let user: any = null
     let supabase: any = null  // 在外部声明，供后续代码使用
 
     if (deploymentRegion === 'CN') {
-      // For CN region, we trust the client-side authentication
-      // The user info is passed via headers or we can skip auth check
-      // since CloudBase handles auth differently
-      const authHeader = request.headers.get('x-user-id')
-      if (authHeader) {
-        user = { id: authHeader }
-      } else {
-        // For CN, we'll allow the request to proceed
-        // The database queries will be filtered by workspace
-        user = { id: 'cn-user' }
+      const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+      const cloudBaseUser = await verifyCloudBaseSession(request)
+      if (!cloudBaseUser) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        )
       }
+      user = cloudBaseUser
     } else {
       // For international region, use Supabase auth
       supabase = await createClient()
