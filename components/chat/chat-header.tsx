@@ -18,8 +18,6 @@ import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { cn } from '@/lib/utils'
-import { useSubscription } from '@/hooks/use-subscription'
-import { LimitAlert } from '@/components/subscription/limit-alert'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 interface ChatHeaderProps {
@@ -32,14 +30,12 @@ interface ChatHeaderProps {
 export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggleGroupInfo }: ChatHeaderProps) {
   const [showVoiceCall, setShowVoiceCall] = useState(false)
   const [showVideoCall, setShowVideoCall] = useState(false)
-  const [showVideoLimitAlert, setShowVideoLimitAlert] = useState(false)
   const [incomingCallMessageId, setIncomingCallMessageId] = useState<string | undefined>()
   const [incomingCallType, setIncomingCallType] = useState<'voice' | 'video' | undefined>()
   // 当从消息列表点“Answer”时，自动接听，不再弹出第二个接听界面
   const [autoAnswerVoice, setAutoAnswerVoice] = useState(false)
   const [autoAnswerVideo, setAutoAnswerVideo] = useState(false)
   const { language } = useSettings()
-  const { limits } = useSubscription()
   const router = useRouter()
   const searchParams = useSearchParams()
   const autoCallHandledRef = useRef<string | null>(null)
@@ -64,11 +60,7 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
     autoCallHandledRef.current = requestKey
 
     if (callType === 'video') {
-      if (!limits.canUseVideoCall) {
-        setShowVideoLimitAlert(true)
-      } else {
-        setShowVideoCall(true)
-      }
+      setShowVideoCall(true)
     } else {
       setShowVoiceCall(true)
     }
@@ -79,7 +71,7 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
     nextParams.delete('userId')
     const nextQuery = nextParams.toString()
     router.replace(nextQuery ? `/chat?${nextQuery}` : '/chat')
-  }, [conversation.id, limits.canUseVideoCall, router, searchParams])
+  }, [conversation.id, router, searchParams])
   
   // 监听来自消息列表的接听/拒绝通话事件
   useEffect(() => {
@@ -102,11 +94,6 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
             setIncomingCallMessageId(messageId)
             
             if (callType === 'video') {
-              // 检查权限限制
-              if (!limits.canUseVideoCall) {
-                setShowVideoLimitAlert(true)
-                return
-              }
               setIncomingCallType('video')
               setAutoAnswerVideo(true) // 从消息列表接听：自动接听视频
               setShowVideoCall(true)
@@ -159,7 +146,7 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
       window.removeEventListener('answerCall', handleAnswerCall as EventListener)
       window.removeEventListener('rejectCall', handleRejectCall as EventListener)
     }
-  }, [conversation.id, limits.canUseVideoCall])
+  }, [conversation.id])
 
   const getConversationDisplay = () => {
     if (conversation.type === 'direct') {
@@ -300,13 +287,7 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
             <Button
               size="icon"
               variant="ghost"
-              onClick={() => {
-                if (!limits.canUseVideoCall) {
-                  setShowVideoLimitAlert(true)
-                } else {
-                  setShowVideoCall(true)
-                }
-              }}
+              onClick={() => setShowVideoCall(true)}
               className={cn("h-8 w-8", isMobile && "h-7 w-7")}
             >
               <Video className="h-4 w-4" />
@@ -361,20 +342,6 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
         groupMembers={conversation.members}
       />
 
-      {showVideoLimitAlert && (
-        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4">
-          <LimitAlert
-            type="video"
-            limits={limits}
-            onDismiss={() => setShowVideoLimitAlert(false)}
-            onUpgrade={() => {
-              setShowVideoLimitAlert(false)
-              router.push('/payment')
-            }}
-          />
-        </div>
-      )}
-      
       <VideoCallDialog
         open={showVideoCall}
         onOpenChange={(open) => {

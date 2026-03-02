@@ -151,10 +151,10 @@ async function verifyRegion(region, cfg) {
     method: 'POST',
     json: {
       conversationId,
-      content: 'Voice call',
+      content: cfg.callType === 'video' ? 'Video call' : 'Voice call',
       type: 'system',
       metadata: {
-        call_type: 'voice',
+        call_type: cfg.callType,
         call_status: 'calling',
         channel_name: `verify-${region.toLowerCase()}-${Date.now()}`,
         caller_id: callerId,
@@ -175,6 +175,23 @@ async function verifyRegion(region, cfg) {
     ...(message.metadata || {}),
     call_status: 'answered',
     answered_at: new Date().toISOString(),
+  }
+
+  if (process.env.SKIP_CALLEE_FETCH_BEFORE_ANSWER !== '1') {
+    const calleeFetchBeforeAnswer = await callee.request(
+      `/api/messages?conversationId=${encodeURIComponent(conversationId)}`
+    )
+    printStep(region, 'callee-fetch-before-answer', calleeFetchBeforeAnswer)
+    const calleeMsgList = Array.isArray(calleeFetchBeforeAnswer.data?.messages)
+      ? calleeFetchBeforeAnswer.data.messages
+      : []
+    const calleeCallMsg = calleeMsgList.find((m) => String(m.id || m._id) === messageId)
+    printStep(region, 'callee-call-message-shape', { status: 200 }, {
+      found: !!calleeCallMsg,
+      type: calleeCallMsg?.type || null,
+      conversation_id: calleeCallMsg?.conversation_id || null,
+      metadata: calleeCallMsg?.metadata || null,
+    })
   }
 
   const answer = await callee.request(`/api/messages/${encodeURIComponent(messageId)}`, {
@@ -216,12 +233,14 @@ async function verifyRegion(region, cfg) {
 }
 
 async function main() {
+  const callType = (process.env.CALL_TYPE || 'voice').toLowerCase() === 'video' ? 'video' : 'voice'
   const cn = {
     baseUrl: mustGet('CN_BASE_URL'),
     callerEmail: mustGet('CN_CALLER_EMAIL'),
     callerPassword: mustGet('CN_CALLER_PASSWORD'),
     calleeEmail: mustGet('CN_CALLEE_EMAIL'),
     calleePassword: mustGet('CN_CALLEE_PASSWORD'),
+    callType,
   }
 
   const intl = {
@@ -230,6 +249,7 @@ async function main() {
     callerPassword: mustGet('INTL_CALLER_PASSWORD'),
     calleeEmail: mustGet('INTL_CALLEE_EMAIL'),
     calleePassword: mustGet('INTL_CALLEE_PASSWORD'),
+    callType,
   }
 
   const results = []
