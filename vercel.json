@@ -1,0 +1,19 @@
+{
+  "buildCommand": "next build",
+  "framework": "nextjs",
+  "installCommand": "npm install",
+  "functions": {
+    "app/**/*.{js,ts,tsx}": {
+      "maxDuration": 10
+    },
+    "api/**/*.{js,ts,tsx}": {
+      "maxDuration": 10
+    }
+  },
+  "regions": ["sin1"],
+  "build": {
+    "env": {
+      "NEXT_TELEMETRY_DISABLED": "1"
+    }
+  }
+}
