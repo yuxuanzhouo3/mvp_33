@@ -73,6 +73,7 @@ export function VoiceCallDialog({
   const callMessageIdRef = useRef<string | undefined>(callMessageId)
   const uniqueUidRef = useRef<string | null>(null) // Store unique UID for this call session
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const endingCallRef = useRef(false)
 
   // 轮询检查对方是否接听（发起方使用）
   const startPollingForAnswer = (channelName: string) => {
@@ -165,27 +166,26 @@ export function VoiceCallDialog({
   }, [])
 
   useEffect(() => {
-    if (open) {
-      // Generate unique numeric UID for this call session to avoid conflicts
-      // This ensures each call attempt uses a different UID
-      const timestamp = Date.now()
-      const random = Math.floor(Math.random() * 100000)
-      const uniqueNumericUid = Math.floor(timestamp / 1000) * 100000 + random
-      uniqueUidRef.current = `${currentUser.id}_${uniqueNumericUid}`
-      
-      if (isIncoming) {
-        // 来电场景：默认显示响铃界面。
-        // 如果来自消息列表点击“接听”，会在 autoAnswer effect 中自动执行接听流程。
-        if (callMessageId) {
-          callMessageIdRef.current = callMessageId
-        }
-        setCallStatus('ringing')
-      } else {
-        // 发起通话：发送邀请
-        sendCallInvitation()
+    if (!open) return
+
+    endingCallRef.current = false
+    // Generate unique numeric UID for this call session to avoid conflicts
+    // This ensures each call attempt uses a different UID
+    const timestamp = Date.now()
+    const random = Math.floor(Math.random() * 100000)
+    const uniqueNumericUid = Math.floor(timestamp / 1000) * 100000 + random
+    uniqueUidRef.current = `${currentUser.id}_${uniqueNumericUid}`
+    
+    if (isIncoming) {
+      // 来电场景：默认显示响铃界面。
+      // 如果来自消息列表点击“接听”，会在 autoAnswer effect 中自动执行接听流程。
+      if (callMessageId) {
+        callMessageIdRef.current = callMessageId
       }
+      setCallStatus('ringing')
     } else {
-      handleEndCall()
+      // 发起通话：发送邀请
+      sendCallInvitation()
     }
     
     return () => {
@@ -540,6 +540,9 @@ export function VoiceCallDialog({
   }
 
   const handleEndCall = async () => {
+    if (endingCallRef.current) return
+    endingCallRef.current = true
+
     // 保存当前状态，因为后面会设置为 ended
     const currentStatus = callStatus
     const currentRemoteJoined = remoteUserJoined
@@ -621,6 +624,7 @@ export function VoiceCallDialog({
     callStartTimeRef.current = null
     setTimeout(() => {
       onOpenChange(false)
+      endingCallRef.current = false
     }, 500)
   }
 
@@ -637,12 +641,17 @@ export function VoiceCallDialog({
     : recipient.full_name || recipient.username || recipient.email || 'User'
   const displayMembers = isGroup ? groupMembers : [recipient]
 
-  // 阻止 Dialog 被外部点击关闭，只能通过"停止通话"按钮关闭
+  const getStatusText = () => {
+    if (callStatus === 'ringing') return 'Incoming voice call'
+    if (callStatus === 'calling') return 'Calling...'
+    if (callStatus === 'connected') return remoteUserJoined ? formatDuration(callDuration) : 'Connecting...'
+    return 'Call ended'
+  }
+
+  // 外部关闭动作统一视为“挂断/取消”
   const handleOpenChange = (newOpen: boolean) => {
-    // 只有当调用 handleEndCall 时才会关闭（通过 setCallStatus('ended') 和 onOpenChange(false)）
-    // 阻止外部点击或 ESC 键关闭
     if (!newOpen && callStatus !== 'ended') {
-      // 如果通话还在进行中，阻止关闭
+      void handleEndCall()
       return
     }
     onOpenChange(newOpen)
@@ -651,7 +660,7 @@ export function VoiceCallDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent 
-        className="sm:max-w-md"
+        className="sm:max-w-sm p-0 border-0 bg-transparent shadow-none"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
@@ -661,164 +670,112 @@ export function VoiceCallDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col items-center gap-6 py-8">
-          {/* Avatar and status */}
-          {callStatus === 'calling' || callStatus === 'ringing' ? (
-            <>
-              {isGroup ? (
-                <div className="flex justify-center -space-x-4">
-                  {displayMembers.slice(0, 3).map((member) => (
-                    <Avatar key={member.id} className="h-24 w-24 border-4 border-gray-200">
-                      <AvatarImage src={member.avatar_url || undefined} />
-                      <AvatarFallback name={member.full_name || member.email || 'User'}>
-                        {(member.full_name || member.email || 'User')
-                          .split(' ')
-                          .map((n) => n[0])
-                          .join('')
-                          .toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                  ))}
-                </div>
-              ) : (
-                <Avatar className="h-32 w-32">
-                  <AvatarImage src={recipient.avatar_url || undefined} />
-                  <AvatarFallback
-                    name={recipient.full_name || recipient.email || 'User'}
-                    className="text-3xl"
-                  >
-                    {(recipient.full_name || recipient.email || 'User')
-                      .split(' ')
-                      .map((n) => n[0])
-                      .join('')
-                      .toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-              )}
-              <div className="text-center">
-                <h3 className="text-2xl font-semibold">{displayName}</h3>
-                <p className="text-gray-500 mt-2">
-                  {callStatus === 'ringing' ? 'Ringing...' : 'Calling...'}
-                </p>
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white">
+          <div className="pointer-events-none absolute -left-10 -top-10 h-36 w-36 rounded-full bg-emerald-400/20 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-12 -right-10 h-40 w-40 rounded-full bg-blue-500/20 blur-3xl" />
+
+          <div className="relative flex min-h-[520px] flex-col items-center px-6 pb-7 pt-8">
+            <p className="text-xs uppercase tracking-[0.3em] text-white/60">Voice Call</p>
+
+            {isGroup ? (
+              <div className="mt-8 flex justify-center -space-x-4">
+                {displayMembers.slice(0, 3).map((member) => (
+                  <Avatar key={member.id} className="h-24 w-24 border-4 border-white/20 shadow-lg">
+                    <AvatarImage src={member.avatar_url || undefined} />
+                    <AvatarFallback
+                      className="bg-slate-700 text-lg"
+                      name={member.full_name || member.email || 'User'}
+                    >
+                      {(member.full_name || member.email || 'User')
+                        .split(' ')
+                        .map((n) => n[0])
+                        .join('')
+                        .toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                ))}
               </div>
-              {callStatus === 'ringing' && (
-                <div className="flex items-center justify-center gap-4 mt-4">
+            ) : (
+              <Avatar className={cn('mt-8 h-32 w-32 border-4 border-white/20 shadow-xl', callStatus !== 'ended' && 'animate-pulse')}>
+                <AvatarImage src={recipient.avatar_url || undefined} />
+                <AvatarFallback
+                  className="bg-slate-700 text-3xl"
+                  name={recipient.full_name || recipient.email || 'User'}
+                >
+                  {(recipient.full_name || recipient.email || 'User')
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+            )}
+
+            <div className="mt-6 text-center">
+              <h3 className="text-2xl font-semibold">{displayName}</h3>
+              {isGroup && (
+                <p className="mt-1 text-sm text-white/70">{displayMembers.length} participants</p>
+              )}
+              {!isGroup && recipient.title && (
+                <p className="mt-1 text-sm text-white/70">{recipient.title}</p>
+              )}
+              <p className="mt-3 text-base font-medium text-white/80">{getStatusText()}</p>
+            </div>
+
+            <div className="mt-auto w-full">
+              {callStatus === 'ringing' && isIncoming ? (
+                <div className="flex items-center justify-center gap-8">
                   <Button
-                    size="lg"
+                    size="icon"
                     variant="destructive"
-                    className="h-16 w-16 rounded-full"
+                    className="h-16 w-16 rounded-full shadow-lg shadow-red-500/40"
                     onClick={handleRejectCall}
                   >
                     <Phone className="h-6 w-6 rotate-90" />
                   </Button>
                   <Button
-                    size="lg"
+                    size="icon"
                     variant="default"
-                    className="h-16 w-16 rounded-full bg-green-600 hover:bg-green-700"
+                    className="h-16 w-16 rounded-full bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/40"
                     onClick={handleAnswerCall}
                   >
                     <Phone className="h-6 w-6" />
                   </Button>
                 </div>
-              )}
-            </>
-          ) : (
-            <>
-              {isGroup ? (
-                <div className="flex justify-center -space-x-4">
-                  {displayMembers.slice(0, 3).map((member) => (
-                    <Avatar key={member.id} className="h-24 w-24 border-4 border-gray-200">
-                      <AvatarImage src={member.avatar_url || undefined} />
-                      <AvatarFallback name={member.full_name || member.email || 'User'}>
-                        {(member.full_name || member.email || 'User')
-                          .split(' ')
-                          .map((n) => n[0])
-                          .join('')
-                          .toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                  ))}
-                </div>
               ) : (
-                <Avatar className="h-32 w-32">
-                  <AvatarImage src={recipient.avatar_url || undefined} />
-                  <AvatarFallback
-                    name={recipient.full_name || recipient.email || 'User'}
-                    className="text-3xl"
+                <div className="flex items-center justify-center gap-4">
+                  <Button
+                    size="icon"
+                    variant={isSpeakerOn ? 'secondary' : 'outline'}
+                    className="h-12 w-12 rounded-full border-white/20 bg-white/10 text-white hover:bg-white/20"
+                    onClick={() => setIsSpeakerOn(!isSpeakerOn)}
+                    disabled={callStatus !== 'connected'}
                   >
-                    {(recipient.full_name || recipient.email || 'User')
-                      .split(' ')
-                      .map((n) => n[0])
-                      .join('')
-                      .toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                    {isSpeakerOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+                  </Button>
+
+                  <Button
+                    size="icon"
+                    variant={isMuted ? 'destructive' : 'secondary'}
+                    className="h-12 w-12 rounded-full border-white/20 bg-white/10 text-white hover:bg-white/20"
+                    onClick={handleToggleMute}
+                    disabled={callStatus !== 'connected'}
+                  >
+                    {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                  </Button>
+
+                  <Button
+                    size="icon"
+                    variant="destructive"
+                    className="h-16 w-16 rounded-full shadow-lg shadow-red-500/40"
+                    onClick={handleEndCall}
+                  >
+                    <Phone className="h-6 w-6 rotate-[135deg]" />
+                  </Button>
+                </div>
               )}
-
-              <div className="text-center">
-                <h3 className="text-xl font-semibold">{displayName}</h3>
-                {isGroup && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {displayMembers.length} participants
-                  </p>
-                )}
-                {!isGroup && recipient.title && (
-                  <p className="text-sm text-muted-foreground mt-1">{recipient.title}</p>
-                )}
-                <p className="text-lg font-medium text-muted-foreground mt-2">
-                  {callStatus === 'connected' ? (
-                    remoteUserJoined ? (
-                      callDuration > 0 ? formatDuration(callDuration) : 'Call started'
-                    ) : (
-                      'Waiting for other user...'
-                    )
-                  ) : callStatus === 'ended' ? (
-                    'Call ended'
-                  ) : (
-                    'Connecting...'
-                  )}
-                </p>
-              </div>
-
-              {/* Controls */}
-              <div className="flex items-center gap-4 mt-4">
-                <Button
-                  size="icon"
-                  variant={isSpeakerOn ? 'default' : 'outline'}
-                  className="h-14 w-14 rounded-full"
-                  onClick={() => setIsSpeakerOn(!isSpeakerOn)}
-                >
-                  {isSpeakerOn ? (
-                    <Volume2 className="h-6 w-6" />
-                  ) : (
-                    <VolumeX className="h-6 w-6" />
-                  )}
-                </Button>
-
-                <Button
-                  size="icon"
-                  variant={isMuted ? 'destructive' : 'default'}
-                  className="h-14 w-14 rounded-full"
-                  onClick={handleToggleMute}
-                >
-                  {isMuted ? (
-                    <MicOff className="h-6 w-6" />
-                  ) : (
-                    <Mic className="h-6 w-6" />
-                  )}
-                </Button>
-
-                <Button
-                  size="icon"
-                  variant="destructive"
-                  className="h-16 w-16 rounded-full"
-                  onClick={handleEndCall}
-                >
-                  <Phone className="h-6 w-6" />
-                </Button>
-              </div>
-            </>
-          )}
+            </div>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
