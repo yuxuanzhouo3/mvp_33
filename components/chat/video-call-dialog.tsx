@@ -13,6 +13,12 @@ import { Mic, MicOff, Phone, Video, VideoOff, Monitor } from 'lucide-react'
 import { User } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { TrtcClient } from '@/lib/trtc/client'
+import {
+  acquireCallUiLock,
+  createCallLockToken,
+  releaseCallUiLock,
+  updateCallUiLock,
+} from '@/lib/call/call-ui-lock'
 
 // Generate a short channel name that fits call room requirements.
 function generateChannelName(userId1: string, userId2: string, conversationId?: string): string {
@@ -78,6 +84,19 @@ export function VideoCallDialog({
   const callMessageIdRef = useRef<string | undefined>(callMessageId)
   const uniqueUidRef = useRef<string | null>(null) // Store unique UID for this call session
   const endingCallRef = useRef(false)
+  const callStatusRef = useRef(callStatus)
+  const lockTokenRef = useRef<string>(createCallLockToken('video'))
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const outgoingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const incomingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    callStatusRef.current = callStatus
+  }, [callStatus])
+
+  useEffect(() => {
+    callMessageIdRef.current = callMessageId
+  }, [callMessageId])
 
   // Generate unique Agora UID per call session to avoid UID_CONFLICT.
   // Uses high-entropy random + timestamp + performance counter to ensure maximum uniqueness.
@@ -128,6 +147,35 @@ export function VideoCallDialog({
     if (!open) return
 
     endingCallRef.current = false
+    const initialMessageId = callMessageIdRef.current || callMessageId
+    const acquired = acquireCallUiLock({
+      token: lockTokenRef.current,
+      callType: 'video',
+      direction: isIncoming ? 'incoming' : 'outgoing',
+      conversationId,
+      messageId: initialMessageId,
+      phase: isIncoming ? 'incoming' : 'outgoing',
+    })
+    if (!acquired) {
+      if (isIncoming && initialMessageId) {
+        void fetch(`/api/messages/${initialMessageId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            metadata: {
+              call_status: 'missed',
+              rejected_at: new Date().toISOString(),
+              reject_reason: 'busy',
+            },
+          }),
+        }).catch((error) => {
+          console.error('[VideoCallDialog] Failed to reject busy invite:', error)
+        })
+      }
+      onOpenChange(false)
+      return
+    }
+
     // 注意：不在 useEffect 中生成 UID，而是在 initializeCall 中统一生成
     // 这样可以避免 UID 生成时机不一致的问题
     // uniqueUidRef.current 会在 initializeCall 中设置
@@ -157,11 +205,20 @@ export function VideoCallDialog({
         agoraClientRef.current = null
       }
       uniqueUidRef.current = null
+      if (outgoingTimeoutRef.current) {
+        clearTimeout(outgoingTimeoutRef.current)
+        outgoingTimeoutRef.current = null
+      }
+      if (incomingTimeoutRef.current) {
+        clearTimeout(incomingTimeoutRef.current)
+        incomingTimeoutRef.current = null
+      }
+      releaseCallUiLock(lockTokenRef.current)
       // 重置所有状态，确保下次打开时是干净的状态
       setHasRemoteVideo(false)
       setRemoteUserJoined(false)
     }
-  }, [open, isIncoming])
+  }, [open, isIncoming, callMessageId, conversationId, onOpenChange])
 
   // 从消息列表点击“Answer”时，自动接听：直接进入通话界面并开始连接
   useEffect(() => {
@@ -179,8 +236,96 @@ export function VideoCallDialog({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isIncoming, autoAnswer, callMessageId])
 
+  // Real-time call signal listener (faster than polling; polling stays as fallback).
+  useEffect(() => {
+    if (!open) return
+
+    const handleCallSignal = (event: Event) => {
+      const custom = event as CustomEvent<{
+        messageId?: string
+        conversationId?: string
+        callStatus?: string
+        channelName?: string
+      }>
+      const detail = custom.detail || {}
+      const currentMessageId = callMessageIdRef.current || callMessageId
+      if (!currentMessageId) return
+      if (String(detail.messageId || '') !== String(currentMessageId)) return
+      if (String(detail.conversationId || '') !== String(conversationId)) return
+
+      const status = String(detail.callStatus || '')
+      if (!status) return
+
+      if (status === 'answered' && !isIncoming) {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current)
+          pollingIntervalRef.current = null
+        }
+        setCallStatus('connected')
+        updateCallUiLock(lockTokenRef.current, { phase: 'active' })
+        if (!agoraClientRef.current) {
+          void initializeCall(detail.channelName).catch((error) => {
+            console.error('[VideoCallDialog] Failed to initialize call from signal:', error)
+            setCallStatus('ended')
+            onOpenChange(false)
+          })
+        }
+        return
+      }
+
+      if (status === 'missed' || status === 'cancelled' || status === 'ended') {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current)
+          pollingIntervalRef.current = null
+        }
+        setCallStatus('ended')
+        onOpenChange(false)
+      }
+    }
+
+    window.addEventListener('callSignal', handleCallSignal as EventListener)
+    return () => {
+      window.removeEventListener('callSignal', handleCallSignal as EventListener)
+    }
+  }, [open, isIncoming, callMessageId, conversationId, onOpenChange])
+
+  // Outgoing unanswered timeout.
+  useEffect(() => {
+    if (!open || isIncoming || callStatus !== 'calling') return
+    if (outgoingTimeoutRef.current) clearTimeout(outgoingTimeoutRef.current)
+    outgoingTimeoutRef.current = setTimeout(() => {
+      if (callStatusRef.current === 'calling') {
+        void handleEndCall()
+      }
+    }, 35000)
+    return () => {
+      if (outgoingTimeoutRef.current) {
+        clearTimeout(outgoingTimeoutRef.current)
+        outgoingTimeoutRef.current = null
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isIncoming, callStatus])
+
+  // Incoming ringing timeout.
+  useEffect(() => {
+    if (!open || !isIncoming || callStatus !== 'ringing') return
+    if (incomingTimeoutRef.current) clearTimeout(incomingTimeoutRef.current)
+    incomingTimeoutRef.current = setTimeout(() => {
+      if (callStatusRef.current === 'ringing') {
+        void handleRejectCall('timeout')
+      }
+    }, 35000)
+    return () => {
+      if (incomingTimeoutRef.current) {
+        clearTimeout(incomingTimeoutRef.current)
+        incomingTimeoutRef.current = null
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isIncoming, callStatus])
+
   // 轮询检查对方是否接听（发起方使用）
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const startPollingForAnswer = (channelName: string) => {
     // 清除之前的轮询
     if (pollingIntervalRef.current) {
@@ -217,8 +362,10 @@ export function VideoCallDialog({
             // 如果还没有加入频道，则需要初始化通话
             if (agoraClientRef.current) {
               setCallStatus('connected')
+              updateCallUiLock(lockTokenRef.current, { phase: 'active' })
             } else {
               setCallStatus('connected')
+              updateCallUiLock(lockTokenRef.current, { phase: 'active' })
               try {
                 const channelNameToUse = callMessage?.metadata?.channel_name || channelName || generateChannelName(currentUser.id, recipient.id, conversationId)
                 await initializeCall(channelNameToUse)
@@ -282,6 +429,7 @@ export function VideoCallDialog({
             const callMessage = msgData.messages.find((m: any) => m.id === answeredMessageId)
             const channelName = callMessage?.metadata?.channel_name || generateChannelName(currentUser.id, recipient.id, conversationId)
             setCallStatus('connected')
+            updateCallUiLock(lockTokenRef.current, { phase: 'active' })
             await initializeCall(channelName)
           }
         } catch (error) {
@@ -310,6 +458,7 @@ export function VideoCallDialog({
         : generateChannelName(currentUser.id, recipient.id, conversationId)
       
       // 发送通话邀请消息
+      const inviteExpiresAt = new Date(Date.now() + 35_000).toISOString()
       const response = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -323,6 +472,7 @@ export function VideoCallDialog({
             channel_name: channelName,
             caller_id: currentUser.id,
             caller_name: currentUser.full_name || currentUser.username || currentUser.email,
+            invite_expires_at: inviteExpiresAt,
           },
         }),
       })
@@ -331,6 +481,10 @@ export function VideoCallDialog({
       if (data.success && data.message?.id) {
         // 保存通话消息ID和频道名称
         callMessageIdRef.current = data.message.id
+        updateCallUiLock(lockTokenRef.current, {
+          messageId: data.message.id,
+          phase: 'outgoing',
+        })
         // 发起方立即加入频道开启摄像头，但保持 calling 状态直到对方接听
         // 这样发起方能看到自己的摄像头，但看不到对方（对方还没接听）
         try {
@@ -375,6 +529,7 @@ export function VideoCallDialog({
             ...(callMessage.metadata || {}),
             call_status: 'answered',
             answered_at: new Date().toISOString(),
+            answered_by: currentUser.id,
           }
           
           // 更新消息状态为已接听
@@ -435,6 +590,14 @@ export function VideoCallDialog({
           // 接收方：一旦点击接听，立即切换到通话界面（即使对方还在加入）
           // 注意：先不设置 connected，等 initializeCall 成功后再设置
           setCallStatus('ringing') // 临时设置为 ringing，表示正在连接
+          if (incomingTimeoutRef.current) {
+            clearTimeout(incomingTimeoutRef.current)
+            incomingTimeoutRef.current = null
+          }
+          updateCallUiLock(lockTokenRef.current, {
+            messageId,
+            phase: 'active',
+          })
           console.log('[A端接听] 状态设置为 ringing，准备初始化通话')
 
           // 开始连接（加入 Agora 频道）
@@ -485,7 +648,7 @@ export function VideoCallDialog({
   }
 
   // 拒绝通话
-  const handleRejectCall = async () => {
+  const handleRejectCall = async (reason: 'declined' | 'busy' | 'timeout' = 'declined') => {
     const messageId = callMessageIdRef.current || callMessageId
     if (messageId) {
       try {
@@ -499,6 +662,7 @@ export function VideoCallDialog({
               ...callMessage.metadata,
               call_status: 'missed',
               rejected_at: new Date().toISOString(),
+              reject_reason: reason,
             }
             
             await fetch(`/api/messages/${messageId}`, {
@@ -944,6 +1108,7 @@ export function VideoCallDialog({
             }
             return prev
           })
+          updateCallUiLock(lockTokenRef.current, { phase: 'active' })
           console.log('[initializeCall] 状态已设置为 connected')
           break // 成功，退出循环
         } catch (joinError: any) {
@@ -1620,6 +1785,7 @@ export function VideoCallDialog({
     
     // 先设置状态为 ended，防止 Dialog 被意外关闭
     setCallStatus('ended')
+    updateCallUiLock(lockTokenRef.current, { phase: 'ending' })
     
     const duration = callStartTimeRef.current 
       ? Math.floor((Date.now() - callStartTimeRef.current) / 1000)
@@ -1856,7 +2022,9 @@ export function VideoCallDialog({
                     size="icon"
                     variant="destructive"
                     className="h-16 w-16 rounded-full shadow-lg shadow-red-500/40"
-                    onClick={handleRejectCall}
+                    onClick={() => {
+                      void handleRejectCall()
+                    }}
                   >
                     <Phone className="h-6 w-6 rotate-90" />
                   </Button>

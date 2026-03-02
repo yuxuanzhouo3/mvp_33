@@ -39,6 +39,7 @@ import { User, Workspace, ConversationWithDetails, MessageWithSender, Message } 
 import { MessageSquare } from 'lucide-react'
 
 import { VideoCallDialog } from '@/components/chat/video-call-dialog'
+import { VoiceCallDialog } from '@/components/chat/voice-call-dialog'
 
 import { useSubscription } from '@/hooks/use-subscription'
 
@@ -53,6 +54,7 @@ import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
 import { SessionValidator } from '@/components/auth/session-validator'
 import { IS_DOMESTIC_VERSION } from '@/config'
+import { getCallUiLock, isCallUiBusy } from '@/lib/call/call-ui-lock'
 
 type ConversationsApiResponse = {
 
@@ -62,6 +64,26 @@ type ConversationsApiResponse = {
 
   error?: string
 
+}
+
+type IncomingCallPromptPayload = {
+  messageId: string
+  conversationId: string
+  callType?: unknown
+  callerId?: unknown
+  callerName?: unknown
+}
+
+type PendingCallInviteApiResponse = {
+  success: boolean
+  invite?: {
+    messageId?: string
+    conversationId?: string
+    callType?: 'voice' | 'video'
+    callerId?: string
+    callerName?: string
+  } | null
+  error?: string
 }
 
 const SYSTEM_ASSISTANT_IDS = new Set([
@@ -127,6 +149,36 @@ function ChatPageContent() {
   const [incomingCallMessageId, setIncomingCallMessageId] = useState<string | null>(null)
   const [incomingCallConversationId, setIncomingCallConversationId] = useState<string | null>(null)
   const [incomingCallRecipient, setIncomingCallRecipient] = useState<User | null>(null)
+  const [incomingCallType, setIncomingCallType] = useState<'voice' | 'video'>('video')
+  const [incomingCallAutoAnswer, setIncomingCallAutoAnswer] = useState(false)
+  const incomingCallPromptedIdsRef = useRef<Set<string>>(new Set())
+  const pendingCallPollInFlightRef = useRef(false)
+
+  const dispatchIncomingCallPrompt = useCallback((payload: IncomingCallPromptPayload): boolean => {
+    if (typeof window === 'undefined') return false
+
+    const messageId = String(payload.messageId || '')
+    const conversationId = String(payload.conversationId || '')
+    if (!messageId || !conversationId) return false
+
+    if (incomingCallPromptedIdsRef.current.has(messageId)) return false
+    incomingCallPromptedIdsRef.current.add(messageId)
+    if (incomingCallPromptedIdsRef.current.size > 500) {
+      const preserved = Array.from(incomingCallPromptedIdsRef.current).slice(-200)
+      incomingCallPromptedIdsRef.current = new Set(preserved)
+    }
+
+    window.dispatchEvent(new CustomEvent('showCallDialog', {
+      detail: {
+        messageId,
+        conversationId,
+        callType: payload.callType,
+        callerId: payload.callerId,
+        callerName: payload.callerName,
+      },
+    }))
+    return true
+  }, [])
 
   const { limits, subscription } = useSubscription()
   const { language } = useSettings()
@@ -4565,140 +4617,159 @@ function ChatPageContent() {
     }
   }, [currentUser, currentWorkspace, loadConversations])
 
-  // Listen for answer call and reject call events from message list
+  // Listen for incoming-call popup events from realtime message handler
   useEffect(() => {
     if (!currentUser) return
 
-    const handleAnswerCall = async (event: CustomEvent) => {
-      const { messageId, conversationId } = event.detail
-      
-      try {
-        // Get conversation to find recipient
-        const conversation = conversations.find(c => c.id === conversationId)
-        if (!conversation) {
-          console.error('Conversation not found:', conversationId)
-          return
-        }
+    const handleShowCallDialog = (event: CustomEvent) => {
+      const { messageId, conversationId, callType, callerId, callerName } = event.detail || {}
+      if (!messageId || !conversationId) return
 
-        // Get recipient user (for direct calls) - 确保 recipient 不是 currentUser
-        let recipient: User | null = null
-        if (conversation.type === 'direct') {
-          recipient = conversation.members.find(m => m.id !== currentUser.id) || null
-        } else {
-          // For group calls, use the first member that is not currentUser
-          recipient = conversation.members.find(m => m.id !== currentUser.id) || conversation.members[0] || null
-        }
-
-        if (!recipient) {
-          console.error('Recipient not found')
-          return
-        }
-        
-        // 严格验证：确保 recipient 不是 currentUser（防止显示错误）
-        if (recipient.id === currentUser.id) {
-          console.error('[handleAnswerCall] ❌ CRITICAL: recipient is same as currentUser! This will cause wrong display.', {
-            recipientId: recipient.id,
-            recipientName: recipient.full_name,
-            currentUserId: currentUser.id,
-            currentUserName: currentUser.full_name,
-            conversationId,
-            conversationType: conversation.type,
-            members: conversation.members.map(m => ({ id: m.id, name: m.full_name }))
-          })
-          // 尝试找到另一个成员
-          const otherMember = conversation.members.find(m => m.id !== currentUser.id)
-          if (otherMember) {
-            recipient = otherMember
-            console.warn('[handleAnswerCall] Using alternative recipient:', otherMember.id)
-          } else {
-            console.error('[handleAnswerCall] No alternative recipient found, cannot proceed')
-            return
-          }
-        }
-
-        // Get message to get channel name
-        const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}`)
-        const msgData = await msgResponse.json()
-        if (!msgData.success) {
-          console.error('Failed to get messages')
-          return
-        }
-
-        const callMessage = msgData.messages.find((m: any) => m.id === messageId)
-        if (!callMessage) {
-          console.error('Call message not found')
-          return
-        }
-
-        // Update message status to answered
-        const updatedMetadata = {
-          ...callMessage.metadata,
-          call_status: 'answered',
-          answered_at: new Date().toISOString(),
-        }
-        
-        await fetch(`/api/messages/${messageId}`, {
+      // If another call is active in this tab, reject new invite as busy.
+      const activeCall = getCallUiLock()
+      const busyByDialogState = showIncomingCallDialog && incomingCallMessageId && incomingCallMessageId !== messageId
+      const busyByGlobalLock = isCallUiBusy({ messageId })
+      if (busyByDialogState || busyByGlobalLock) {
+        void fetch(`/api/messages/${messageId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            metadata: updatedMetadata,
+            metadata: {
+              call_status: 'missed',
+              rejected_at: new Date().toISOString(),
+              reject_reason: 'busy',
+              busy_by_message_id: activeCall?.messageId,
+            },
           }),
+        }).catch((error) => {
+          console.error('[showCallDialog] Failed to auto-reject busy call:', error)
+        })
+        return
+      }
+
+      const conversation = conversations.find(c => c.id === conversationId)
+
+      let recipient: User | null = null
+      if (conversation) {
+        if (callerId) {
+          recipient = conversation.members.find(m => m.id === callerId) || null
+        }
+        if (!recipient) {
+          recipient = conversation.members.find(m => m.id !== currentUser.id) || null
+        }
+      }
+      if (!recipient && callerId) {
+        const now = new Date().toISOString()
+        const fallbackName = typeof callerName === 'string' && callerName.trim().length > 0
+          ? callerName
+          : 'User'
+        recipient = {
+          id: callerId,
+          email: '',
+          username: fallbackName,
+          full_name: fallbackName,
+          status: 'online',
+          created_at: now,
+          updated_at: now,
+        }
+      }
+      if (!recipient || recipient.id === currentUser.id) {
+        console.warn('[showCallDialog] Unable to resolve caller info:', {
+          conversationId,
+          callerId,
+          callerName,
+          currentUserId: currentUser.id,
+        })
+        return
+      }
+
+      setIncomingCallMessageId(messageId)
+      setIncomingCallConversationId(conversationId)
+      setIncomingCallRecipient(recipient)
+      setIncomingCallType(callType === 'voice' ? 'voice' : 'video')
+      setIncomingCallAutoAnswer(false)
+      setShowIncomingCallDialog(true)
+    }
+
+    window.addEventListener('showCallDialog', handleShowCallDialog as EventListener)
+    return () => {
+      window.removeEventListener('showCallDialog', handleShowCallDialog as EventListener)
+    }
+  }, [currentUser, conversations, showIncomingCallDialog, incomingCallMessageId])
+
+  // Fallback call-invite sync for WebView/mobile-shell scenarios.
+  // Realtime is the primary path; this polling path is for missed foreground/background transitions.
+  useEffect(() => {
+    if (!currentUser || typeof window === 'undefined') return
+
+    let disposed = false
+
+    const checkPendingCallInvite = async (reason: 'initial' | 'interval' | 'focus' | 'pageshow' | 'visible') => {
+      if (disposed || pendingCallPollInFlightRef.current) return
+      if (reason === 'interval' && typeof document !== 'undefined' && document.hidden) return
+
+      pendingCallPollInFlightRef.current = true
+      try {
+        const response = await fetch('/api/calls/pending?maxAgeSeconds=120', {
+          method: 'GET',
+          cache: 'no-store',
         })
 
-        // Open video call dialog and start call immediately
-        setIncomingCallMessageId(messageId)
-        setIncomingCallConversationId(conversationId)
-        setIncomingCallRecipient(recipient)
-        setShowIncomingCallDialog(true)
-      } catch (error) {
-        console.error('Failed to handle answer call:', error)
-      }
-    }
-
-    const handleRejectCall = async (event: CustomEvent) => {
-      const { messageId } = event.detail
-      
-      try {
-        // Update message status to rejected
-        const conversation = conversations.find(c => 
-          c.last_message?.id === messageId || messages.some(m => m.id === messageId)
-        )
-        
-        if (conversation) {
-          const msgResponse = await fetch(`/api/messages?conversationId=${conversation.id}`)
-          const msgData = await msgResponse.json()
-          if (msgData.success) {
-            const callMessage = msgData.messages.find((m: any) => m.id === messageId)
-            if (callMessage) {
-              const updatedMetadata = {
-                ...callMessage.metadata,
-                call_status: 'missed',
-                rejected_at: new Date().toISOString(),
-              }
-              
-              await fetch(`/api/messages/${messageId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  metadata: updatedMetadata,
-                }),
-              })
-            }
+        if (!response.ok) {
+          // Session may be rotating in background; ignore transient 401/403.
+          if (response.status !== 401 && response.status !== 403) {
+            console.warn(`[call-pending] check failed (${reason}):`, response.status)
           }
+          return
         }
+
+        const data = await response.json() as PendingCallInviteApiResponse
+        const invite = data?.invite
+        if (!data?.success || !invite?.messageId || !invite?.conversationId) return
+
+        dispatchIncomingCallPrompt({
+          messageId: invite.messageId,
+          conversationId: invite.conversationId,
+          callType: invite.callType,
+          callerId: invite.callerId,
+          callerName: invite.callerName,
+        })
       } catch (error) {
-        console.error('Failed to handle reject call:', error)
+        console.error('[call-pending] check failed:', error)
+      } finally {
+        pendingCallPollInFlightRef.current = false
       }
     }
 
-    window.addEventListener('answerCall', handleAnswerCall as EventListener)
-    window.addEventListener('rejectCall', handleRejectCall as EventListener)
+    const intervalId = window.setInterval(() => {
+      void checkPendingCallInvite('interval')
+    }, 2000)
+
+    const handleWindowFocus = () => {
+      void checkPendingCallInvite('focus')
+    }
+    const handlePageShow = () => {
+      void checkPendingCallInvite('pageshow')
+    }
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        void checkPendingCallInvite('visible')
+      }
+    }
+
+    window.addEventListener('focus', handleWindowFocus)
+    window.addEventListener('pageshow', handlePageShow)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    void checkPendingCallInvite('initial')
 
     return () => {
-      window.removeEventListener('answerCall', handleAnswerCall as EventListener)
-      window.removeEventListener('rejectCall', handleRejectCall as EventListener)
+      disposed = true
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleWindowFocus)
+      window.removeEventListener('pageshow', handlePageShow)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [currentUser, conversations, messages])
+  }, [currentUser?.id, dispatchIncomingCallPrompt])
 
   // Debug: log when conversation is selected but not found
 
@@ -7068,6 +7139,29 @@ function ChatPageContent() {
 
           const conversationId = newMessage.conversation_id
 
+          // Speed path: trigger incoming-call popup immediately from realtime payload.
+          // Do this before any membership/loading checks so receiver gets a near-instant dialog.
+          const isIncomingCallInvite =
+            newMessage.type === 'system' &&
+            !!newMessage.metadata?.call_type &&
+            newMessage.metadata?.call_status === 'calling' &&
+            newMessage.sender_id !== currentUser.id
+          if (isIncomingCallInvite) {
+            dispatchIncomingCallPrompt({
+              messageId: String(newMessage.id || ''),
+              conversationId,
+              callType: newMessage.metadata?.call_type,
+              callerId: newMessage.metadata?.caller_id,
+              callerName: newMessage.metadata?.caller_name,
+            })
+          }
+
+          // Ignore self-sent realtime messages (UI already has optimistic updates).
+          if (newMessage.sender_id === currentUser.id) {
+            console.log('⏭️ Skipping realtime update for self-sent message to avoid duplicates')
+            return
+          }
+
           
 
           // CRITICAL: First check if user is a member of this conversation
@@ -7091,16 +7185,6 @@ function ChatPageContent() {
           if (!membership) {
 
             console.log('⚠️ User is not a member of this conversation, ignoring message')
-
-            return
-
-          }
-
-          
-
-          if (newMessage.sender_id === currentUser.id) {
-
-            console.log('⏭️ Skipping realtime update for self-sent message to avoid duplicates')
 
             return
 
@@ -7180,19 +7264,6 @@ function ChatPageContent() {
             } else if (newMessage.type === 'system' && newMessage.metadata?.call_type) {
 
               displayContent = newMessage.metadata.call_type === 'video' ? '📹 Video Call' : '📞 Voice Call'
-
-              // 如果是通话邀请且不是自己发起的，显示接听界面
-              if (newMessage.metadata.call_status === 'calling' && newMessage.sender_id !== currentUser.id) {
-                // 触发显示通话对话框
-                window.dispatchEvent(new CustomEvent('showCallDialog', {
-                  detail: {
-                    messageId: newMessage.id,
-                    conversationId: conversationId,
-                    callType: newMessage.metadata.call_type,
-                    callerId: newMessage.metadata.caller_id,
-                  }
-                }))
-              }
             }
 
             
@@ -7420,6 +7491,53 @@ function ChatPageContent() {
         async (payload) => {
           const updatedMessage = payload.new as any
           const oldMessage = payload.old as any
+
+          const normalizeMetadata = (value: any): Record<string, any> => {
+            if (!value) return {}
+            if (typeof value === 'object') return value
+            if (typeof value === 'string') {
+              try {
+                return JSON.parse(value)
+              } catch {
+                return {}
+              }
+            }
+            return {}
+          }
+
+          const newMetadata = normalizeMetadata(updatedMessage?.metadata)
+          const oldMetadata = normalizeMetadata(oldMessage?.metadata)
+          const callType = newMetadata.call_type || oldMetadata.call_type
+          const oldCallStatus = oldMetadata.call_status
+          const newCallStatus = newMetadata.call_status
+          const isCallStatusChanged =
+            updatedMessage?.type === 'system' &&
+            !!callType &&
+            !!newCallStatus &&
+            oldCallStatus !== newCallStatus
+
+          if (isCallStatusChanged && typeof window !== 'undefined') {
+            const signalDetail = {
+              messageId: String(updatedMessage.id || ''),
+              conversationId: String(updatedMessage.conversation_id || ''),
+              callType: callType === 'voice' ? 'voice' : 'video',
+              callStatus: String(newCallStatus),
+              previousStatus: String(oldCallStatus || ''),
+              channelName: newMetadata.channel_name || oldMetadata.channel_name,
+              callerId: newMetadata.caller_id || oldMetadata.caller_id,
+              callerName: newMetadata.caller_name || oldMetadata.caller_name,
+            }
+
+            window.dispatchEvent(new CustomEvent('callSignal', { detail: signalDetail }))
+            if (newCallStatus === 'answered') {
+              window.dispatchEvent(new CustomEvent('callAnswered', {
+                detail: {
+                  messageId: signalDetail.messageId,
+                  conversationId: signalDetail.conversationId,
+                },
+              }))
+            }
+          }
           
           // Only process if message was just recalled or deleted (check if status actually changed)
           const wasJustRecalled = !oldMessage?.is_recalled && updatedMessage.is_recalled
@@ -7571,7 +7689,7 @@ function ChatPageContent() {
       }
     }
 
-  }, [currentUser, currentWorkspace, selectedConversationId, loadSingleConversation])
+  }, [currentUser, currentWorkspace, selectedConversationId, loadSingleConversation, dispatchIncomingCallPrompt])
 
   // Update user status to offline when page closes/unloads
   useEffect(() => {
@@ -8151,16 +8269,47 @@ function ChatPageContent() {
 
       {/* Incoming call dialog */}
       {showIncomingCallDialog && incomingCallRecipient && incomingCallConversationId && incomingCallMessageId && currentUser && (
-        <VideoCallDialog
-          open={showIncomingCallDialog}
-          onOpenChange={setShowIncomingCallDialog}
-          recipient={incomingCallRecipient}
-          currentUser={currentUser}
-          conversationId={incomingCallConversationId}
-          callMessageId={incomingCallMessageId}
-          isIncoming={true}
-          autoAnswer={true}
-        />
+        incomingCallType === 'voice' ? (
+          <VoiceCallDialog
+            open={showIncomingCallDialog}
+            onOpenChange={(open) => {
+              setShowIncomingCallDialog(open)
+              if (!open) {
+                setIncomingCallMessageId(null)
+                setIncomingCallConversationId(null)
+                setIncomingCallRecipient(null)
+                setIncomingCallType('video')
+                setIncomingCallAutoAnswer(false)
+              }
+            }}
+            recipient={incomingCallRecipient}
+            currentUser={currentUser}
+            conversationId={incomingCallConversationId}
+            callMessageId={incomingCallMessageId}
+            isIncoming={true}
+            autoAnswer={incomingCallAutoAnswer}
+          />
+        ) : (
+          <VideoCallDialog
+            open={showIncomingCallDialog}
+            onOpenChange={(open) => {
+              setShowIncomingCallDialog(open)
+              if (!open) {
+                setIncomingCallMessageId(null)
+                setIncomingCallConversationId(null)
+                setIncomingCallRecipient(null)
+                setIncomingCallType('video')
+                setIncomingCallAutoAnswer(false)
+              }
+            }}
+            recipient={incomingCallRecipient}
+            currentUser={currentUser}
+            conversationId={incomingCallConversationId}
+            callMessageId={incomingCallMessageId}
+            isIncoming={true}
+            autoAnswer={incomingCallAutoAnswer}
+          />
+        )
       )}
 
       {/* Announcement drawer */}

@@ -13,6 +13,12 @@ import { Mic, MicOff, Phone, Volume2, VolumeX } from 'lucide-react'
 import { User } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { TrtcClient } from '@/lib/trtc/client'
+import {
+  acquireCallUiLock,
+  createCallLockToken,
+  releaseCallUiLock,
+  updateCallUiLock,
+} from '@/lib/call/call-ui-lock'
 
 // Generate a short channel name that fits call room requirements.
 function generateChannelName(userId1: string, userId2: string, conversationId?: string): string {
@@ -74,6 +80,18 @@ export function VoiceCallDialog({
   const uniqueUidRef = useRef<string | null>(null) // Store unique UID for this call session
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const endingCallRef = useRef(false)
+  const callStatusRef = useRef(callStatus)
+  const lockTokenRef = useRef<string>(createCallLockToken('voice'))
+  const outgoingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const incomingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    callStatusRef.current = callStatus
+  }, [callStatus])
+
+  useEffect(() => {
+    callMessageIdRef.current = callMessageId
+  }, [callMessageId])
 
   // 轮询检查对方是否接听（发起方使用）
   const startPollingForAnswer = (channelName: string) => {
@@ -169,6 +187,36 @@ export function VoiceCallDialog({
     if (!open) return
 
     endingCallRef.current = false
+    const initialMessageId = callMessageIdRef.current || callMessageId
+    const acquired = acquireCallUiLock({
+      token: lockTokenRef.current,
+      callType: 'voice',
+      direction: isIncoming ? 'incoming' : 'outgoing',
+      conversationId,
+      messageId: initialMessageId,
+      phase: isIncoming ? 'incoming' : 'outgoing',
+    })
+    if (!acquired) {
+      // Busy: incoming invite gets rejected; outgoing attempt just closes.
+      if (isIncoming && initialMessageId) {
+        void fetch(`/api/messages/${initialMessageId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            metadata: {
+              call_status: 'missed',
+              rejected_at: new Date().toISOString(),
+              reject_reason: 'busy',
+            },
+          }),
+        }).catch((error) => {
+          console.error('[VoiceCallDialog] Failed to reject busy invite:', error)
+        })
+      }
+      onOpenChange(false)
+      return
+    }
+
     // Generate unique numeric UID for this call session to avoid conflicts
     // This ensures each call attempt uses a different UID
     const timestamp = Date.now()
@@ -181,6 +229,7 @@ export function VoiceCallDialog({
       // 如果来自消息列表点击“接听”，会在 autoAnswer effect 中自动执行接听流程。
       if (callMessageId) {
         callMessageIdRef.current = callMessageId
+        updateCallUiLock(lockTokenRef.current, { messageId: callMessageId })
       }
       setCallStatus('ringing')
     } else {
@@ -195,6 +244,15 @@ export function VoiceCallDialog({
         agoraClientRef.current = null
       }
       uniqueUidRef.current = null
+      if (outgoingTimeoutRef.current) {
+        clearTimeout(outgoingTimeoutRef.current)
+        outgoingTimeoutRef.current = null
+      }
+      if (incomingTimeoutRef.current) {
+        clearTimeout(incomingTimeoutRef.current)
+        incomingTimeoutRef.current = null
+      }
+      releaseCallUiLock(lockTokenRef.current)
     }
   }, [open, isIncoming, callMessageId])
 
@@ -208,6 +266,95 @@ export function VoiceCallDialog({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isIncoming, autoAnswer, callMessageId])
 
+  // Real-time call signal listener (faster than polling; polling stays as fallback).
+  useEffect(() => {
+    if (!open) return
+
+    const handleCallSignal = (event: Event) => {
+      const custom = event as CustomEvent<{
+        messageId?: string
+        conversationId?: string
+        callStatus?: string
+        channelName?: string
+      }>
+      const detail = custom.detail || {}
+      const currentMessageId = callMessageIdRef.current || callMessageId
+      if (!currentMessageId) return
+      if (String(detail.messageId || '') !== String(currentMessageId)) return
+      if (String(detail.conversationId || '') !== String(conversationId)) return
+
+      const status = String(detail.callStatus || '')
+      if (!status) return
+
+      if (status === 'answered' && !isIncoming) {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current)
+          pollingIntervalRef.current = null
+        }
+        setCallStatus('connected')
+        updateCallUiLock(lockTokenRef.current, { phase: 'active' })
+        if (!agoraClientRef.current) {
+          void initializeCall(detail.channelName).catch((error) => {
+            console.error('[VoiceCallDialog] Failed to initialize call from signal:', error)
+            setCallStatus('ended')
+            onOpenChange(false)
+          })
+        }
+        return
+      }
+
+      if (status === 'missed' || status === 'cancelled' || status === 'ended') {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current)
+          pollingIntervalRef.current = null
+        }
+        setCallStatus('ended')
+        onOpenChange(false)
+      }
+    }
+
+    window.addEventListener('callSignal', handleCallSignal as EventListener)
+    return () => {
+      window.removeEventListener('callSignal', handleCallSignal as EventListener)
+    }
+  }, [open, isIncoming, callMessageId, conversationId, onOpenChange])
+
+  // Outgoing unanswered timeout.
+  useEffect(() => {
+    if (!open || isIncoming || callStatus !== 'calling') return
+    if (outgoingTimeoutRef.current) clearTimeout(outgoingTimeoutRef.current)
+    outgoingTimeoutRef.current = setTimeout(() => {
+      if (callStatusRef.current === 'calling') {
+        void handleEndCall()
+      }
+    }, 35000)
+    return () => {
+      if (outgoingTimeoutRef.current) {
+        clearTimeout(outgoingTimeoutRef.current)
+        outgoingTimeoutRef.current = null
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isIncoming, callStatus])
+
+  // Incoming ringing timeout.
+  useEffect(() => {
+    if (!open || !isIncoming || callStatus !== 'ringing') return
+    if (incomingTimeoutRef.current) clearTimeout(incomingTimeoutRef.current)
+    incomingTimeoutRef.current = setTimeout(() => {
+      if (callStatusRef.current === 'ringing') {
+        void handleRejectCall('timeout')
+      }
+    }, 35000)
+    return () => {
+      if (incomingTimeoutRef.current) {
+        clearTimeout(incomingTimeoutRef.current)
+        incomingTimeoutRef.current = null
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isIncoming, callStatus])
+
   // 发送通话邀请消息
   const sendCallInvitation = async () => {
     try {
@@ -219,6 +366,7 @@ export function VoiceCallDialog({
         : generateChannelName(currentUser.id, recipient.id, conversationId)
       
       // 发送通话邀请消息
+      const inviteExpiresAt = new Date(Date.now() + 35_000).toISOString()
       const response = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -232,6 +380,7 @@ export function VoiceCallDialog({
             channel_name: channelName,
             caller_id: currentUser.id,
             caller_name: currentUser.full_name || currentUser.username || currentUser.email,
+            invite_expires_at: inviteExpiresAt,
           },
         }),
       })
@@ -240,6 +389,10 @@ export function VoiceCallDialog({
       if (data.success && data.message?.id) {
         // 保存通话消息ID和频道名称
         callMessageIdRef.current = data.message.id
+        updateCallUiLock(lockTokenRef.current, {
+          messageId: data.message.id,
+          phase: 'outgoing',
+        })
         // 发起方只发送邀请，保持 calling 状态，等待对方接听
         // 不立即加入频道，等对方接听后通过监听消息状态变化来加入
         startPollingForAnswer(channelName)
@@ -271,6 +424,7 @@ export function VoiceCallDialog({
             ...(callMessage.metadata || {}),
             call_status: 'answered',
             answered_at: new Date().toISOString(),
+            answered_by: currentUser.id,
           }
           
           // 更新消息状态为已接听
@@ -290,6 +444,14 @@ export function VoiceCallDialog({
           }
 
           // 开始连接
+          if (incomingTimeoutRef.current) {
+            clearTimeout(incomingTimeoutRef.current)
+            incomingTimeoutRef.current = null
+          }
+          updateCallUiLock(lockTokenRef.current, {
+            messageId,
+            phase: 'active',
+          })
           await initializeCall(callMessage.metadata?.channel_name)
         }
       }
@@ -300,7 +462,7 @@ export function VoiceCallDialog({
   }
 
   // 拒绝通话
-  const handleRejectCall = async () => {
+  const handleRejectCall = async (reason: 'declined' | 'busy' | 'timeout' = 'declined') => {
     const messageId = callMessageIdRef.current || callMessageId
     if (messageId) {
       try {
@@ -314,6 +476,7 @@ export function VoiceCallDialog({
               ...(callMessage.metadata || {}),
               call_status: 'missed',
               rejected_at: new Date().toISOString(),
+              reject_reason: reason,
             }
             
             const updateResponse = await fetch(`/api/messages/${messageId}`, {
@@ -475,6 +638,7 @@ export function VoiceCallDialog({
       
       // Set status to connected after joining
       setCallStatus('connected')
+      updateCallUiLock(lockTokenRef.current, { phase: 'active' })
       // 注意：callStartTimeRef 只在远程用户加入时设置，这样双方的时间是同步的
     } catch (error: any) {
       const errorMsg = error?.message || 'Failed to connect to call'
@@ -549,6 +713,7 @@ export function VoiceCallDialog({
     
     // 先设置状态为 ended，防止 Dialog 被意外关闭
     setCallStatus('ended')
+    updateCallUiLock(lockTokenRef.current, { phase: 'ending' })
     
     const duration = callStartTimeRef.current 
       ? Math.floor((Date.now() - callStartTimeRef.current) / 1000)
@@ -729,7 +894,9 @@ export function VoiceCallDialog({
                     size="icon"
                     variant="destructive"
                     className="h-16 w-16 rounded-full shadow-lg shadow-red-500/40"
-                    onClick={handleRejectCall}
+                    onClick={() => {
+                      void handleRejectCall()
+                    }}
                   >
                     <Phone className="h-6 w-6 rotate-90" />
                   </Button>

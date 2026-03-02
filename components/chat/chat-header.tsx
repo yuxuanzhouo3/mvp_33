@@ -19,6 +19,7 @@ import { getTranslation } from '@/lib/i18n'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { cn } from '@/lib/utils'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { getCallUiLock } from '@/lib/call/call-ui-lock'
 
 interface ChatHeaderProps {
   conversation: ConversationWithDetails
@@ -139,12 +140,12 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
       }
     }
     
-    window.addEventListener('answerCall', handleAnswerCall as EventListener)
-    window.addEventListener('rejectCall', handleRejectCall as EventListener)
+    window.addEventListener('answerCall', handleAnswerCall as unknown as EventListener)
+    window.addEventListener('rejectCall', handleRejectCall as unknown as EventListener)
     
     return () => {
-      window.removeEventListener('answerCall', handleAnswerCall as EventListener)
-      window.removeEventListener('rejectCall', handleRejectCall as EventListener)
+      window.removeEventListener('answerCall', handleAnswerCall as unknown as EventListener)
+      window.removeEventListener('rejectCall', handleRejectCall as unknown as EventListener)
     }
   }, [conversation.id])
 
@@ -225,7 +226,7 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
         email: 'placeholder@example.com',
         full_name: 'Group Member',
         username: 'group_member',
-        avatar_url: null,
+        avatar_url: undefined,
         status: 'offline',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -239,6 +240,24 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
     // 无论是对方还是自己，统一跳到 contacts 页面，并高亮这个人
     router.push(`/contacts?userId=${display.user.id}`)
   }, [conversation.type, display.user?.id, router])
+
+  const startVoiceCallFromHeader = useCallback(() => {
+    const activeCall = getCallUiLock()
+    if (activeCall) {
+      alert('A call is already in progress. Please end the current call first.')
+      return
+    }
+    setShowVoiceCall(true)
+  }, [])
+
+  const startVideoCallFromHeader = useCallback(() => {
+    const activeCall = getCallUiLock()
+    if (activeCall) {
+      alert('A call is already in progress. Please end the current call first.')
+      return
+    }
+    setShowVideoCall(true)
+  }, [])
 
   return (
     <>
@@ -279,7 +298,7 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
             <Button
               size="icon"
               variant="ghost"
-              onClick={() => setShowVoiceCall(true)}
+              onClick={startVoiceCallFromHeader}
               className={cn("h-8 w-8", isMobile && "h-7 w-7")}
             >
               <Phone className="h-4 w-4" />
@@ -287,7 +306,7 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
             <Button
               size="icon"
               variant="ghost"
-              onClick={() => setShowVideoCall(true)}
+              onClick={startVideoCallFromHeader}
               className={cn("h-8 w-8", isMobile && "h-7 w-7")}
             >
               <Video className="h-4 w-4" />
