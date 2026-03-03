@@ -22,9 +22,20 @@ export async function GET(request: NextRequest) {
 
     // CN version: use CloudBase
     if (dbClient.type === 'cloudbase') {
-      const userId = request.headers.get('x-user-id')
+      let userId = request.headers.get('x-user-id')
       if (!userId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        try {
+          const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+          const cloudBaseUser = await verifyCloudBaseSession(request)
+          userId = cloudBaseUser?.id || null
+        } catch (error) {
+          console.warn('[workspace-join-requests] failed to verify session:', error)
+        }
+      }
+
+      // For non-admin/non-authenticated users, return an empty list to avoid noisy polling errors.
+      if (!userId) {
+        return NextResponse.json({ success: true, requests: [] })
       }
 
       // 检查是否为工作区管理员
@@ -44,7 +55,7 @@ export async function GET(request: NextRequest) {
         .get()
 
       if (!adminCheck.data || adminCheck.data.length === 0) {
-        return NextResponse.json({ error: 'Permission denied. Admin role required.' }, { status: 403 })
+        return NextResponse.json({ success: true, requests: [] })
       }
 
       // 获取申请（默认仅 pending，可选包含历史）

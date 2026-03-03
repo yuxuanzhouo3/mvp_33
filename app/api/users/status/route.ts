@@ -7,7 +7,7 @@ import { getDatabaseClientForUser } from '@/lib/database-router'
  * PUT /api/users/status
  * Body: { status: 'online' | 'offline' | 'away' | 'busy' }
  */
-export async function PUT(request: NextRequest) {
+async function updateUserStatus(request: NextRequest) {
   try {
     const { IS_DOMESTIC_VERSION } = await import('@/config')
     let currentUser: any = null
@@ -122,4 +122,13 @@ export async function PUT(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+export async function PUT(request: NextRequest) {
+  return updateUserStatus(request)
+}
+
+// sendBeacon commonly sends POST; keep the same behavior as PUT.
+export async function POST(request: NextRequest) {
+  return updateUserStatus(request)
 }

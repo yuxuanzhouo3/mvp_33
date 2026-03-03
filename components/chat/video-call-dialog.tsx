@@ -266,8 +266,8 @@ export function VideoCallDialog({
         if (!agoraClientRef.current) {
           void initializeCall(detail.channelName).catch((error) => {
             console.error('[VideoCallDialog] Failed to initialize call from signal:', error)
+            // Keep dialog open so user can still hang up manually after answer failure.
             setCallStatus('ended')
-            onOpenChange(false)
           })
         }
         return
@@ -370,8 +370,8 @@ export function VideoCallDialog({
                 const channelNameToUse = callMessage?.metadata?.channel_name || channelName || generateChannelName(currentUser.id, recipient.id, conversationId)
                 await initializeCall(channelNameToUse)
               } catch (error) {
+                // Keep dialog open so user can still hang up manually after answer failure.
                 setCallStatus('ended')
-                onOpenChange(false)
               }
             }
           } else if (callStatus === 'missed' || callStatus === 'cancelled') {
@@ -434,8 +434,8 @@ export function VideoCallDialog({
           }
         } catch (error) {
           console.error('Failed to initialize call after answer event:', error)
+          // Keep dialog open so user can still hang up manually after answer failure.
           setCallStatus('ended')
-          onOpenChange(false)
         }
       }
     }
@@ -485,17 +485,8 @@ export function VideoCallDialog({
           messageId: data.message.id,
           phase: 'outgoing',
         })
-        // 发起方立即加入频道开启摄像头，但保持 calling 状态直到对方接听
-        // 这样发起方能看到自己的摄像头，但看不到对方（对方还没接听）
-        try {
-          await initializeCall(channelName)
-          // 启动轮询检测对方是否接听
-          startPollingForAnswer(channelName)
-        } catch (error) {
-          console.error('Failed to initialize call:', error)
-          setCallStatus('ended')
-          onOpenChange(false)
-        }
+        // Align with voice flow: invite first, then initialize media after answer.
+        startPollingForAnswer(channelName)
       } else {
         setCallStatus('ended')
         onOpenChange(false)
@@ -604,7 +595,6 @@ export function VideoCallDialog({
           if (!channelNameToUse) {
             console.error('Channel name not found in call message')
             setCallStatus('ended')
-            onOpenChange(false)
             return
           }
           
@@ -627,23 +617,21 @@ export function VideoCallDialog({
             if (errorMsg.includes('permission') || errorMsg.includes('Permission') || errorMsg.includes('denied')) {
               alert('无法访问麦克风或摄像头。请检查浏览器权限设置，确保已允许访问麦克风和摄像头。')
             }
+            // Keep dialog open so user can still hang up manually after answer failure.
             setCallStatus('ended')
-            onOpenChange(false)
           }
         } else {
           console.error('Call message not found:', messageId)
           setCallStatus('ended')
-          onOpenChange(false)
         }
       } else {
         console.error('Failed to fetch messages:', msgData)
         setCallStatus('ended')
-        onOpenChange(false)
       }
     } catch (error) {
       console.error('Failed to answer call:', error)
+      // Keep dialog open so user can still hang up manually after answer failure.
       setCallStatus('ended')
-      onOpenChange(false)
     }
   }
 

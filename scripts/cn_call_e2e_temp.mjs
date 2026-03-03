@@ -1,10 +1,13 @@
 import { chromium } from 'playwright'
+import fs from 'node:fs/promises'
+import path from 'node:path'
 
 const baseUrl = process.env.BASE_URL || 'https://orbital.mornscience.top'
 const callerEmail = process.env.CALLER_EMAIL || '3139307614@qq.com'
 const callerPassword = process.env.CALLER_PASSWORD || 'Bb123456'
 const calleeEmail = process.env.CALLEE_EMAIL || '2326815976@qq.com'
 const calleePassword = process.env.CALLEE_PASSWORD || 'Aa123456'
+const debugDir = path.resolve(process.cwd(), 'test-results', 'cn-call-e2e-temp')
 
 function normalizeBaseUrl(url) {
   return url.replace(/\/+$/, '')
@@ -20,7 +23,74 @@ async function parseJson(response) {
   }
 }
 
-async function loginByApi(context, page, email, password) {
+async function ensureDir(dir) {
+  await fs.mkdir(dir, { recursive: true })
+}
+
+async function capturePageState(page, tag) {
+  await ensureDir(debugDir)
+  const safeTag = tag.replace(/[^a-zA-Z0-9_-]/g, '_')
+  const file = path.join(debugDir, `${Date.now()}-${safeTag}.png`)
+  await page.screenshot({ path: file, fullPage: true })
+  const state = await page.evaluate(() => {
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'))
+    const visibleDialogs = dialogs.filter((node) => {
+      if (!(node instanceof HTMLElement)) return false
+      const s = window.getComputedStyle(node)
+      return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0'
+    })
+    const bodyText = (document.body?.innerText || '').slice(0, 1200)
+    const hasPhoneButton = !!document.querySelector('button:has(svg.lucide-phone)')
+    const hasVideoButton = !!document.querySelector('button:has(svg.lucide-video)')
+    return {
+      url: window.location.href,
+      visibleDialogs: visibleDialogs.length,
+      hasPhoneButton,
+      hasVideoButton,
+      bodyText,
+    }
+  })
+  return { file, state }
+}
+
+async function loginByUi(page, email, password) {
+  await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' })
+  const emailInput = page.locator('#email, input[name="email"], input[type="email"]').first()
+  const passwordInput = page.locator('#password, input[name="password"], input[type="password"]').first()
+  await emailInput.waitFor({ state: 'visible', timeout: 30000 })
+  await passwordInput.waitFor({ state: 'visible', timeout: 30000 })
+  await emailInput.fill(email)
+  await passwordInput.fill(password)
+  await page.locator('form button[type="submit"]').first().click()
+
+  const deadline = Date.now() + 30000
+
+  while (Date.now() < deadline) {
+    const url = page.url()
+    if (url.includes('/chat') || url.includes('/contacts') || url.includes('/channels')) {
+      return
+    }
+
+    const workspaceCards = page.locator('button.w-full.justify-between.h-auto.p-3')
+    if ((await workspaceCards.count()) > 0) {
+      await workspaceCards.first().click()
+      await page.waitForTimeout(1200)
+      continue
+    }
+
+    const loginError = page.locator('p.text-sm.text-destructive')
+    if ((await loginError.count()) > 0) {
+      const errText = (await loginError.first().textContent()) || 'unknown error'
+      throw new Error(`ui login failed for ${email}: ${errText}`)
+    }
+
+    await page.waitForTimeout(300)
+  }
+
+  throw new Error(`post-login navigation timeout for ${email}, last url=${page.url()}`)
+}
+
+async function loginByApiInjection(context, page, email, password) {
   const res = await context.request.post(`${baseUrl}/api/auth/login`, {
     data: { email, password },
   })
@@ -69,27 +139,18 @@ async function loginByApi(context, page, email, password) {
       workspaceData: workspace,
     }
   )
-
   await page.goto(`${baseUrl}/chat`, { waitUntil: 'domcontentloaded' })
-  const deadline = Date.now() + 30000
+}
 
-  while (Date.now() < deadline) {
-    const url = page.url()
-    if (url.includes('/chat') || url.includes('/contacts') || url.includes('/channels')) {
-      return
-    }
-
-    const workspaceCards = page.locator('button.w-full.justify-between.h-auto.p-3')
-    if ((await workspaceCards.count()) > 0) {
-      await workspaceCards.first().click()
-      await page.waitForTimeout(1200)
-      continue
-    }
-
-    await page.waitForTimeout(300)
+async function login(context, page, email, password) {
+  try {
+    await loginByUi(page, email, password)
+    return 'ui'
+  } catch (error) {
+    console.warn(`[login] ui failed for ${email}, fallback to api injection: ${String(error)}`)
+    await loginByApiInjection(context, page, email, password)
+    return 'api'
   }
-
-  throw new Error(`post-login navigation timeout for ${email}, last url=${page.url()}`)
 }
 
 async function getCurrentUser(session, label) {
@@ -253,7 +314,13 @@ async function runCallCase({
 
   const answered = await waitForCallStatus(callerSession, conversationId, callMessageId, ['answered'], 20000)
   console.log(`[call:${callType}] answered`)
+  const callerAfterAnswer = await capturePageState(callerPage, `${callType}-caller-after-answer`)
+  const calleeAfterAnswer = await capturePageState(calleePage, `${callType}-callee-after-answer`)
+  console.log(`[call:${callType}] callerAfterAnswerState=${JSON.stringify(callerAfterAnswer.state)}`)
+  console.log(`[call:${callType}] calleeAfterAnswerState=${JSON.stringify(calleeAfterAnswer.state)}`)
   await callerPage.waitForTimeout(Math.max(holdSeconds, 1) * 1000)
+  const callerBeforeHangup = await capturePageState(callerPage, `${callType}-caller-before-hangup`)
+  console.log(`[call:${callType}] callerBeforeHangupState=${JSON.stringify(callerBeforeHangup.state)}`)
   try {
     await hangupFromDialog(callerPage)
   } catch (error) {
@@ -304,6 +371,55 @@ async function main() {
 
   const callerPage = await contextCaller.newPage()
   const calleePage = await contextCallee.newPage()
+  const callerConsole = []
+  const calleeConsole = []
+  const callerCallFlowLogs = []
+  const calleeCallFlowLogs = []
+  const caller401s = []
+  const callee401s = []
+  const callerCallApiTrace = []
+  const calleeCallApiTrace = []
+  const push401 = (arr, prefix) => async (res) => {
+    const status = res.status()
+    if (status !== 401 && status !== 405) return
+    const url = res.url()
+    const entry = `${status} ${url}`
+    arr.push(entry)
+    if (arr.length > 200) arr.shift()
+    console.log(`${prefix}${entry}`)
+  }
+  const pushCallApiTrace = (arr, prefix) => async (res) => {
+    const url = res.url()
+    if (!url.includes('/api/messages') && !url.includes('/api/trtc/user-sig') && !url.includes('/api/agora/token')) {
+      return
+    }
+    const method = res.request().method()
+    const status = res.status()
+    const line = `${status} ${method} ${url}`
+    arr.push(line)
+    if (arr.length > 300) arr.shift()
+    console.log(`${prefix}${line}`)
+  }
+  const callLogPattern = /(initializeCall|Joined voice channel|Failed to initialize call|TRTC|userSig|WS_ABORT|OPERATION_ABORTED|join channel|Calling\.\.\.)/i
+  const pushConsole = (arr, flowArr, prefix) => (msg) => {
+    const type = msg.type()
+    const text = msg.text()
+    if (callLogPattern.test(text)) {
+      flowArr.push(`[${type}] ${text}`)
+      if (flowArr.length > 300) flowArr.shift()
+      console.log(`${prefix}[flow][${type}] ${text}`)
+    }
+    if (!['error', 'warning', 'warn'].includes(type)) return
+    arr.push(`[${type}] ${text}`)
+    if (arr.length > 200) arr.shift()
+    console.log(`${prefix}[${type}] ${text}`)
+  }
+  callerPage.on('console', pushConsole(callerConsole, callerCallFlowLogs, '[caller] '))
+  calleePage.on('console', pushConsole(calleeConsole, calleeCallFlowLogs, '[callee] '))
+  callerPage.on('response', push401(caller401s, '[caller][resp] '))
+  calleePage.on('response', push401(callee401s, '[callee][resp] '))
+  callerPage.on('response', pushCallApiTrace(callerCallApiTrace, '[caller][api] '))
+  calleePage.on('response', pushCallApiTrace(calleeCallApiTrace, '[callee][api] '))
 
   const report = {
     baseUrl: normalizedBaseUrl,
@@ -314,8 +430,8 @@ async function main() {
   }
 
   try {
-    await loginByApi(contextCaller, callerPage, callerEmail, callerPassword)
-    await loginByApi(contextCallee, calleePage, calleeEmail, calleePassword)
+    const callerLoginMode = await login(contextCaller, callerPage, callerEmail, callerPassword)
+    const calleeLoginMode = await login(contextCallee, calleePage, calleeEmail, calleePassword)
 
     const callerUser = await getCurrentUser(contextCaller.request, 'caller')
     const calleeUser = await getCurrentUser(contextCallee.request, 'callee')
@@ -324,6 +440,8 @@ async function main() {
     report.conversationId = conversationId
     report.callerUserId = callerUser.id
     report.calleeUserId = calleeUser.id
+    report.callerLoginMode = callerLoginMode
+    report.calleeLoginMode = calleeLoginMode
 
     await openConversation(callerPage, conversationId)
     await openConversation(calleePage, conversationId)
@@ -359,7 +477,16 @@ async function main() {
     report.results.push(videoResult)
 
     report.finishedAt = new Date().toISOString()
+    report.callerConsoleTail = callerConsole.slice(-40)
+    report.calleeConsoleTail = calleeConsole.slice(-40)
+    report.callerCallFlowLogs = callerCallFlowLogs.slice(-120)
+    report.calleeCallFlowLogs = calleeCallFlowLogs.slice(-120)
+    report.callerResp401Tail = caller401s.slice(-60)
+    report.calleeResp401Tail = callee401s.slice(-60)
+    report.callerCallApiTraceTail = callerCallApiTrace.slice(-120)
+    report.calleeCallApiTraceTail = calleeCallApiTrace.slice(-120)
     console.log(JSON.stringify(report, null, 2))
+    console.log(`[cn_call_e2e_temp] debug screenshots: ${debugDir}`)
   } finally {
     await contextCaller.close()
     await contextCallee.close()

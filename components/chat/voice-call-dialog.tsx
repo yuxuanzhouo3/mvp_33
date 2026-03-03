@@ -147,8 +147,8 @@ export function VoiceCallDialog({
               await initializeCall(channelNameToUse)
             } catch (error) {
               console.error('[Polling] ❌ Failed to initialize call after answer:', error)
+              // Keep dialog open so user can still hang up manually after answer failure.
               setCallStatus('ended')
-              onOpenChange(false)
             }
           } else if (callStatus === 'missed' || callStatus === 'cancelled') {
             // 对方拒绝或取消，停止轮询
@@ -296,8 +296,8 @@ export function VoiceCallDialog({
         if (!agoraClientRef.current) {
           void initializeCall(detail.channelName).catch((error) => {
             console.error('[VoiceCallDialog] Failed to initialize call from signal:', error)
+            // Keep dialog open so user can still hang up manually after answer failure.
             setCallStatus('ended')
-            onOpenChange(false)
           })
         }
         return
@@ -459,8 +459,8 @@ export function VoiceCallDialog({
       }
     } catch (error) {
       console.error('Failed to answer call:', error)
+      // Keep dialog open so user can still hang up manually after answer failure.
       setCallStatus('ended')
-      onOpenChange(false)
     }
   }
 
