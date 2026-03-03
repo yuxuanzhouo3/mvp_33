@@ -120,7 +120,7 @@ function ChatPageContent() {
   const [showNewConversation, setShowNewConversation] = useState(false)
 
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false) // Mobile sidebar state
+  const [mobileView, setMobileView] = useState<'list' | 'detail'>('list')
   const [groupInfoOpen, setGroupInfoOpen] = useState(false) // Group info panel state
   const [announcementDrawerOpen, setAnnouncementDrawerOpen] = useState(false) // Announcement drawer state
   const [activeTab, setActiveTab] = useState('messages') // Chat tabs state
@@ -325,6 +325,17 @@ function ChatPageContent() {
       console.log('🔒 Welded conversation unread_count to 0:', selectedConversationId)
     }
   }, [selectedConversationId])
+
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileView('list')
+      return
+    }
+    const hasExternalTarget = Boolean(searchParams.get('conversation') || searchParams.get('userId'))
+    if (hasExternalTarget || activeChannel !== 'none') {
+      setMobileView('detail')
+    }
+  }, [isMobile, activeChannel, searchParams])
 
   useEffect(() => {
     if (!selectedConversationId) return
@@ -7912,22 +7923,13 @@ function ChatPageContent() {
       <div className="relative flex flex-1 min-w-0 overflow-hidden">
         {/* 左侧导航栏（仅桌面端显示） */}
         {!isMobile && <AppNavigation totalUnreadCount={conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0)} />}
-        {/* Mobile overlay */}
-        {isMobile && sidebarOpen && (
-          <div
-            className="fixed inset-0 z-40 bg-black/35 backdrop-blur-[1px]"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
 
-        <div 
+        <div
+          data-testid="chat-list-panel"
           className={cn(
-            "transition-transform duration-300 ease-in-out",
-            isMobile
-              ? "absolute inset-y-0 left-0 z-50 w-[min(88vw,320px)] bg-background shadow-xl"
-              : "relative shrink-0",
-            isMobile && sidebarOpen && "translate-x-0",
-            isMobile && !sidebarOpen && "-translate-x-full pointer-events-none"
+            "min-w-0 h-full",
+            isMobile ? "w-full" : "relative shrink-0",
+            isMobile && mobileView === 'detail' ? "hidden" : "block"
           )}
           style={!isMobile ? {
             width: sidebarExpanded ? '420px' : '340px'
@@ -8011,6 +8013,9 @@ function ChatPageContent() {
 
               selectedConversationIdRef.current = conversationId
               setSelectedConversationId(conversationId)
+              if (isMobile) {
+                setMobileView('detail')
+              }
 
               // Update URL asynchronously (don't block)
 
@@ -8050,8 +8055,7 @@ function ChatPageContent() {
 
             expanded={sidebarExpanded}
             isMobile={isMobile}
-            isMobileOpen={sidebarOpen}
-            onToggleMobile={() => setSidebarOpen(prev => !prev)}
+            isMobileOpen={isMobile ? mobileView === 'list' : true}
             onToggleExpand={() => setSidebarExpanded(prev => !prev)}
 
             onPinConversation={handlePinConversation}
@@ -8066,15 +8070,25 @@ function ChatPageContent() {
             workspaceId={currentWorkspace?.id || ''}
             activeChannel={activeChannel}
             onSelectAnnouncement={() => {
-              setActiveChannel(activeChannel === 'announcement' ? 'none' : 'announcement')
+              const nextChannel = activeChannel === 'announcement' ? 'none' : 'announcement'
+              setActiveChannel(nextChannel)
               if (isMobile) {
-                setSidebarOpen(false)
+                if (nextChannel === 'none' && !selectedConversationId) {
+                  setMobileView('list')
+                } else {
+                  setMobileView('detail')
+                }
               }
             }}
             onSelectBlindZone={() => {
-              setActiveChannel(activeChannel === 'blind' ? 'none' : 'blind')
+              const nextChannel = activeChannel === 'blind' ? 'none' : 'blind'
+              setActiveChannel(nextChannel)
               if (isMobile) {
-                setSidebarOpen(false)
+                if (nextChannel === 'none' && !selectedConversationId) {
+                  setMobileView('list')
+                } else {
+                  setMobileView('detail')
+                }
               }
             }}
 
@@ -8082,7 +8096,13 @@ function ChatPageContent() {
 
         </div>
 
-        <div className="flex flex-1 min-w-0">
+        <div
+          data-testid="chat-detail-panel"
+          className={cn(
+            "min-w-0 flex flex-1",
+            isMobile && mobileView === 'list' ? "hidden" : "flex"
+          )}
+        >
 
           <div className="flex flex-1 min-w-0 flex-col">
 
@@ -8113,7 +8133,7 @@ function ChatPageContent() {
               <ChatHeader
                 conversation={displayConversation}
                 currentUser={currentUser}
-                onToggleSidebar={isMobile ? () => setSidebarOpen(prev => !prev) : undefined}
+                onToggleSidebar={isMobile ? () => setMobileView('list') : undefined}
                 onToggleGroupInfo={() => setGroupInfoOpen(prev => !prev)}
               />
 
@@ -8245,9 +8265,9 @@ function ChatPageContent() {
                     variant="outline"
                     size="sm"
                     className="mt-4"
-                    onClick={() => setSidebarOpen(true)}
+                    onClick={() => setMobileView('list')}
                   >
-                    {language === 'zh' ? '打开会话列表' : 'Open conversations'}
+                    {language === 'zh' ? '返回会话列表' : 'Back to conversations'}
                   </Button>
                 )}
 

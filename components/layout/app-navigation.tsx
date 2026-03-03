@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -50,6 +50,7 @@ interface AppNavigationProps {
 export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigationProps) {
   const pathname = usePathname()
   const router = useRouter()
+  const refreshInFlightRef = useRef(false)
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0)
   const [contactPendingCount, setContactPendingCount] = useState(0)
   const [chatUnreadCount, setChatUnreadCount] = useState(0)
@@ -215,11 +216,24 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
 
   // 初始化和定时刷新
   useEffect(() => {
-    fetchPendingRequestsCount()
-    fetchContactPendingCount()
-    if (totalUnreadCount === undefined) {
-      fetchChatUnreadCount()
+    const runRefresh = async (forceRefresh = false) => {
+      if (refreshInFlightRef.current) return
+      refreshInFlightRef.current = true
+      try {
+        const tasks: Promise<unknown>[] = [
+          fetchPendingRequestsCount(forceRefresh),
+          fetchContactPendingCount(forceRefresh),
+        ]
+        if (totalUnreadCount === undefined) {
+          tasks.push(fetchChatUnreadCount(forceRefresh))
+        }
+        await Promise.all(tasks)
+      } finally {
+        refreshInFlightRef.current = false
+      }
     }
+
+    void runRefresh()
 
     let interval: ReturnType<typeof setInterval>
     const setupInterval = () => {
@@ -227,14 +241,12 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
         clearInterval(interval)
       }
 
-      const refreshInterval = document.visibilityState === 'visible' ? 2000 : 10000
+      const refreshInterval = document.visibilityState === 'visible'
+        ? (mobile ? 6000 : 3000)
+        : (mobile ? 20000 : 12000)
       interval = setInterval(() => {
         if (document.visibilityState === 'visible') {
-          fetchPendingRequestsCount()
-          fetchContactPendingCount()
-          if (totalUnreadCount === undefined) {
-            fetchChatUnreadCount()
-          }
+          void runRefresh()
         }
       }, refreshInterval)
     }
@@ -245,31 +257,19 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
     const handleRefresh = () => {
       // 添加小延迟确保数据库已更新
       setTimeout(() => {
-        fetchPendingRequestsCount(true)
-        fetchContactPendingCount(true)
-        if (totalUnreadCount === undefined) {
-          fetchChatUnreadCount(true)
-        }
+        void runRefresh(true)
       }, 100)
     }
 
     const handleVisibilityChange = () => {
       setupInterval()
       if (document.visibilityState === 'visible') {
-        fetchPendingRequestsCount(true)
-        fetchContactPendingCount(true)
-        if (totalUnreadCount === undefined) {
-          fetchChatUnreadCount(true)
-        }
+        void runRefresh(true)
       }
     }
 
     const handleFocus = () => {
-      fetchPendingRequestsCount(true)
-      fetchContactPendingCount(true)
-      if (totalUnreadCount === undefined) {
-        fetchChatUnreadCount(true)
-      }
+      void runRefresh(true)
     }
 
     window.addEventListener('pendingRequestsUpdated', handleRefresh)
@@ -288,7 +288,7 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
       window.removeEventListener('focus', handleFocus)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [fetchPendingRequestsCount, fetchContactPendingCount, fetchChatUnreadCount, totalUnreadCount])
+  }, [fetchPendingRequestsCount, fetchContactPendingCount, fetchChatUnreadCount, totalUnreadCount, mobile])
 
   const isActive = (href: string) => {
     return pathname === href || pathname?.startsWith(href + '/')

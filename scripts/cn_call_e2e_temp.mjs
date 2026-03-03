@@ -115,9 +115,8 @@ async function loginByApiInjection(context, page, email, password) {
         name: 'cb_session',
         value: String(body.token),
         url: baseUrl,
-        path: '/',
         httpOnly: true,
-        secure: true,
+        secure: baseUrl.startsWith('https://'),
         sameSite: 'Lax',
       },
     ])

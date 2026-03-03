@@ -101,6 +101,7 @@ function ConversationItem({
       <ContextMenuTrigger asChild>
         <button
           ref={containerRef}
+          data-testid="chat-conversation-item"
           onClick={onSelect}
           className={cn(
             'w-full flex items-start gap-2.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-accent/50',
@@ -495,7 +496,7 @@ export function Sidebar({
   const totalUnreadCount = conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0)
 
   return (
-    <div className="flex h-full flex-col border-r bg-background relative z-50">
+    <div className={cn("flex h-full flex-col bg-background relative z-50", !isMobile && "border-r")}>
       <div className="flex h-full flex-col">
         {/* Expand/Collapse button (desktop only) */}
         {onToggleExpand && !isMobile && (
