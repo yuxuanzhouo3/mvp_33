@@ -139,6 +139,9 @@ export function VoiceCallDialog({
               clearInterval(pollingIntervalRef.current)
               pollingIntervalRef.current = null
             }
+            if (!callStartTimeRef.current) {
+              callStartTimeRef.current = Date.now()
+            }
             setCallStatus('connected')
             try {
               // 从消息中获取频道名称，确保使用最新的值
@@ -291,6 +294,9 @@ export function VoiceCallDialog({
           clearInterval(pollingIntervalRef.current)
           pollingIntervalRef.current = null
         }
+        if (!callStartTimeRef.current) {
+          callStartTimeRef.current = Date.now()
+        }
         setCallStatus('connected')
         updateCallUiLock(lockTokenRef.current, { phase: 'active' })
         if (!agoraClientRef.current) {
@@ -318,6 +324,39 @@ export function VoiceCallDialog({
       window.removeEventListener('callSignal', handleCallSignal as EventListener)
     }
   }, [open, isIncoming, callMessageId, conversationId, onOpenChange])
+
+  // Fallback status sync to close stale dialogs when realtime events are delayed/lost.
+  useEffect(() => {
+    if (!open) return
+    const messageId = callMessageIdRef.current || callMessageId
+    if (!messageId) return
+
+    let disposed = false
+    const syncStatus = async () => {
+      if (disposed) return
+      try {
+        const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}&_t=${Date.now()}`)
+        const msgData = await msgResponse.json()
+        if (!msgData?.success || !Array.isArray(msgData?.messages)) return
+        const callMessage = msgData.messages.find((m: any) => String(m?.id || '') === String(messageId))
+        const status = String(callMessage?.metadata?.call_status || '')
+        if (!status) return
+        if (status === 'ended' || status === 'cancelled' || status === 'missed') {
+          setCallStatus('ended')
+          onOpenChange(false)
+        }
+      } catch {
+        // Ignore sync errors and retry on next interval.
+      }
+    }
+
+    const intervalId = setInterval(syncStatus, 2000)
+    void syncStatus()
+    return () => {
+      disposed = true
+      clearInterval(intervalId)
+    }
+  }, [open, callMessageId, conversationId, onOpenChange])
 
   // Outgoing unanswered timeout.
   useEffect(() => {
@@ -449,6 +488,9 @@ export function VoiceCallDialog({
             incomingTimeoutRef.current = null
           }
           // Switch to connecting state immediately after answer to avoid ringing/missed regressions.
+          if (!callStartTimeRef.current) {
+            callStartTimeRef.current = Date.now()
+          }
           setCallStatus('connected')
           updateCallUiLock(lockTokenRef.current, {
             messageId,
@@ -733,12 +775,10 @@ export function VoiceCallDialog({
 
     // 更新通话记录 - 确保双方都能看到通话时长
     const messageId = callMessageIdRef.current || callMessageId
-    // 确定最终状态：如果已连接过（双方都加入了），就是 ended；如果还在 ringing，就是 missed；否则是 cancelled
-    const finalCallStatus = (currentStatus === 'connected' && currentRemoteJoined) ? 'ended' : 
-                           (currentStatus === 'ringing' ? 'missed' : 'cancelled')
-    
-    // 只有在双方都连接后才记录通话时长
-    const finalDuration = (currentStatus === 'connected' && currentRemoteJoined) ? duration : 0
+    let finalCallStatus: 'ended' | 'missed' | 'cancelled' =
+      (currentStatus === 'connected' && currentRemoteJoined) ? 'ended' :
+      (currentStatus === 'ringing' ? 'missed' : 'cancelled')
+    let finalDuration = (currentStatus === 'connected' && currentRemoteJoined) ? duration : 0
     
     if (messageId) {
       try {
@@ -748,6 +788,20 @@ export function VoiceCallDialog({
         if (msgData.success) {
           const callMessage = msgData.messages.find((m: any) => m.id === messageId)
           if (callMessage) {
+            const metadata = callMessage.metadata || {}
+            const backendStatus = String(metadata.call_status || '')
+            const answeredAtMs = Date.parse(String(metadata.answered_at || ''))
+            const backendWasAnswered = backendStatus === 'answered' || Number.isFinite(answeredAtMs)
+            const locallyConnected = currentStatus === 'connected' || currentRemoteJoined
+
+            if (backendWasAnswered || locallyConnected) {
+              finalCallStatus = 'ended'
+              finalDuration = Math.max(finalDuration, duration)
+              if (finalDuration <= 0 && Number.isFinite(answeredAtMs)) {
+                finalDuration = Math.max(0, Math.floor((Date.now() - answeredAtMs) / 1000))
+              }
+            }
+
             const updatedMetadata = {
               ...callMessage.metadata,
               call_status: finalCallStatus,
@@ -780,10 +834,10 @@ export function VoiceCallDialog({
       }
     }
 
-    const finalStatus = currentStatus === 'connected' ? 'answered' : 
-                       (currentStatus === 'ringing' ? 'missed' : 'cancelled')
+    const finalStatus = finalCallStatus === 'ended' ? 'answered' :
+      (finalCallStatus === 'missed' ? 'missed' : 'cancelled')
     if (onCallEnd) {
-      onCallEnd(duration, finalStatus)
+      onCallEnd(finalDuration, finalStatus)
     }
     setCallDuration(0)
     setIsMuted(false)
