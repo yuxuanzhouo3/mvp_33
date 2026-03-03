@@ -13,6 +13,13 @@ export interface CallUiLock {
 }
 
 let activeLock: CallUiLock | null = null
+const STALE_LOCK_MS = 15000
+
+function purgeStaleLock(): void {
+  if (!activeLock) return
+  if (Date.now() - activeLock.updatedAt <= STALE_LOCK_MS) return
+  activeLock = null
+}
 
 export function createCallLockToken(prefix = 'call'): string {
   const rand = Math.random().toString(36).slice(2, 10)
@@ -20,10 +27,12 @@ export function createCallLockToken(prefix = 'call'): string {
 }
 
 export function getCallUiLock(): CallUiLock | null {
+  purgeStaleLock()
   return activeLock
 }
 
 export function acquireCallUiLock(lock: Omit<CallUiLock, 'updatedAt'>): boolean {
+  purgeStaleLock()
   if (!activeLock) {
     activeLock = { ...lock, updatedAt: Date.now() }
     return true
@@ -40,6 +49,7 @@ export function acquireCallUiLock(lock: Omit<CallUiLock, 'updatedAt'>): boolean 
 }
 
 export function updateCallUiLock(token: string, patch: Partial<Omit<CallUiLock, 'token' | 'updatedAt'>>): void {
+  purgeStaleLock()
   if (!activeLock || activeLock.token !== token) return
   activeLock = {
     ...activeLock,
@@ -49,15 +59,17 @@ export function updateCallUiLock(token: string, patch: Partial<Omit<CallUiLock, 
 }
 
 export function releaseCallUiLock(token: string): void {
+  purgeStaleLock()
   if (!activeLock) return
   if (activeLock.token !== token) return
   activeLock = null
 }
 
 export function isCallUiBusy(incoming?: { messageId?: string }): boolean {
+  purgeStaleLock()
   if (!activeLock) return false
+  if (activeLock.phase === 'ending') return false
   if (!incoming?.messageId) return true
   if (!activeLock.messageId) return true
   return activeLock.messageId !== incoming.messageId
 }
-

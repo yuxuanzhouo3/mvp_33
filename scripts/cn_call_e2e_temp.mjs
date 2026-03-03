@@ -7,6 +7,12 @@ const callerEmail = process.env.CALLER_EMAIL || '3139307614@qq.com'
 const callerPassword = process.env.CALLER_PASSWORD || 'Bb123456'
 const calleeEmail = process.env.CALLEE_EMAIL || '2326815976@qq.com'
 const calleePassword = process.env.CALLEE_PASSWORD || 'Aa123456'
+const callCases = (process.env.CALL_CASES || 'voice,video')
+  .split(',')
+  .map((item) => item.trim().toLowerCase())
+  .filter((item) => item === 'voice' || item === 'video')
+const holdSeconds = Number(process.env.HOLD_SECONDS || 12)
+const waitBetweenCasesMs = Number(process.env.WAIT_BETWEEN_CASES_MS || 1800)
 const debugDir = path.resolve(process.cwd(), 'test-results', 'cn-call-e2e-temp')
 
 function normalizeBaseUrl(url) {
@@ -42,11 +48,13 @@ async function capturePageState(page, tag) {
     const bodyText = (document.body?.innerText || '').slice(0, 1200)
     const hasPhoneButton = !!document.querySelector('button:has(svg.lucide-phone)')
     const hasVideoButton = !!document.querySelector('button:has(svg.lucide-video)')
+    const callControlButtons = Array.from(document.querySelectorAll('[role="dialog"] button.h-16.w-16')).length
     return {
       url: window.location.href,
       visibleDialogs: visibleDialogs.length,
       hasPhoneButton,
       hasVideoButton,
+      callControlButtons,
       bodyText,
     }
   })
@@ -277,8 +285,21 @@ async function waitIncomingAndAccept(page, timeoutMs = 15000) {
     has: page.locator('button.h-16.w-16'),
   }).first()
   await dialog.waitFor({ state: 'visible', timeout: timeoutMs })
+  const answerButton = dialog.locator('button.h-16.w-16.bg-emerald-500').first()
+  if ((await answerButton.count()) > 0) {
+    await answerButton.click()
+    return
+  }
+
   const buttons = dialog.locator('button.h-16.w-16')
-  await buttons.nth(1).click()
+  const count = await buttons.count()
+  if (count >= 2) {
+    await buttons.nth(1).click()
+    return
+  }
+
+  const dialogText = ((await dialog.textContent()) || '').replace(/\s+/g, ' ').trim()
+  throw new Error(`incoming dialog does not have answer button, count=${count}, text="${dialogText.slice(0, 240)}"`)
 }
 
 async function hangupFromDialog(page) {
@@ -286,8 +307,27 @@ async function hangupFromDialog(page) {
     has: page.locator('button.h-16.w-16'),
   }).first()
   await dialog.waitFor({ state: 'visible', timeout: 15000 })
-  const redHangup = dialog.locator('button.h-16.w-16').last()
-  await redHangup.click()
+  const redHangup = dialog.locator('button.h-16.w-16[class*="destructive"]').first()
+  if ((await redHangup.count()) > 0) {
+    await redHangup.click()
+    return
+  }
+  const fallbackHangup = dialog.locator('button.h-16.w-16').last()
+  await fallbackHangup.click()
+}
+
+async function readMessageStatus(session, conversationId, messageId) {
+  const messages = await fetchMessages(session, conversationId)
+  const callMessage = messages.find((m) => String(m?.id || '') === String(messageId))
+  return {
+    callStatus: String(callMessage?.metadata?.call_status || ''),
+    callDuration: Number(callMessage?.metadata?.call_duration || 0),
+    metadata: callMessage?.metadata || {},
+  }
+}
+
+function compactError(error) {
+  return String(error).replace(/\s+/g, ' ').trim().slice(0, 400)
 }
 
 async function runCallCase({
@@ -308,8 +348,24 @@ async function runCallCase({
   console.log(`[call:${callType}] message=${callMessageId}`)
 
   const popupStart = Date.now()
-  await waitIncomingAndAccept(calleePage)
-  const popupLatencyMs = Date.now() - popupStart
+  let popupLatencyMs = 0
+  try {
+    await waitIncomingAndAccept(calleePage)
+    popupLatencyMs = Date.now() - popupStart
+  } catch (error) {
+    const [callerState, calleeState, messageStatus] = await Promise.all([
+      capturePageState(callerPage, `${callType}-caller-accept-failed`),
+      capturePageState(calleePage, `${callType}-callee-accept-failed`),
+      readMessageStatus(callerSession, conversationId, callMessageId).catch(() => ({
+        callStatus: 'unknown',
+        callDuration: 0,
+        metadata: {},
+      })),
+    ])
+    throw new Error(
+      `accept failed: ${compactError(error)} | messageStatus=${messageStatus.callStatus} duration=${messageStatus.callDuration} metadata=${JSON.stringify(messageStatus.metadata).slice(0, 600)} | callerState=${JSON.stringify(callerState.state)} calleeState=${JSON.stringify(calleeState.state)}`
+    )
+  }
   console.log(`[call:${callType}] popupLatencyMs=${popupLatencyMs}`)
 
   const answered = await waitForCallStatus(callerSession, conversationId, callMessageId, ['answered'], 20000)
@@ -455,7 +511,7 @@ async function main() {
           conversationId,
           callType,
           callerId: callerUser.id,
-          holdSeconds: 12,
+          holdSeconds,
         })
         return { ok: true, ...result }
       } catch (error) {
@@ -467,14 +523,20 @@ async function main() {
       }
     }
 
-    const voiceResult = await runCaseSafely('voice')
-    report.results.push(voiceResult)
+    const plannedCases = callCases.length > 0 ? callCases : ['voice', 'video']
+    report.plannedCases = plannedCases
+    report.holdSeconds = holdSeconds
+    report.waitBetweenCasesMs = waitBetweenCasesMs
 
-    await callerPage.waitForTimeout(1800)
-    await calleePage.waitForTimeout(1800)
-
-    const videoResult = await runCaseSafely('video')
-    report.results.push(videoResult)
+    for (let i = 0; i < plannedCases.length; i += 1) {
+      const callType = plannedCases[i]
+      const result = await runCaseSafely(callType)
+      report.results.push(result)
+      if (i < plannedCases.length - 1 && waitBetweenCasesMs > 0) {
+        await callerPage.waitForTimeout(waitBetweenCasesMs)
+        await calleePage.waitForTimeout(waitBetweenCasesMs)
+      }
+    }
 
     report.finishedAt = new Date().toISOString()
     report.callerConsoleTail = callerConsole.slice(-40)

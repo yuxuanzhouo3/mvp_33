@@ -22,6 +22,21 @@ interface CreateConversationInput {
   createdBy: string
 }
 
+function normalizeConversationKey(value: unknown): string {
+  if (!value) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number') return String(value)
+  if (typeof value === 'object') {
+    const raw = value as Record<string, unknown>
+    if (typeof raw.id === 'string') return raw.id
+    if (typeof raw._id === 'string') return raw._id
+    if (typeof raw.$oid === 'string') return raw.$oid
+    const str = String(value)
+    if (str && str !== '[object Object]') return str
+  }
+  return ''
+}
+
 export async function createConversation(input: CreateConversationInput): Promise<ConversationWithDetails> {
   const db = getCloudBaseDb()
   if (!db) {
@@ -133,7 +148,13 @@ export async function getUserConversations(userId: string): Promise<Conversation
   const memberships = (membersRes.data || []).filter((m: any) => !m.deleted_at && !m.is_hidden)
   if (!memberships.length) return []
 
-  const convIds = Array.from(new Set(memberships.map((m: any) => m.conversation_id).filter(Boolean)))
+  const convIds = Array.from(
+    new Set(
+      memberships
+        .map((m: any) => normalizeConversationKey(m.conversation_id))
+        .filter(Boolean)
+    )
+  )
   if (!convIds.length) return []
 
   // 2) fetch conversations
@@ -155,11 +176,11 @@ export async function getUserConversations(userId: string): Promise<Conversation
 
   const mergedConvMap = new Map<string, any>()
   ;(convByIdRes.data || []).forEach((c: any) => {
-    const key = c.id || c._id
+    const key = normalizeConversationKey(c.id || c._id)
     if (key) mergedConvMap.set(key, c)
   })
   ;(convByDocIdRes.data || []).forEach((c: any) => {
-    const key = c.id || c._id
+    const key = normalizeConversationKey(c.id || c._id)
     if (key && !mergedConvMap.has(key)) mergedConvMap.set(key, c)
   })
 
@@ -209,7 +230,7 @@ export async function getUserConversations(userId: string): Promise<Conversation
   // 对每个会话取"最新的一条消息"
   const lastMessageByConv = new Map<string, any>()
   for (const m of messageDocs) {
-    const cid = m.conversation_id
+    const cid = normalizeConversationKey(m.conversation_id)
     if (!cid) continue
     if (!lastMessageByConv.has(cid)) {
       lastMessageByConv.set(cid, m)
@@ -220,7 +241,7 @@ export async function getUserConversations(userId: string): Promise<Conversation
   const membersByConv = new Map<string, any[]>()
   const currentUserMembershipByConv = new Map<string, any>() // Track current user's membership for is_pinned
   memberDocs.forEach((m: any) => {
-    const cid = m.conversation_id
+    const cid = normalizeConversationKey(m.conversation_id)
     if (!cid) return
     if (!membersByConv.has(cid)) membersByConv.set(cid, [])
     membersByConv.get(cid)!.push(m)
@@ -235,7 +256,7 @@ export async function getUserConversations(userId: string): Promise<Conversation
   // Keep behavior consistent with Supabase: only count messages from others.
   const unreadCountByConv = new Map<string, number>()
   messageDocs.forEach((m: any) => {
-    const cid = m.conversation_id
+    const cid = normalizeConversationKey(m.conversation_id)
     if (!cid) return
     if (m.sender_id === userId) return
 
@@ -295,9 +316,13 @@ export async function getUserConversations(userId: string): Promise<Conversation
   }
 
   const result: ConversationWithDetails[] = convs.map((c: any) => {
-    // CRITICAL: Use c.id (not c._id) to lookup members, because conversation_members.conversation_id stores the id field
-    const convId = c.id || c._id
-    const memberEntries = membersByConv.get(convId) || []
+    const convId = normalizeConversationKey(c.id || c._id)
+    const convDocId = normalizeConversationKey(c._id)
+    const lookupKeys = Array.from(new Set([convId, convDocId].filter(Boolean)))
+    const memberEntries =
+      lookupKeys
+        .map((key) => membersByConv.get(key) || [])
+        .find((entries) => entries.length > 0) || []
     const members: User[] = memberEntries.map((m: any) => {
       const uid = m.user_id
       const user = uid ? usersById.get(uid) : undefined
@@ -317,7 +342,9 @@ export async function getUserConversations(userId: string): Promise<Conversation
       ) as User
     })
 
-    const lastMessageDoc = lastMessageByConv.get(convId)
+    const lastMessageDoc = lookupKeys
+      .map((key) => lastMessageByConv.get(key))
+      .find(Boolean)
 
     // If this is a direct conversation and the other user is not in contacts, skip it
     if (c.type === 'direct') {
@@ -331,9 +358,15 @@ export async function getUserConversations(userId: string): Promise<Conversation
     }
 
     // Get current user's membership info for this conversation (for is_pinned and pinned_at)
-    const currentUserMembership = currentUserMembershipByConv.get(convId)
+    const currentUserMembership = lookupKeys
+      .map((key) => currentUserMembershipByConv.get(key))
+      .find(Boolean)
     const isPinned = currentUserMembership ? Boolean(currentUserMembership.is_pinned) : false
     const pinnedAt = currentUserMembership?.pinned_at || null
+    const unreadCount =
+      lookupKeys
+        .map((key) => unreadCountByConv.get(key) || 0)
+        .find((count) => count > 0) || 0
 
     return {
       id: convId,
@@ -347,7 +380,7 @@ export async function getUserConversations(userId: string): Promise<Conversation
       last_message_at:
         (lastMessageDoc?.created_at as string) || c.last_message_at || c.created_at,
       members,
-      unread_count: unreadCountByConv.get(convId) || 0,
+      unread_count: unreadCount,
       is_pinned: isPinned, // Include pin status from conversation_members
       pinned_at: pinnedAt, // Include pinned_at timestamp for sorting
       last_message: lastMessageDoc

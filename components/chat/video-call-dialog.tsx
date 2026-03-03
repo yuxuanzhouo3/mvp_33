@@ -138,6 +138,18 @@ export function VideoCallDialog({
     callStatusRef.current = callStatus
   }, [callStatus])
 
+  // Prevent stale "ended" dialog from blocking the next incoming invite.
+  useEffect(() => {
+    if (!open || callStatus !== 'ended') return
+    updateCallUiLock(lockTokenRef.current, { phase: 'ending' })
+    const timer = setTimeout(() => {
+      if (callStatusRef.current === 'ended') {
+        onOpenChange(false)
+      }
+    }, 700)
+    return () => clearTimeout(timer)
+  }, [open, callStatus, onOpenChange])
+
   useEffect(() => {
     callMessageIdRef.current = callMessageId
     if (callMessageId) {
