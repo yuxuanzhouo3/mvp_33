@@ -6,12 +6,16 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // 注意：standalone 模式仅用于 Docker 部署，Vercel 部署时会自动使用 serverless 模式
-  // output: 'standalone',
+  // Standalone output is required by Dockerfile (copies .next/standalone and runs server.js)
+  output: 'standalone',
 
   // Performance optimizations for faster dev server
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
+  },
+  turbopack: {
+    // Keep build root stable in CI/monorepo-like layouts with multiple lockfiles.
+    root: process.cwd(),
   },
   experimental: {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
