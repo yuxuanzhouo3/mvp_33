@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { User, Workspace } from '@/lib/types'
-import { Building2, ChevronDown, Settings, LogOut, Bell, Hash, UsersIcon, MessageSquare, Plus, UserPlus, Loader2, AlertCircle, RefreshCw, Copy, Check } from 'lucide-react'
+import { Building2, ChevronDown, LogOut, Bell, Hash, UsersIcon, MessageSquare, Plus, UserPlus, Loader2, AlertCircle, RefreshCw, Copy, Check } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +26,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getTranslation } from '@/lib/i18n'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { JoinWorkspaceDialog } from '@/components/workspace/join-workspace-dialog'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 interface WorkspaceHeaderProps {
   workspace: Workspace
@@ -40,6 +41,7 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
   const { t: tSettings } = useSettings()
   const { subscription } = useSubscription()
   const { language } = useSettings()
+  const isMobile = useIsMobile()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
 
   const [workspace, setWorkspace] = useState<Workspace>(initialWorkspace)
@@ -438,11 +440,20 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
   return (
     <>
       <div className="border-b bg-background">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className={cn(
+          "flex items-center justify-between",
+          isMobile ? "px-3 py-2 gap-2" : "px-4 py-3"
+        )}>
+          <div className="flex min-w-0 flex-1 items-center gap-4">
             <DropdownMenu open={showWorkspaceMenu} onOpenChange={setShowWorkspaceMenu}>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="gap-2 px-2">
+                <Button
+                  variant="ghost"
+                  className={cn(
+                    "gap-2 px-2",
+                    isMobile && "min-w-0 max-w-full px-1.5"
+                  )}
+                >
                   <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
                     {workspace.logo_url ? (
                       <img src={workspace.logo_url || "/placeholder.svg"} alt={workspace.name} className="h-6 w-6 rounded" />
@@ -450,13 +461,13 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
                       <Building2 className="h-5 w-5 text-primary" />
                     )}
                   </div>
-                  <div className="text-left">
-                    <div className="font-semibold text-sm">{workspace.name}</div>
+                  <div className={cn("text-left", isMobile && "min-w-0")}>
+                    <div className={cn("font-semibold text-sm", isMobile && "truncate max-w-[160px]")}>{workspace.name}</div>
                   </div>
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-72 p-0">
+              <DropdownMenuContent align="start" className={cn("p-0", isMobile ? "w-[90vw] max-w-72" : "w-72")}>
                 {/* 工作区列表 */}
                 <div className="p-2">
                   <div className="text-[10px] font-bold text-gray-400 px-2 py-1 uppercase tracking-wider">
@@ -508,26 +519,28 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
             </DropdownMenu>
           </div>
 
-          <div className="flex items-center gap-2">
-            {subscription.type === 'free' && (
+          <div className={cn("flex items-center", isMobile ? "gap-1" : "gap-2")}>
+            {!isMobile && subscription.type === 'free' && (
               <Button size="sm" variant="ghost" onClick={goToPayment} className="h-8 gap-1.5 px-2.5 hover:bg-accent/50">
                 <Crown className="h-3.5 w-3.5" />
                 <span className="text-xs font-medium">Pro</span>
               </Button>
             )}
-            {subscription.type !== 'free' && subscription.isActive && (
+            {!isMobile && subscription.type !== 'free' && subscription.isActive && (
               <button type="button" onClick={goToPayment} className="rounded-full border-0 bg-transparent p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 <SubscriptionBadge subscription={subscription} showDays />
               </button>
             )}
-            <Button size="icon" variant="ghost">
-              <Bell className="h-5 w-5" />
-            </Button>
+            {!isMobile && (
+              <Button size="icon" variant="ghost">
+                <Bell className="h-5 w-5" />
+              </Button>
+            )}
             <SettingsSwitcher />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <Avatar className="h-8 w-8">
+                <Button variant="ghost" size="icon" className={cn("rounded-full", isMobile ? "h-8 w-8" : "")}>
+                  <Avatar className={cn(isMobile ? "h-7 w-7" : "h-8 w-8")}>
                     <AvatarImage src={currentUser.avatar_url || undefined} />
                     <AvatarFallback name={currentUser.full_name}>
                       {currentUser.full_name.split(' ').map(n => n[0]).join('')}

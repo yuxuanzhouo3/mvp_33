@@ -7,12 +7,17 @@ import { Languages, Sun, Moon, Code, Sparkles, Sunset, Star } from 'lucide-react
 import { useSettings } from '@/lib/settings-context'
 import { PrivacySettings } from '@/components/settings/privacy-settings'
 import { BlockedUsersList } from '@/components/settings/blocked-users-list'
+import { AppNavigation } from '@/components/layout/app-navigation'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 export default function PreferencesPage() {
   const { language, theme, setLanguage, setTheme, t } = useSettings()
+  const isMobile = useIsMobile()
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="flex h-screen min-w-0 flex-col">
+      <div className="flex-1 overflow-y-auto">
+        <div className="container mx-auto max-w-4xl px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">{t('preferences')}</h1>
         <p className="text-muted-foreground">{t('customizeAppLanguage')}</p>
@@ -151,6 +156,9 @@ export default function PreferencesPage() {
           </div>
         </CardContent>
       </Card>
+        </div>
+      </div>
+      {isMobile && <AppNavigation mobile />}
     </div>
   )
 }

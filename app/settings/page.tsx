@@ -8,10 +8,13 @@ import { SubscriptionBadge } from '@/components/subscription/subscription-badge'
 import { ArrowRight, ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AppNavigation } from '@/components/layout/app-navigation'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 export default function SettingsPage() {
   const router = useRouter()
   const { subscription, usage, limits } = useSubscription()
+  const isMobile = useIsMobile()
 
   const getUsagePercentage = (used: number, limit: number) => {
     if (limit === Infinity) return 0
@@ -27,7 +30,9 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="flex h-screen min-w-0 flex-col">
+      <div className="flex-1 overflow-y-auto">
+        <div className="container mx-auto max-w-4xl px-4 py-8">
       <Button
         variant="ghost"
         size="sm"
@@ -248,6 +253,9 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       )}
+        </div>
+      </div>
+      {isMobile && <AppNavigation mobile />}
     </div>
   )
 }

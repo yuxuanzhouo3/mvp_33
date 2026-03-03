@@ -44,9 +44,10 @@ const navItems: NavItem[] = [
 
 interface AppNavigationProps {
   totalUnreadCount?: number
+  mobile?: boolean
 }
 
-export function AppNavigation({ totalUnreadCount }: AppNavigationProps) {
+export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigationProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0)
@@ -293,26 +294,88 @@ export function AppNavigation({ totalUnreadCount }: AppNavigationProps) {
     return pathname === href || pathname?.startsWith(href + '/')
   }
 
+  const effectiveChatUnreadCount =
+    typeof totalUnreadCount === 'number' ? totalUnreadCount : chatUnreadCount
+
+  if (mobile) {
+    return (
+      <nav className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
+        <div className="grid grid-cols-5 gap-0.5 px-1 pt-1 pb-[max(0.4rem,env(safe-area-inset-bottom))]">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            const active = isActive(item.href)
+            const showChatBadge = item.href === '/chat' && effectiveChatUnreadCount > 0
+            const showContactBadge = item.href === '/contacts' && contactPendingCount > 0
+            const showPendingBadge = item.href === '/workspace-members' && pendingRequestsCount > 0
+
+            return (
+              <Button
+                key={item.href}
+                asChild
+                variant="ghost"
+                className={cn(
+                  'relative h-14 w-full flex-col gap-1 rounded-lg px-1',
+                  active && 'bg-primary/10 text-primary hover:bg-primary/15'
+                )}
+              >
+                <Link href={item.href}>
+                  <span className="relative">
+                    <Icon className="h-4 w-4 shrink-0" />
+                    {showChatBadge && (
+                      <Badge
+                        variant="destructive"
+                        className="absolute -top-2 -right-3 h-4 min-w-4 px-1 text-[10px] leading-none"
+                      >
+                        {effectiveChatUnreadCount > 99 ? '99+' : effectiveChatUnreadCount}
+                      </Badge>
+                    )}
+                    {showContactBadge && (
+                      <Badge
+                        variant="destructive"
+                        className="absolute -top-2 -right-3 h-4 min-w-4 px-1 text-[10px] leading-none"
+                      >
+                        {contactPendingCount > 99 ? '99+' : contactPendingCount}
+                      </Badge>
+                    )}
+                    {showPendingBadge && (
+                      <Badge
+                        variant="destructive"
+                        className="absolute -top-2 -right-3 h-4 min-w-4 px-1 text-[10px] leading-none"
+                      >
+                        {pendingRequestsCount > 99 ? '99+' : pendingRequestsCount}
+                      </Badge>
+                    )}
+                  </span>
+                  <span className="text-[10px] font-medium leading-none">{item.label}</span>
+                </Link>
+              </Button>
+            )
+          })}
+        </div>
+      </nav>
+    )
+  }
+
   return (
     <div className="w-32 border-r bg-background flex flex-col py-4 gap-1">
       {navItems.map((item) => {
         const Icon = item.icon
         const active = isActive(item.href)
-        const effectiveChatUnreadCount =
-          typeof totalUnreadCount === 'number' ? totalUnreadCount : chatUnreadCount
         const showChatBadge = item.href === '/chat' && effectiveChatUnreadCount > 0
         const showContactBadge = item.href === '/contacts' && contactPendingCount > 0
         const showPendingBadge = item.href === '/workspace-members' && pendingRequestsCount > 0
 
         return (
-          <Link key={item.href} href={item.href} className="w-full">
-            <Button
-              variant="ghost"
-              className={cn(
-                'w-full h-12 flex items-center justify-start gap-3 px-4 rounded-lg transition-colors relative',
-                active && 'bg-primary/10 text-primary hover:bg-primary/15'
-              )}
-            >
+          <Button
+            key={item.href}
+            asChild
+            variant="ghost"
+            className={cn(
+              'w-full h-12 flex items-center justify-start gap-3 px-4 rounded-lg transition-colors relative',
+              active && 'bg-primary/10 text-primary hover:bg-primary/15'
+            )}
+          >
+            <Link href={item.href}>
               <Icon className="h-5 w-5 shrink-0" />
               <span className="text-sm font-medium">{item.label}</span>
               {showChatBadge && (
@@ -339,8 +402,8 @@ export function AppNavigation({ totalUnreadCount }: AppNavigationProps) {
                   {pendingRequestsCount > 99 ? '99+' : pendingRequestsCount}
                 </Badge>
               )}
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         )
       })}
     </div>

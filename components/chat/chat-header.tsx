@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { ConversationWithDetails, User } from '@/lib/types'
-import { Hash, Lock, Users, Phone, Video, Info, MoreVertical } from 'lucide-react'
+import { Hash, Lock, Users, Phone, Video, Info, MoreVertical, PanelLeftOpen } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -261,9 +261,20 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
 
   return (
     <>
-      <div className={cn("border-b bg-background", isMobile ? "px-3 py-2" : "px-4 py-2.5")}>
+      <div className={cn("border-b bg-background", isMobile ? "px-2.5 py-2" : "px-4 py-2.5")}>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+          <div className="flex min-w-0 items-center gap-2">
+            {isMobile && onToggleSidebar && (
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={onToggleSidebar}
+                className="h-8 w-8 shrink-0"
+                aria-label="Open conversation list"
+              >
+                <PanelLeftOpen className="h-4 w-4" />
+              </Button>
+            )}
             {conversation.type === 'direct' ? (
               <div className="relative">
                 <button
@@ -271,7 +282,7 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
                   className="cursor-pointer hover:opacity-80 transition-opacity"
                   title="View contact details"
                 >
-                  <Avatar className="h-10 w-10" userId={display.user?.id} showOnlineStatus={true}>
+                  <Avatar className={cn("h-10 w-10", isMobile && "h-9 w-9")} userId={display.user?.id} showOnlineStatus={true}>
                     <AvatarImage src={display.avatar || undefined} />
                     <AvatarFallback name={display.name}>
                       {display.name
@@ -284,12 +295,12 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
                 </button>
               </div>
             ) : (
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+              <div className={cn("h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center", isMobile && "h-9 w-9")}>
                 {getConversationIcon()}
               </div>
             )}
-            <div>
-              <h2 className="font-semibold text-base">{display.name}</h2>
+            <div className="min-w-0">
+              <h2 className={cn("font-semibold text-base", isMobile && "text-[15px] truncate max-w-[160px]")}>{display.name}</h2>
               {!isMobile && <p className="text-sm text-muted-foreground">{display.subtitle}</p>}
             </div>
           </div>

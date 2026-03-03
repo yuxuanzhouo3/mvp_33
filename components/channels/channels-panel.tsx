@@ -85,6 +85,7 @@ export function ChannelsPanel({
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <button
+            data-testid="channels-item"
             onClick={() => onSelectChannel(conversation.id)}
             className={cn(
               'w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors hover:bg-accent',
@@ -161,6 +162,7 @@ export function ChannelsPanel({
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <button
+            data-testid="channels-item"
             onClick={() => onSelectChannel(conversation.id)}
             className={cn(
               'w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors hover:bg-accent',

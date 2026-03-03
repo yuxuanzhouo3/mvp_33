@@ -37,6 +37,7 @@ import { NewConversationDialog } from '@/components/contacts/new-conversation-di
 import { User, Workspace, ConversationWithDetails, MessageWithSender, Message } from '@/lib/types'
 
 import { MessageSquare } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 import { VideoCallDialog } from '@/components/chat/video-call-dialog'
 import { VoiceCallDialog } from '@/components/chat/voice-call-dialog'
@@ -117,7 +118,7 @@ function ChatPageContent() {
   const [showNewConversation, setShowNewConversation] = useState(false)
 
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(true) // Mobile sidebar state
+  const [sidebarOpen, setSidebarOpen] = useState(false) // Mobile sidebar state
   const [groupInfoOpen, setGroupInfoOpen] = useState(false) // Group info panel state
   const [announcementDrawerOpen, setAnnouncementDrawerOpen] = useState(false) // Announcement drawer state
   const [activeTab, setActiveTab] = useState('messages') // Chat tabs state
@@ -7899,28 +7900,29 @@ function ChatPageContent() {
 
       )}
 
-      <div className="flex flex-1 overflow-hidden relative">
+      <div className="relative flex flex-1 min-w-0 overflow-hidden">
         {/* 左侧导航栏（仅桌面端显示） */}
         {!isMobile && <AppNavigation totalUnreadCount={conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0)} />}
         {/* Mobile overlay */}
         {isMobile && sidebarOpen && (
           <div
-            className="fixed inset-0 bg-black/50 z-40"
+            className="fixed inset-0 z-40 bg-black/35 backdrop-blur-[1px]"
             onClick={() => setSidebarOpen(false)}
           />
         )}
 
         <div 
           className={cn(
-            "transition-all duration-300 ease-in-out relative",
-            isMobile && !sidebarOpen && "-translate-x-[calc(100%-40px)]",
-            isMobile && sidebarOpen && "translate-x-0"
+            "transition-transform duration-300 ease-in-out",
+            isMobile
+              ? "absolute inset-y-0 left-0 z-50 w-[min(88vw,320px)] bg-background shadow-xl"
+              : "relative shrink-0",
+            isMobile && sidebarOpen && "translate-x-0",
+            isMobile && !sidebarOpen && "-translate-x-full pointer-events-none"
           )}
-          style={{
-            width: isMobile
-              ? '280px'
-              : (sidebarExpanded ? '420px' : '340px')
-          }}
+          style={!isMobile ? {
+            width: sidebarExpanded ? '420px' : '340px'
+          } : undefined}
         >
 
           <Sidebar
@@ -8040,8 +8042,8 @@ function ChatPageContent() {
             expanded={sidebarExpanded}
             isMobile={isMobile}
             isMobileOpen={sidebarOpen}
-            onToggleMobile={() => setSidebarOpen(!sidebarOpen)}
-            onToggleExpand={() => setSidebarExpanded(!sidebarExpanded)}
+            onToggleMobile={() => setSidebarOpen(prev => !prev)}
+            onToggleExpand={() => setSidebarExpanded(prev => !prev)}
 
             onPinConversation={handlePinConversation}
 
@@ -8056,18 +8058,24 @@ function ChatPageContent() {
             activeChannel={activeChannel}
             onSelectAnnouncement={() => {
               setActiveChannel(activeChannel === 'announcement' ? 'none' : 'announcement')
+              if (isMobile) {
+                setSidebarOpen(false)
+              }
             }}
             onSelectBlindZone={() => {
               setActiveChannel(activeChannel === 'blind' ? 'none' : 'blind')
+              if (isMobile) {
+                setSidebarOpen(false)
+              }
             }}
 
           />
 
         </div>
 
-        <div className="flex-1 flex">
+        <div className="flex flex-1 min-w-0">
 
-          <div className="flex-1 flex flex-col">
+          <div className="flex flex-1 min-w-0 flex-col">
 
           {/* Global Announcement or Blind Zone channel - highest priority */}
           {activeChannel !== 'none' ? (
@@ -8096,8 +8104,8 @@ function ChatPageContent() {
               <ChatHeader
                 conversation={displayConversation}
                 currentUser={currentUser}
-                onToggleSidebar={isMobile ? () => setSidebarOpen(!sidebarOpen) : undefined}
-                onToggleGroupInfo={() => setGroupInfoOpen(!groupInfoOpen)}
+                onToggleSidebar={isMobile ? () => setSidebarOpen(prev => !prev) : undefined}
+                onToggleGroupInfo={() => setGroupInfoOpen(prev => !prev)}
               />
 
               {displayConversation.type === 'group' && (
@@ -8223,6 +8231,16 @@ function ChatPageContent() {
                 <h3 className="text-lg font-semibold mb-2">{t('noConversationSelected')}</h3>
 
                 <p>{t('selectConversationToStart')}</p>
+                {isMobile && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4"
+                    onClick={() => setSidebarOpen(true)}
+                  >
+                    {language === 'zh' ? '打开会话列表' : 'Open conversations'}
+                  </Button>
+                )}
 
               </div>
 
@@ -8233,7 +8251,7 @@ function ChatPageContent() {
           </div>
 
           {/* Group Info Panel */}
-          {displayConversation && displayConversation.type === 'group' && (
+          {!isMobile && displayConversation && displayConversation.type === 'group' && (
             <GroupInfoPanel
               conversation={displayConversation}
               currentUser={currentUser}
@@ -8250,6 +8268,12 @@ function ChatPageContent() {
         </div>
 
       </div>
+      {isMobile && (
+        <AppNavigation
+          totalUnreadCount={conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0)}
+          mobile
+        />
+      )}
 
       <NewConversationDialog
 

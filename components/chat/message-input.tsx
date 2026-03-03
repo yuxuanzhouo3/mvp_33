@@ -236,8 +236,8 @@ export function MessageInput({
 
   return (
     <>
-      <div className="border-t bg-background px-4 py-3">
-        <div className="max-w-4xl mx-auto space-y-2">
+      <div className={cn("border-t bg-background px-4 py-3", isMobile && "px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]")}>
+        <div className={cn("max-w-4xl mx-auto space-y-2", isMobile && "max-w-none")}>
           {selectedFile && (
             <div className={cn("flex items-start gap-3 bg-muted rounded-lg", isMobile ? "p-2 gap-2" : "p-3")}>
               {previewUrl ? (

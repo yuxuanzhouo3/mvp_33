@@ -12,11 +12,14 @@ import { Save, Upload, X } from 'lucide-react'
 import { User } from '@/lib/types'
 import { mockAuth } from '@/lib/mock-auth'
 import { useSettings } from '@/lib/settings-context'
+import { AppNavigation } from '@/components/layout/app-navigation'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 export default function ProfileSettingsPage() {
   const { t } = useSettings()
   const router = useRouter()
   const { toast, toasts } = useToast()
+  const isMobile = useIsMobile()
   const [profile, setProfile] = useState<Partial<User>>({})
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -307,7 +310,9 @@ export default function ProfileSettingsPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="flex h-screen min-w-0 flex-col">
+      <div className="flex-1 overflow-y-auto">
+        <div className="container mx-auto max-w-4xl px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">{t('profileSettings')}</h1>
         <p className="text-muted-foreground">{t('editWorkInformation')}</p>
@@ -487,6 +492,9 @@ export default function ProfileSettingsPage() {
           </Button>
         </CardContent>
       </Card>
+        </div>
+      </div>
+      {isMobile && <AppNavigation mobile />}
     </div>
   )
 }

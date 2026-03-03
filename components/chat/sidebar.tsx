@@ -496,19 +496,7 @@ export function Sidebar({
 
   return (
     <div className="flex h-full flex-col border-r bg-background relative z-50">
-      {/* Mobile expand button (shown when collapsed) */}
-      {isMobile && !isMobileOpen && onToggleMobile && (
-        <button
-          onClick={onToggleMobile}
-          className="absolute right-0 top-1/2 -translate-y-1/2 z-50 h-10 w-10 flex items-center justify-center bg-background border-r border-t border-b rounded-r-lg shadow-lg hover:bg-accent transition-colors"
-          aria-label="展开侧边栏"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      )}
-      
-      {/* Content wrapper - hide content when mobile sidebar is collapsed */}
-      <div className={cn("flex h-full flex-col", isMobile && !isMobileOpen && "opacity-0 pointer-events-none")}>
+      <div className="flex h-full flex-col">
         {/* Expand/Collapse button (desktop only) */}
         {onToggleExpand && !isMobile && (
           <Button

@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Monitor, Smartphone, Tablet, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDeviceListener } from '@/hooks/use-device-listener';
+import { AppNavigation } from '@/components/layout/app-navigation';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface Device {
   id: string;
@@ -46,6 +48,7 @@ export default function DevicesPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     loadDevices();
@@ -99,14 +102,19 @@ export default function DevicesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">加载中...</div>
+      <div className="flex h-screen flex-col">
+        <div className="flex flex-1 items-center justify-center">
+          <div className="text-gray-500">加载中...</div>
+        </div>
+        {isMobile && <AppNavigation mobile />}
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-screen min-w-0 flex-col">
+      <div className="flex-1 overflow-y-auto">
+        <div className="space-y-6 px-4 py-6">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">设备管理</h1>
         <p className="mt-1 text-sm text-gray-500">
@@ -160,6 +168,9 @@ export default function DevicesPage() {
           ))}
         </div>
       )}
+        </div>
+      </div>
+      {isMobile && <AppNavigation mobile />}
     </div>
   );
 }

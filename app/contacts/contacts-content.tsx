@@ -916,10 +916,10 @@ function ContactsPageContent() {
           currentUser={currentUser}
           totalUnreadCount={totalUnreadCount}
         />
-        <div className="flex flex-1 overflow-hidden relative">
+        <div className="relative flex flex-1 min-w-0 overflow-hidden">
           {/* 左侧导航栏（仅桌面端显示） */}
-          {!isMobile && <AppNavigation />}
-          <div className="flex-1 overflow-hidden">
+          {!isMobile && <AppNavigation totalUnreadCount={totalUnreadCount} />}
+          <div className="min-w-0 flex-1 overflow-hidden">
             <ContactsPanel
               users={contacts}
               currentUser={currentUser}
@@ -947,6 +947,9 @@ function ContactsPageContent() {
             />
           </div>
         </div>
+        {isMobile && (
+          <AppNavigation totalUnreadCount={totalUnreadCount} mobile />
+        )}
       </div>
 
       {/* Add-contact success dialog，风格对齐支付成功弹窗 */}

@@ -12,6 +12,7 @@ import { MessageList } from '@/components/chat/message-list'
 import { MessageInput } from '@/components/chat/message-input'
 import { ChannelInfoPanel } from '@/components/channels/channel-info-panel'
 import { CreateChannelDialog } from '@/components/channels/create-channel-dialog'
+import { Button } from '@/components/ui/button'
 import { User, Workspace, ConversationWithDetails, MessageWithSender } from '@/lib/types'
 import { Hash } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
@@ -40,7 +41,7 @@ export default function ChannelsPage() {
   const [showChannelInfo, setShowChannelInfo] = useState(false)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [mobileView, setMobileView] = useState<'list' | 'detail'>('list')
   const isMobile = useIsMobile()
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
@@ -111,6 +112,14 @@ export default function ChannelsPage() {
 
     return () => clearInterval(interval)
   }, [selectedChannelId])
+
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileView('list')
+      return
+    }
+    setMobileView(selectedChannelId ? 'detail' : 'list')
+  }, [isMobile, selectedChannelId])
 
   const loadConversations = async (
     userId: string,
@@ -367,36 +376,27 @@ export default function ChannelsPage() {
         currentUser={currentUser}
       />
 
-      <div className="flex flex-1 overflow-hidden relative">
+      <div className="relative flex flex-1 min-w-0 overflow-hidden">
         {/* 左侧导航栏（仅桌面端显示） */}
         {!isMobile && <AppNavigation />}
 
-        {/* Mobile overlay */}
-        {isMobile && sidebarOpen && (
-          <div
-            className="fixed inset-0 bg-black/50 z-40"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-
-        <div 
+        <div
+          data-testid="channels-list-panel"
           className={cn(
-            "transition-all duration-300 ease-in-out relative",
-            isMobile && !sidebarOpen && "-translate-x-[calc(100%-40px)]",
-            isMobile && sidebarOpen && "translate-x-0"
+            "min-w-0 h-full",
+            isMobile ? "w-full" : "relative shrink-0",
+            isMobile && mobileView === 'detail' ? "hidden" : "block"
           )}
-          style={{ 
-            width: isMobile 
-              ? '280px' 
-              : (sidebarExpanded ? '400px' : '320px')
-          }}
+          style={!isMobile ? {
+            width: sidebarExpanded ? '400px' : '320px'
+          } : undefined}
         >
           <ChannelsPanel
             conversations={conversations}
             isLoading={isConversationsLoading}
             onSelectChannel={(id) => {
               setSelectedChannelId(id)
-              if (isMobile) setSidebarOpen(false)
+              if (isMobile) setMobileView('detail')
             }}
             onCreateChannel={() => setShowCreateChannel(true)}
             selectedChannelId={selectedChannelId}
@@ -407,13 +407,19 @@ export default function ChannelsPage() {
           />
         </div>
 
-        <div className="flex-1 flex flex-col">
+        <div
+          data-testid="channels-detail-panel"
+          className={cn(
+            "min-w-0 flex-1 flex-col",
+            isMobile && mobileView === 'list' ? "hidden" : "flex"
+          )}
+        >
           {selectedChannel ? (
             <>
               <ChatHeader 
                 conversation={selectedChannel} 
                 currentUser={currentUser}
-                onToggleSidebar={isMobile ? () => setSidebarOpen(!sidebarOpen) : undefined}
+                onToggleSidebar={isMobile ? () => setMobileView('list') : undefined}
               />
               <MessageList 
                 messages={messages} 
@@ -433,12 +439,22 @@ export default function ChannelsPage() {
                 <Hash className="h-16 w-16 mx-auto mb-4 opacity-20" />
                 <h3 className="text-lg font-semibold mb-2">{t('noChannelSelected')}</h3>
                 <p>{t('selectChannelToViewMessages')}</p>
+                {isMobile && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4"
+                    onClick={() => setMobileView('list')}
+                  >
+                    {language === 'zh' ? '返回频道列表' : 'Back to channels'}
+                  </Button>
+                )}
               </div>
             </div>
           )}
         </div>
 
-        {selectedChannel && (
+        {selectedChannel && !isMobile && (
           <ChannelInfoPanel
             conversation={selectedChannel}
             isOpen={showChannelInfo}
@@ -446,6 +462,7 @@ export default function ChannelsPage() {
           />
         )}
       </div>
+      {isMobile && <AppNavigation mobile />}
 
       <CreateChannelDialog
         open={showCreateChannel}

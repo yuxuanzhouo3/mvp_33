@@ -3,10 +3,7 @@
   "framework": "nextjs",
   "installCommand": "npm install",
   "functions": {
-    "app/**/*.{js,ts,tsx}": {
-      "maxDuration": 10
-    },
-    "api/**/*.{js,ts,tsx}": {
+    "app/api/**/*.{js,ts,tsx}": {
       "maxDuration": 10
     }
   },

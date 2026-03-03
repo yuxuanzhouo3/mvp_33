@@ -8,10 +8,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { User } from '@/lib/types'
-import { Search, UserPlus, Users, Star, Building2, MessageSquare, Phone, Video, ChevronUp, ChevronDown, Trash2, Ban, Flag, QrCode, Scan } from 'lucide-react'
+import { Search, UserPlus, Users, Star, Building2, MessageSquare, Phone, Video, ChevronUp, ChevronDown, Trash2, Ban, Flag, QrCode, Scan, ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { AddContactDialog } from './add-contact-dialog'
 import { ContactRequestsPanel } from './contact-requests-panel'
 import { ContactSkeleton } from './contact-skeleton'
@@ -113,10 +114,24 @@ export function ContactsPanel({
   const [showScrollDownButton, setShowScrollDownButton] = useState(false)
   const [showScrollUpButton, setShowScrollUpButton] = useState(false)
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0)
+  const [mobileView, setMobileView] = useState<'list' | 'detail'>('list')
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const { language } = useSettings()
+  const isMobile = useIsMobile()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
+
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileView('list')
+      return
+    }
+    if (selectedUser) {
+      setMobileView('detail')
+    } else {
+      setMobileView('list')
+    }
+  }, [isMobile, selectedUser])
 
   // Get the scroll container
   const getScrollContainer = (): HTMLDivElement | null => {
@@ -378,9 +393,14 @@ export function ContactsPanel({
   }
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-w-0">
       {/* Contacts list */}
-      <div className="w-[480px] border-r flex flex-col">
+      <div
+        className={cn(
+          "min-w-0 w-full md:w-[480px] md:border-r flex-col",
+          mobileView === 'detail' ? "hidden md:flex" : "flex"
+        )}
+      >
         <div className="border-b p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">{t('contacts')}</h2>
@@ -493,7 +513,10 @@ export function ContactsPanel({
                       {deptUsers.map((user) => (
                       <button
                         key={user.id}
-                        onClick={() => setSelectedUser(user)}
+                        onClick={() => {
+                          setSelectedUser(user)
+                          setMobileView('detail')
+                        }}
                         className={cn(
                           'w-full flex items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-accent',
                           selectedUser?.id === user.id && 'bg-accent'
@@ -531,7 +554,10 @@ export function ContactsPanel({
                     {favoriteUsers.map((user) => (
                       <button
                         key={user.id}
-                        onClick={() => setSelectedUser(user)}
+                        onClick={() => {
+                          setSelectedUser(user)
+                          setMobileView('detail')
+                        }}
                         className={cn(
                           'w-full flex items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-accent',
                           selectedUser?.id === user.id && 'bg-accent'
@@ -585,10 +611,29 @@ export function ContactsPanel({
       </div>
 
       {/* Contact details */}
-      <div className="flex-1 flex flex-col">
+      <div
+        className={cn(
+          "min-w-0 flex-1 flex-col md:flex",
+          mobileView === 'list' ? "hidden md:flex" : "flex"
+        )}
+      >
         {selectedUser ? (
           <>
-            <div className="border-b p-6">
+            <div className={cn("border-b", isMobile ? "p-4" : "p-6")}>
+              {isMobile && (
+                <div className="mb-3 flex items-center gap-1 md:hidden">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="-ml-1 h-8 w-8"
+                    onClick={() => setMobileView('list')}
+                    aria-label={language === 'zh' ? '返回联系人列表' : 'Back to contacts'}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm text-muted-foreground">{t('contacts')}</span>
+                </div>
+              )}
               <div className="flex items-start gap-4">
                 <div className="relative">
                   <Avatar className="h-20 w-20" userId={selectedUser.id} showOnlineStatus={true}>
@@ -609,7 +654,7 @@ export function ContactsPanel({
                 </div>
               </div>
 
-              <div className="flex gap-2 mt-6">
+              <div className={cn("mt-6 flex gap-2", isMobile && "flex-wrap")}>
                 <Button 
                   className="flex-1"
                   onClick={() => onStartChat(selectedUser.id)}
@@ -773,6 +818,11 @@ export function ContactsPanel({
               <Users className="h-16 w-16 mx-auto mb-4 opacity-20" />
               <h3 className="text-lg font-semibold mb-2">{t('noContactSelected')}</h3>
               <p>{t('selectContactToViewDetails')}</p>
+              {isMobile && (
+                <Button variant="outline" size="sm" className="mt-4 md:hidden" onClick={() => setMobileView('list')}>
+                  {language === 'zh' ? '返回联系人列表' : 'Back to contacts'}
+                </Button>
+              )}
             </div>
           </div>
         )}

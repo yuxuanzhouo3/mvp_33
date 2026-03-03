@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { User, Workspace } from '@/lib/types'
-import { Search, Users, Loader2, Shield, Clock, Trash2, MessageSquare, Phone, Video, ShieldOff } from 'lucide-react'
+import { Search, Users, Loader2, Shield, Clock, Trash2, MessageSquare, Phone, Video, ShieldOff, ChevronLeft } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { useIsMobile } from '@/hooks/use-mobile'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -98,6 +100,7 @@ export function WorkspaceMembersPanel({
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'members' | 'pending'>('members')
+  const [mobileView, setMobileView] = useState<'list' | 'detail'>('list')
   const [requests, setRequests] = useState<JoinRequest[]>([])
   const [isOperating, setIsOperating] = useState(false) // 操作中状态
   const [requestsLoading, setRequestsLoading] = useState(false) // 申请列表加载中状态
@@ -111,6 +114,7 @@ export function WorkspaceMembersPanel({
     member: MemberWithRole | null
   }>({ open: false, type: null, member: null })
   const { language } = useSettings()
+  const isMobile = useIsMobile()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
   const isZh = language === 'zh'
 
@@ -615,6 +619,14 @@ export function WorkspaceMembersPanel({
   const selectedRequest = requests.find(r => r.id === selectedId)
   const selectedItem = activeTab === 'members' ? selectedMember : selectedRequest
 
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileView('list')
+      return
+    }
+    setMobileView(selectedItem ? 'detail' : 'list')
+  }, [isMobile, selectedItem])
+
   // 获取角色显示文本和样式
   const getRoleInfo = (role: MemberRole) => {
     const roleMap = {
@@ -654,10 +666,17 @@ export function WorkspaceMembersPanel({
   const workspaceName = workspace?.name || (isZh ? '工作区' : 'Workspace')
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-w-0">
       {/* 2. 中间列表区 */}
-      <div className="w-[380px] border-r border-gray-200 bg-white flex flex-col">
-        <div className="p-6">
+      <div
+        data-testid="workspace-members-list-panel"
+        className={cn(
+          "min-w-0 bg-white flex-col",
+          isMobile ? "w-full" : "w-[380px] border-r border-gray-200",
+          isMobile && mobileView === 'detail' ? "hidden" : "flex"
+        )}
+      >
+        <div className={cn("p-6", isMobile && "p-4")}>
           <h1 className="text-xl font-bold mb-4">
             {isZh ? '工作区成员' : 'Workspace Members'}
           </h1>
@@ -665,13 +684,21 @@ export function WorkspaceMembersPanel({
           {/* Tab 切换 */}
           <div className="flex border-b border-gray-100 mb-4">
             <button
-              onClick={() => { setActiveTab('members'); setSelectedId(null); }}
+              onClick={() => {
+                setActiveTab('members')
+                setSelectedId(null)
+                if (isMobile) setMobileView('list')
+              }}
               className={`flex-1 pb-2 text-sm font-medium transition ${activeTab === 'members' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}
             >
               {isZh ? '成员' : 'Members'} ({members.length})
             </button>
             <button
-              onClick={() => { setActiveTab('pending'); setSelectedId(null); }}
+              onClick={() => {
+                setActiveTab('pending')
+                setSelectedId(null)
+                if (isMobile) setMobileView('list')
+              }}
               className={`flex-1 pb-2 text-sm font-medium transition relative ${activeTab === 'pending' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}
             >
               {isZh ? '待审批' : 'Pending'}
@@ -707,7 +734,11 @@ export function WorkspaceMembersPanel({
                 return (
                   <div
                     key={m.id}
-                    onClick={() => setSelectedId(m.id)}
+                    data-testid="workspace-member-item"
+                    onClick={() => {
+                      setSelectedId(m.id)
+                      if (isMobile) setMobileView('detail')
+                    }}
                     className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition mb-1 ${selectedId === m.id ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
                   >
                     <div className={`w-9 h-9 rounded-full ${getAvatarColor(m.full_name || m.username)} text-white flex items-center justify-center font-bold text-sm`}>
@@ -744,7 +775,11 @@ export function WorkspaceMembersPanel({
               filteredRequests.map(r => (
                 <div
                   key={r.id}
-                  onClick={() => setSelectedId(r.id)}
+                  data-testid="workspace-request-item"
+                  onClick={() => {
+                    setSelectedId(r.id)
+                    if (isMobile) setMobileView('detail')
+                  }}
                   className={`flex items-center gap-3 p-4 border border-transparent rounded-xl cursor-pointer transition mb-2 ${selectedId === r.id ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 hover:bg-gray-100'}`}
                 >
                   <div className={`w-10 h-10 rounded-full ${r.avatarColor} text-white flex items-center justify-center font-bold`}>
@@ -779,22 +814,45 @@ export function WorkspaceMembersPanel({
       </div>
 
       {/* 3. 右侧详情区 */}
-      <div className="flex-1 bg-white flex flex-col items-center justify-center p-12">
+      <div
+        data-testid="workspace-members-detail-panel"
+        className={cn(
+          "min-w-0 flex-1 bg-white flex-col",
+          isMobile ? (mobileView === 'list' ? "hidden" : "flex overflow-y-auto") : "flex items-center justify-center p-12"
+        )}
+      >
         {selectedItem ? (
-          <div className="w-full max-w-xl animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div className="bg-white border border-gray-200 rounded-3xl p-10 shadow-sm relative overflow-hidden">
+          <div className={cn("w-full animate-in fade-in slide-in-from-bottom-4 duration-300", isMobile ? "p-4" : "max-w-xl")}>
+            {isMobile && (
+              <div className="mb-3 flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setMobileView('list')}
+                  data-testid="workspace-members-back"
+                  aria-label={isZh ? '返回成员列表' : 'Back to members'}
+                  className="-ml-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-sm text-gray-500">{isZh ? '工作区成员' : 'Workspace Members'}</span>
+              </div>
+            )}
+            <div className={cn("bg-white border border-gray-200 shadow-sm relative overflow-hidden", isMobile ? "rounded-2xl p-4" : "rounded-3xl p-10")}>
 
               {/* 背景装饰 */}
               <div className={`absolute top-0 left-0 right-0 h-24 ${activeTab === 'members' ? getAvatarColor((selectedMember?.full_name || selectedMember?.username || '')) : 'bg-blue-500'} opacity-10`}></div>
 
-              <div className="flex flex-col items-center text-center mb-10 relative z-10">
-                <div className={`w-24 h-24 rounded-[32px] ${activeTab === 'members' ? getAvatarColor((selectedMember?.full_name || selectedMember?.username || '')) : 'bg-blue-500'} text-white flex items-center justify-center text-4xl font-bold mb-6 shadow-lg`}>
+              <div className={cn("flex flex-col items-center text-center relative z-10", isMobile ? "mb-6" : "mb-10")}>
+                <div className={cn(
+                  `rounded-[32px] ${activeTab === 'members' ? getAvatarColor((selectedMember?.full_name || selectedMember?.username || '')) : 'bg-blue-500'} text-white flex items-center justify-center font-bold shadow-lg`,
+                  isMobile ? "w-16 h-16 text-2xl mb-4 rounded-2xl" : "w-24 h-24 text-4xl mb-6"
+                )}>
                   {activeTab === 'members'
                     ? (selectedMember?.full_name || selectedMember?.username || '?').charAt(0).toUpperCase()
                     : (selectedRequest?.name || '?').charAt(0).toUpperCase()
                   }
                 </div>
-                <h2 className="text-3xl font-black mb-2">
+                <h2 className={cn("font-black mb-2", isMobile ? "text-xl" : "text-3xl")}>
                   {activeTab === 'members'
                     ? (selectedMember?.full_name || selectedMember?.username)
                     : selectedRequest?.name
@@ -805,7 +863,7 @@ export function WorkspaceMembersPanel({
                 </p>
               </div>
 
-              <div className="space-y-4 mb-10 relative z-10">
+              <div className={cn("space-y-4 relative z-10", isMobile ? "mb-6" : "mb-10")}>
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
                   <div className="flex items-center gap-3 text-gray-500 font-medium">
                     <Shield size={18} />
@@ -837,7 +895,7 @@ export function WorkspaceMembersPanel({
               </div>
 
               {activeTab === 'pending' && selectedRequest && (
-                <div className="mb-10 p-5 bg-blue-50 border border-blue-100 rounded-2xl">
+                <div className={cn("bg-blue-50 border border-blue-100 rounded-2xl", isMobile ? "mb-6 p-4" : "mb-10 p-5")}>
                   <p className="text-xs font-bold text-blue-600 uppercase mb-2">
                     {isZh ? '申请理由' : 'Reason'}
                   </p>
@@ -847,7 +905,7 @@ export function WorkspaceMembersPanel({
 
               {/* 成员操作按钮：发消息、电话、视频 */}
               {activeTab === 'members' && selectedMember && (
-                <div className="flex gap-3 mb-6 relative z-10">
+                <div className={cn("gap-3 mb-6 relative z-10", isMobile ? "grid grid-cols-1" : "flex")}>
                   <button
                     onClick={() => onStartChat(selectedMember.id)}
                     className="flex-1 flex items-center justify-center gap-2 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition"
@@ -931,7 +989,7 @@ export function WorkspaceMembersPanel({
                     )}
                   </>
               ) : selectedRequest ? (
-                <div className="flex gap-4">
+                <div className={cn("gap-4", isMobile ? "grid grid-cols-1" : "flex")}>
                     {selectedRequest.status === 'pending' ? (
                       <>
                         <button
@@ -960,7 +1018,18 @@ export function WorkspaceMembersPanel({
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center text-center">
+          <div className={cn("flex flex-1 flex-col items-center justify-center text-center", isMobile && "px-6")}>
+            {isMobile && (
+              <button
+                type="button"
+                onClick={() => setMobileView('list')}
+                data-testid="workspace-members-back"
+                className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                {isZh ? '返回成员列表' : 'Back to members'}
+              </button>
+            )}
             <div className="w-32 h-32 bg-gray-100 rounded-full flex items-center justify-center mb-6">
               <Users size={48} className="text-gray-300" strokeWidth={1.5} />
             </div>
