@@ -1,7 +1,7 @@
 {
   "buildCommand": "next build",
   "framework": "nextjs",
-  "installCommand": "npm install",
+  "installCommand": "npm install --include=dev",
   "functions": {
     "app/api/**/*.{js,ts,tsx}": {
       "maxDuration": 10
