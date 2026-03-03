@@ -33,15 +33,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    const now = new Date().toISOString()
+
     if (IS_DOMESTIC_VERSION) {
-      await updateCloudBaseUser(currentUserId, { last_seen_at: new Date().toISOString() })
+      await updateCloudBaseUser(currentUserId, {
+        last_seen_at: now,
+        status: 'online',
+      })
     } else {
       const supabase = await createClient()
       const { error: updateError } = await supabase
         .from('users')
         .update({
-          last_seen_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          last_seen_at: now,
+          status: 'online',
+          updated_at: now,
         })
         .eq('id', currentUserId)
 

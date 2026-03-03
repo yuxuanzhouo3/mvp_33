@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getUserByEmail as getSupabaseUserByEmail, createUser as createSupabaseUser } from '@/lib/database/supabase/users'
-import { getUserByEmail as getCloudBaseUserByEmail } from '@/lib/database/cloudbase/users'
+import { getUserByEmail as getCloudBaseUserByEmail, updateUser as updateCloudBaseUser } from '@/lib/database/cloudbase/users'
 import { createCloudBaseSession, setCloudBaseSessionCookie } from '@/lib/cloudbase/auth'
 import { User } from '@/lib/types'
 import { IS_DOMESTIC_VERSION } from '@/config'
@@ -473,8 +473,29 @@ async function handleCloudBaseLogin(request: NextRequest, email: string, passwor
 
     console.log('[LOGIN] CloudBase user authenticated:', user.id)
 
+    const now = new Date().toISOString()
+    let responseUser: User = user as User
+    try {
+      responseUser = await updateCloudBaseUser(user.id, {
+        status: 'online',
+        last_seen_at: now,
+      })
+      console.log('[LOGIN] Updated CloudBase user status to online')
+    } catch (statusError: any) {
+      console.warn('[LOGIN] Failed to update CloudBase online status:', statusError?.message || statusError)
+      responseUser = {
+        ...(user as User),
+        status: 'online',
+        last_seen_at: now,
+      }
+    }
+    // Never expose password hash back to client.
+    if ((responseUser as any).password_hash) {
+      delete (responseUser as any).password_hash
+    }
+
     // Create CloudBase session
-    const token = createCloudBaseSession(user)
+    const token = createCloudBaseSession(responseUser)
 
     // Get device info
     const userAgent = request.headers.get('user-agent') || ''
@@ -505,7 +526,7 @@ async function handleCloudBaseLogin(request: NextRequest, email: string, passwor
     // Create response with session cookie
     const response = NextResponse.json({
       success: true,
-      user: user,
+      user: responseUser,
       token,
     })
 

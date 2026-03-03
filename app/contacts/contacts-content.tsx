@@ -11,6 +11,8 @@ import { User, Workspace } from '@/lib/types'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useHeartbeat } from '@/hooks/use-heartbeat'
+import { createClient } from '@/lib/supabase/client'
 import { IS_DOMESTIC_VERSION } from '@/config'
 import {
   Dialog,
@@ -39,6 +41,43 @@ function ContactsPageContent() {
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
   const isMobile = useIsMobile()
+
+  // Keep online heartbeat active in contacts page for CN deployments.
+  useHeartbeat(currentUser?.id)
+
+  // Keep Supabase presence active in contacts page for INTL deployments.
+  useEffect(() => {
+    if (!currentUser || IS_DOMESTIC_VERSION) return
+
+    let supabase: ReturnType<typeof createClient> | null = null
+    try {
+      supabase = createClient()
+    } catch (error) {
+      console.error('[Contacts] Failed to create Supabase client for presence:', error)
+      return
+    }
+
+    const channel = supabase
+      .channel('online-users')
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          try {
+            await channel.track({
+              user_id: currentUser.id,
+              online_at: new Date().toISOString(),
+            })
+          } catch (trackError) {
+            console.error('[Contacts] Failed to track presence:', trackError)
+          }
+        }
+      })
+
+    return () => {
+      if (channel && supabase) {
+        supabase.removeChannel(channel)
+      }
+    }
+  }, [currentUser])
 
   const loadContacts = useCallback(async (forceRefresh = false, showLoading = true) => {
     if (!currentUser) return
