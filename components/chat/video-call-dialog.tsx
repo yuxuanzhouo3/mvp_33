@@ -587,9 +587,8 @@ export function VideoCallDialog({
             }))
           }
 
-          // 接收方：一旦点击接听，立即切换到通话界面（即使对方还在加入）
-          // 注意：先不设置 connected，等 initializeCall 成功后再设置
-          setCallStatus('ringing') // 临时设置为 ringing，表示正在连接
+          // 接收方：点击接听后立即进入“连接中”状态，避免被当作仍在响铃。
+          setCallStatus('connected')
           if (incomingTimeoutRef.current) {
             clearTimeout(incomingTimeoutRef.current)
             incomingTimeoutRef.current = null
@@ -643,7 +642,8 @@ export function VideoCallDialog({
       }
     } catch (error) {
       console.error('Failed to answer call:', error)
-      handleRejectCall()
+      setCallStatus('ended')
+      onOpenChange(false)
     }
   }
 
@@ -1928,7 +1928,7 @@ export function VideoCallDialog({
 
   // 外部关闭动作统一视为“挂断/取消”
   const handleOpenChange = (newOpen: boolean) => {
-    if (!newOpen && callStatus !== 'ended') {
+    if (!newOpen && callStatusRef.current !== 'ended') {
       void handleEndCall()
       return
     }

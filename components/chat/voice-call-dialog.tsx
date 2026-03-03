@@ -448,6 +448,8 @@ export function VoiceCallDialog({
             clearTimeout(incomingTimeoutRef.current)
             incomingTimeoutRef.current = null
           }
+          // Switch to connecting state immediately after answer to avoid ringing/missed regressions.
+          setCallStatus('connected')
           updateCallUiLock(lockTokenRef.current, {
             messageId,
             phase: 'active',
@@ -457,7 +459,8 @@ export function VoiceCallDialog({
       }
     } catch (error) {
       console.error('Failed to answer call:', error)
-      handleRejectCall()
+      setCallStatus('ended')
+      onOpenChange(false)
     }
   }
 
@@ -815,7 +818,7 @@ export function VoiceCallDialog({
 
   // 外部关闭动作统一视为“挂断/取消”
   const handleOpenChange = (newOpen: boolean) => {
-    if (!newOpen && callStatus !== 'ended') {
+    if (!newOpen && callStatusRef.current !== 'ended') {
       void handleEndCall()
       return
     }

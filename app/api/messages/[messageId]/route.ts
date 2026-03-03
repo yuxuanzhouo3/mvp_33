@@ -181,7 +181,15 @@ export async function PUT(
         )
       }
 
-      const updatedMessage = await updateMessageCN(messageId, content, metadata)
+      let finalMetadata = metadata
+      if (isCallMessage && metadata && typeof metadata === 'object') {
+        finalMetadata = {
+          ...messageMetadata,
+          ...metadata,
+        }
+      }
+
+      const updatedMessage = await updateMessageCN(messageId, content, finalMetadata)
       if (!updatedMessage) {
         return NextResponse.json(
           { error: 'Failed to update message' },

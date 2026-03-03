@@ -19,6 +19,57 @@ function isCollectionMissingError(error: any): boolean {
   )
 }
 
+function extractCloudBaseDoc(raw: any): any | null {
+  if (!raw) return null
+
+  const payload = raw?.data !== undefined ? raw.data : raw
+  if (Array.isArray(payload)) {
+    return payload[0] || null
+  }
+  if (payload && typeof payload === 'object') {
+    return payload
+  }
+  return null
+}
+
+function parseMetadata(value: any): any {
+  if (!value) return null
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return null
+    }
+  }
+  return value
+}
+
+function mapMessageDocToDto(doc: any, fallbackNow?: string): MessageWithSender | null {
+  if (!doc || typeof doc !== 'object') return null
+  const id = String(doc._id || doc.id || '')
+  if (!id) return null
+
+  const createdAt = String(doc.created_at || fallbackNow || new Date().toISOString())
+  const updatedAt = String(doc.updated_at || createdAt)
+  const senderId = String(doc.sender_id || '')
+
+  return {
+    id,
+    conversation_id: String(doc.conversation_id || ''),
+    sender_id: senderId,
+    sender: { id: senderId } as any,
+    content: doc.content || '',
+    type: doc.type || 'text',
+    reactions: Array.isArray(doc.reactions) ? doc.reactions : [],
+    is_edited: !!doc.is_edited,
+    is_deleted: !!doc.is_deleted,
+    is_recalled: !!doc.is_recalled,
+    created_at: createdAt,
+    updated_at: updatedAt,
+    metadata: parseMetadata(doc.metadata),
+  }
+}
+
 export async function getMessages(conversationId: string): Promise<MessageWithSender[]> {
   const db = getCloudBaseDb()
   if (!db) {
@@ -33,23 +84,11 @@ export async function getMessages(conversationId: string): Promise<MessageWithSe
     .orderBy('created_at', 'asc')
     .get()
 
-  const docs = res.data || []
+  const docs = Array.isArray(res?.data) ? res.data : []
 
-  return docs.map((m: any) => ({
-    id: m._id,
-    conversation_id: m.conversation_id,
-    sender_id: m.sender_id,
-    sender: { id: m.sender_id } as any,
-    content: m.content || '',
-    type: m.type || 'text',
-    reactions: Array.isArray(m.reactions) ? m.reactions : [],
-    is_edited: !!m.is_edited,
-    is_deleted: !!m.is_deleted,
-    is_recalled: !!m.is_recalled,
-    created_at: m.created_at,
-    updated_at: m.updated_at || m.created_at,
-    metadata: m.metadata || null,
-  }))
+  return docs
+    .map((doc: any) => mapMessageDocToDto(doc))
+    .filter((msg: MessageWithSender | null): msg is MessageWithSender => !!msg)
 }
 
 export async function createMessage(
@@ -138,24 +177,8 @@ export async function updateMessage(
     .doc(messageId)
     .get()
 
-  const m = res?.data || res
-  if (!m) return null
-
-  return {
-    id: m._id,
-    conversation_id: m.conversation_id,
-    sender_id: m.sender_id,
-    sender: { id: m.sender_id } as any,
-    content: m.content || '',
-    type: m.type || 'text',
-    reactions: Array.isArray(m.reactions) ? m.reactions : [],
-    is_edited: !!m.is_edited,
-    is_deleted: !!m.is_deleted,
-    is_recalled: !!m.is_recalled,
-    created_at: m.created_at,
-    updated_at: m.updated_at || now,
-    metadata: m.metadata || null,
-  }
+  const messageDoc = extractCloudBaseDoc(res)
+  return mapMessageDocToDto(messageDoc, now)
 }
 
 export async function deleteMessage(messageId: string): Promise<MessageWithSender | null> {
@@ -188,7 +211,7 @@ export async function recallMessage(messageId: string): Promise<MessageWithSende
     .doc(messageId)
     .get()
 
-  const m = res?.data || res
+  const m = extractCloudBaseDoc(res)
   if (!m) {
     console.error('recallMessage: Message not found:', messageId)
     return null
@@ -223,27 +246,13 @@ export async function recallMessage(messageId: string): Promise<MessageWithSende
     .doc(messageId)
     .get()
 
-  const updatedM = updatedRes?.data || updatedRes
+  const updatedM = extractCloudBaseDoc(updatedRes)
   if (!updatedM) {
     console.error('recallMessage: Updated message not found')
     return null
   }
 
-  return {
-    id: updatedM._id,
-    conversation_id: updatedM.conversation_id,
-    sender_id: updatedM.sender_id,
-    sender: { id: updatedM.sender_id } as any,
-    content: updatedM.content || '',
-    type: updatedM.type || 'text',
-    reactions: Array.isArray(updatedM.reactions) ? updatedM.reactions : [],
-    is_edited: !!updatedM.is_edited,
-    is_deleted: !!updatedM.is_deleted,
-    is_recalled: !!updatedM.is_recalled,
-    created_at: updatedM.created_at,
-    updated_at: updatedM.updated_at || updateTime,
-    metadata: updatedM.metadata || null,
-  }
+  return mapMessageDocToDto(updatedM, updateTime)
 }
 
 export async function addReaction(messageId: string, emoji: string, userId: string): Promise<MessageWithSender | null> {
@@ -254,7 +263,7 @@ export async function addReaction(messageId: string, emoji: string, userId: stri
     .doc(messageId)
     .get()
 
-  const m = res?.data || res
+  const m = extractCloudBaseDoc(res)
   if (!m) return null
 
   const reactions = Array.isArray(m.reactions) ? m.reactions : []
@@ -285,7 +294,7 @@ export async function removeReaction(messageId: string, emoji: string, userId: s
     .doc(messageId)
     .get()
 
-  const m = res?.data || res
+  const m = extractCloudBaseDoc(res)
   if (!m) return null
 
   let reactions = Array.isArray(m.reactions) ? m.reactions : []
@@ -311,23 +320,8 @@ async function getMessageById(messageId: string): Promise<MessageWithSender | nu
   const db = getCloudBaseDb()
   if (!db) throw new Error('CloudBase not configured')
   const res = await db.collection('messages').doc(messageId).get()
-  const m = res?.data || res
-  if (!m) return null
-  return {
-    id: m._id,
-    conversation_id: m.conversation_id,
-    sender_id: m.sender_id,
-    sender: { id: m.sender_id } as any,
-    content: m.content || '',
-    type: m.type || 'text',
-    reactions: Array.isArray(m.reactions) ? m.reactions : [],
-    is_edited: !!m.is_edited,
-    is_deleted: !!m.is_deleted,
-    is_recalled: !!m.is_recalled,
-    created_at: m.created_at,
-    updated_at: m.updated_at || m.created_at,
-    metadata: m.metadata || null,
-  }
+  const m = extractCloudBaseDoc(res)
+  return mapMessageDocToDto(m)
 }
 
 export async function hideMessage(messageId: string, userId: string): Promise<boolean> {
