@@ -12,6 +12,7 @@ type PendingCallInvite = {
   callType: 'voice' | 'video'
   callerId?: string
   callerName?: string
+  callSessionId?: string
   channelName?: string
   createdAt: string
   inviteExpiresAt?: string
@@ -75,6 +76,7 @@ function pickLatestPendingInvite(rows: any[]): PendingCallInvite | null {
 
     const callerId = typeof metadata.caller_id === 'string' ? metadata.caller_id : undefined
     const callerName = typeof metadata.caller_name === 'string' ? metadata.caller_name : undefined
+    const callSessionId = typeof metadata.call_session_id === 'string' ? metadata.call_session_id : undefined
     const channelName = typeof metadata.channel_name === 'string' ? metadata.channel_name : undefined
     const inviteExpiresAt = toIsoOrUndefined(metadata.invite_expires_at)
 
@@ -84,6 +86,7 @@ function pickLatestPendingInvite(rows: any[]): PendingCallInvite | null {
       callType,
       callerId,
       callerName,
+      callSessionId,
       channelName,
       createdAt,
       inviteExpiresAt,

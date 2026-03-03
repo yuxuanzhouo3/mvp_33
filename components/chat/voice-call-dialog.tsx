@@ -39,6 +39,15 @@ function generateChannelName(userId1: string, userId2: string, conversationId?: 
   return `voice_${id1}_${id2}`.substring(0, maxLen)
 }
 
+function normalizeCallSessionId(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function fallbackCallSessionId(messageId?: string): string {
+  if (!messageId) return ''
+  return `msg_${messageId}`
+}
+
 interface VoiceCallDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -46,6 +55,7 @@ interface VoiceCallDialogProps {
   currentUser: User
   conversationId: string
   callMessageId?: string // 如果是接听通话，传入通话消息ID
+  callSessionId?: string
   isIncoming?: boolean // 是否是来电
   autoAnswer?: boolean // 从消息列表点击接听时自动接听
   isGroup?: boolean
@@ -61,6 +71,7 @@ export function VoiceCallDialog({
   currentUser,
   conversationId,
   callMessageId,
+  callSessionId,
   isIncoming = false,
   autoAnswer = false,
   isGroup = false,
@@ -84,6 +95,39 @@ export function VoiceCallDialog({
   const lockTokenRef = useRef<string>(createCallLockToken('voice'))
   const outgoingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const incomingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const outgoingInviteStartedRef = useRef(false)
+  const callSessionIdRef = useRef<string>(normalizeCallSessionId(callSessionId) || fallbackCallSessionId(callMessageId))
+
+  const resolveIncomingSessionId = (candidate: unknown, messageId?: string): string => {
+    return normalizeCallSessionId(candidate) || fallbackCallSessionId(messageId)
+  }
+
+  const ensureCallSessionId = (candidate?: unknown, messageId?: string): string => {
+    const incomingSessionId = resolveIncomingSessionId(
+      candidate,
+      messageId || callMessageIdRef.current || callMessageId,
+    )
+    if (incomingSessionId) {
+      callSessionIdRef.current = incomingSessionId
+      return incomingSessionId
+    }
+    if (callSessionIdRef.current) {
+      return callSessionIdRef.current
+    }
+    const generated = createCallLockToken('call_session')
+    callSessionIdRef.current = generated
+    return generated
+  }
+
+  const isMatchingCallSession = (candidate?: unknown, messageId?: string): boolean => {
+    const incomingSessionId = resolveIncomingSessionId(
+      candidate,
+      messageId || callMessageIdRef.current || callMessageId,
+    )
+    if (!incomingSessionId) return true
+    const activeSessionId = ensureCallSessionId(undefined, messageId)
+    return !activeSessionId || activeSessionId === incomingSessionId
+  }
 
   useEffect(() => {
     callStatusRef.current = callStatus
@@ -91,7 +135,16 @@ export function VoiceCallDialog({
 
   useEffect(() => {
     callMessageIdRef.current = callMessageId
+    if (callMessageId) {
+      ensureCallSessionId(callSessionId, callMessageId)
+    }
   }, [callMessageId])
+
+  useEffect(() => {
+    if (callSessionId) {
+      ensureCallSessionId(callSessionId, callMessageIdRef.current || callMessageId)
+    }
+  }, [callSessionId])
 
   // 轮询检查对方是否接听（发起方使用）
   const startPollingForAnswer = (channelName: string) => {
@@ -118,7 +171,11 @@ export function VoiceCallDialog({
             return
           }
           
-          const callStatus = callMessage?.metadata?.call_status
+          const metadata = callMessage?.metadata || {}
+          if (!isMatchingCallSession(metadata.call_session_id, messageId)) {
+            return
+          }
+          const callStatus = metadata.call_status
           const fullMetadata = callMessage?.metadata || {}
           
           // 详细的前端日志（只在状态变化或每5次轮询时输出，减少日志量）
@@ -153,7 +210,7 @@ export function VoiceCallDialog({
               // Keep dialog open so user can still hang up manually after answer failure.
               setCallStatus('ended')
             }
-          } else if (callStatus === 'missed' || callStatus === 'cancelled') {
+          } else if ((callStatus === 'missed' || callStatus === 'cancelled') && callStatusRef.current !== 'connected') {
             // 对方拒绝或取消，停止轮询
             console.log('[Polling] ❌ Call rejected/cancelled:', callStatus)
             if (pollingIntervalRef.current) {
@@ -190,7 +247,14 @@ export function VoiceCallDialog({
     if (!open) return
 
     endingCallRef.current = false
+    outgoingInviteStartedRef.current = false
     const initialMessageId = callMessageIdRef.current || callMessageId
+    if (isIncoming) {
+      ensureCallSessionId(callSessionId, initialMessageId)
+    } else if (!normalizeCallSessionId(callSessionId)) {
+      callSessionIdRef.current = ''
+      ensureCallSessionId(undefined, initialMessageId)
+    }
     const acquired = acquireCallUiLock({
       token: lockTokenRef.current,
       callType: 'voice',
@@ -246,6 +310,8 @@ export function VoiceCallDialog({
         agoraClientRef.current.leave().catch(console.error)
         agoraClientRef.current = null
       }
+      outgoingInviteStartedRef.current = false
+      callSessionIdRef.current = ''
       uniqueUidRef.current = null
       if (outgoingTimeoutRef.current) {
         clearTimeout(outgoingTimeoutRef.current)
@@ -279,21 +345,24 @@ export function VoiceCallDialog({
         conversationId?: string
         callStatus?: string
         channelName?: string
+        callSessionId?: string
       }>
       const detail = custom.detail || {}
       const currentMessageId = callMessageIdRef.current || callMessageId
       if (!currentMessageId) return
       if (String(detail.messageId || '') !== String(currentMessageId)) return
       if (String(detail.conversationId || '') !== String(conversationId)) return
+      if (!isMatchingCallSession(detail.callSessionId, currentMessageId)) return
 
       const status = String(detail.callStatus || '')
       if (!status) return
 
-      if (status === 'answered' && !isIncoming) {
+      if (status === 'answered' && !isIncoming && callStatusRef.current === 'calling') {
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current)
           pollingIntervalRef.current = null
         }
+        ensureCallSessionId(detail.callSessionId, currentMessageId)
         if (!callStartTimeRef.current) {
           callStartTimeRef.current = Date.now()
         }
@@ -309,7 +378,17 @@ export function VoiceCallDialog({
         return
       }
 
-      if (status === 'missed' || status === 'cancelled' || status === 'ended') {
+      if (status === 'ended') {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current)
+          pollingIntervalRef.current = null
+        }
+        setCallStatus('ended')
+        onOpenChange(false)
+        return
+      }
+
+      if ((status === 'missed' || status === 'cancelled') && callStatusRef.current !== 'connected') {
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current)
           pollingIntervalRef.current = null
@@ -339,9 +418,13 @@ export function VoiceCallDialog({
         const msgData = await msgResponse.json()
         if (!msgData?.success || !Array.isArray(msgData?.messages)) return
         const callMessage = msgData.messages.find((m: any) => String(m?.id || '') === String(messageId))
+        const metadata = callMessage?.metadata || {}
+        if (!isMatchingCallSession(metadata.call_session_id, messageId)) {
+          return
+        }
         const status = String(callMessage?.metadata?.call_status || '')
         if (!status) return
-        if (status === 'ended' || status === 'cancelled' || status === 'missed') {
+        if (status === 'ended' || ((status === 'cancelled' || status === 'missed') && callStatusRef.current !== 'connected')) {
           setCallStatus('ended')
           onOpenChange(false)
         }
@@ -396,6 +479,11 @@ export function VoiceCallDialog({
 
   // 发送通话邀请消息
   const sendCallInvitation = async () => {
+    // Guard against duplicate invites when parent re-renders while dialog is open.
+    if (!isIncoming && outgoingInviteStartedRef.current) {
+      return
+    }
+    outgoingInviteStartedRef.current = true
     try {
       setCallStatus('calling')
       
@@ -403,6 +491,7 @@ export function VoiceCallDialog({
       const channelName = isGroup 
         ? `group_voice_${(groupName || 'group').substring(0, 15).replace(/[^a-zA-Z0-9]/g, '')}_${Date.now().toString().slice(-10)}`
         : generateChannelName(currentUser.id, recipient.id, conversationId)
+      const sessionId = ensureCallSessionId(undefined, callMessageIdRef.current || callMessageId)
       
       // 发送通话邀请消息
       const inviteExpiresAt = new Date(Date.now() + 35_000).toISOString()
@@ -420,6 +509,7 @@ export function VoiceCallDialog({
             caller_id: currentUser.id,
             caller_name: currentUser.full_name || currentUser.username || currentUser.email,
             invite_expires_at: inviteExpiresAt,
+            call_session_id: sessionId,
           },
         }),
       })
@@ -436,10 +526,12 @@ export function VoiceCallDialog({
         // 不立即加入频道，等对方接听后通过监听消息状态变化来加入
         startPollingForAnswer(channelName)
       } else {
+        outgoingInviteStartedRef.current = false
         setCallStatus('ended')
         onOpenChange(false)
       }
     } catch (error) {
+      outgoingInviteStartedRef.current = false
       console.error('Failed to send call invitation:', error)
       setCallStatus('ended')
       onOpenChange(false)
@@ -455,16 +547,18 @@ export function VoiceCallDialog({
       // 先获取消息以获取 channelName 和现有 metadata
       const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}`)
       const msgData = await msgResponse.json()
-      if (msgData.success) {
-        const callMessage = msgData.messages.find((m: any) => m.id === messageId)
-        if (callMessage) {
-          // 合并 metadata（确保 metadata 不为 null）
-          const updatedMetadata = {
-            ...(callMessage.metadata || {}),
-            call_status: 'answered',
-            answered_at: new Date().toISOString(),
-            answered_by: currentUser.id,
-          }
+        if (msgData.success) {
+          const callMessage = msgData.messages.find((m: any) => m.id === messageId)
+          if (callMessage) {
+            const sessionId = ensureCallSessionId(callMessage.metadata?.call_session_id, messageId)
+            // 合并 metadata（确保 metadata 不为 null）
+            const updatedMetadata = {
+              ...(callMessage.metadata || {}),
+              call_status: 'answered',
+              answered_at: new Date().toISOString(),
+              answered_by: currentUser.id,
+              call_session_id: sessionId,
+            }
           
           // 更新消息状态为已接听
           const updateResponse = await fetch(`/api/messages/${messageId}`, {
@@ -517,11 +611,13 @@ export function VoiceCallDialog({
         if (msgData.success) {
           const callMessage = msgData.messages.find((m: any) => m.id === messageId)
           if (callMessage) {
+            const sessionId = ensureCallSessionId(callMessage.metadata?.call_session_id, messageId)
             const updatedMetadata = {
               ...(callMessage.metadata || {}),
               call_status: 'missed',
               rejected_at: new Date().toISOString(),
               reject_reason: reason,
+              call_session_id: sessionId,
             }
             
             const updateResponse = await fetch(`/api/messages/${messageId}`, {
@@ -807,6 +903,7 @@ export function VoiceCallDialog({
               call_status: finalCallStatus,
               call_duration: finalDuration,
               ended_at: new Date().toISOString(),
+              call_session_id: ensureCallSessionId(callMessage.metadata?.call_session_id, messageId),
             }
             
             // 更新消息，确保双方都能看到

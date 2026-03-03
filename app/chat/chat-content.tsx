@@ -73,6 +73,7 @@ type IncomingCallPromptPayload = {
   callType?: unknown
   callerId?: unknown
   callerName?: unknown
+  callSessionId?: unknown
 }
 
 type PendingCallInviteApiResponse = {
@@ -83,6 +84,7 @@ type PendingCallInviteApiResponse = {
     callType?: 'voice' | 'video'
     callerId?: string
     callerName?: string
+    callSessionId?: string
   } | null
   error?: string
 }
@@ -151,6 +153,7 @@ function ChatPageContent() {
   const [incomingCallConversationId, setIncomingCallConversationId] = useState<string | null>(null)
   const [incomingCallRecipient, setIncomingCallRecipient] = useState<User | null>(null)
   const [incomingCallType, setIncomingCallType] = useState<'voice' | 'video'>('video')
+  const [incomingCallSessionId, setIncomingCallSessionId] = useState<string | null>(null)
   const [incomingCallAutoAnswer, setIncomingCallAutoAnswer] = useState(false)
   const incomingCallPromptedIdsRef = useRef<Set<string>>(new Set())
   const pendingCallPollInFlightRef = useRef(false)
@@ -176,6 +179,7 @@ function ChatPageContent() {
         callType: payload.callType,
         callerId: payload.callerId,
         callerName: payload.callerName,
+        callSessionId: payload.callSessionId,
       },
     }))
     return true
@@ -4623,7 +4627,7 @@ function ChatPageContent() {
     if (!currentUser) return
 
     const handleShowCallDialog = (event: CustomEvent) => {
-      const { messageId, conversationId, callType, callerId, callerName } = event.detail || {}
+      const { messageId, conversationId, callType, callerId, callerName, callSessionId } = event.detail || {}
       if (!messageId || !conversationId) return
 
       // If another call is active in this tab, reject new invite as busy.
@@ -4688,6 +4692,7 @@ function ChatPageContent() {
       setIncomingCallConversationId(conversationId)
       setIncomingCallRecipient(recipient)
       setIncomingCallType(callType === 'voice' ? 'voice' : 'video')
+      setIncomingCallSessionId(typeof callSessionId === 'string' ? callSessionId : null)
       setIncomingCallAutoAnswer(false)
       setShowIncomingCallDialog(true)
     }
@@ -4734,6 +4739,7 @@ function ChatPageContent() {
           callType: invite.callType,
           callerId: invite.callerId,
           callerName: invite.callerName,
+          callSessionId: invite.callSessionId,
         })
       } catch (error) {
         console.error('[call-pending] check failed:', error)
@@ -7154,6 +7160,7 @@ function ChatPageContent() {
               callType: newMessage.metadata?.call_type,
               callerId: newMessage.metadata?.caller_id,
               callerName: newMessage.metadata?.caller_name,
+              callSessionId: newMessage.metadata?.call_session_id,
             })
           }
 
@@ -7527,6 +7534,7 @@ function ChatPageContent() {
               channelName: newMetadata.channel_name || oldMetadata.channel_name,
               callerId: newMetadata.caller_id || oldMetadata.caller_id,
               callerName: newMetadata.caller_name || oldMetadata.caller_name,
+              callSessionId: newMetadata.call_session_id || oldMetadata.call_session_id,
             }
 
             window.dispatchEvent(new CustomEvent('callSignal', { detail: signalDetail }))
@@ -7535,6 +7543,7 @@ function ChatPageContent() {
                 detail: {
                   messageId: signalDetail.messageId,
                   conversationId: signalDetail.conversationId,
+                  callSessionId: signalDetail.callSessionId,
                 },
               }))
             }
@@ -8303,6 +8312,7 @@ function ChatPageContent() {
                 setIncomingCallConversationId(null)
                 setIncomingCallRecipient(null)
                 setIncomingCallType('video')
+                setIncomingCallSessionId(null)
                 setIncomingCallAutoAnswer(false)
               }
             }}
@@ -8310,6 +8320,7 @@ function ChatPageContent() {
             currentUser={currentUser}
             conversationId={incomingCallConversationId}
             callMessageId={incomingCallMessageId}
+            callSessionId={incomingCallSessionId || undefined}
             isIncoming={true}
             autoAnswer={incomingCallAutoAnswer}
           />
@@ -8323,6 +8334,7 @@ function ChatPageContent() {
                 setIncomingCallConversationId(null)
                 setIncomingCallRecipient(null)
                 setIncomingCallType('video')
+                setIncomingCallSessionId(null)
                 setIncomingCallAutoAnswer(false)
               }
             }}
@@ -8330,6 +8342,7 @@ function ChatPageContent() {
             currentUser={currentUser}
             conversationId={incomingCallConversationId}
             callMessageId={incomingCallMessageId}
+            callSessionId={incomingCallSessionId || undefined}
             isIncoming={true}
             autoAnswer={incomingCallAutoAnswer}
           />
