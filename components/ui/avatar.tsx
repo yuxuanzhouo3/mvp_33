@@ -29,7 +29,7 @@ function Avatar({
     <AvatarPrimitive.Root
       data-slot="avatar"
       className={cn(
-        'relative flex size-8 shrink-0 rounded-full',
+        'relative flex size-8 shrink-0 rounded-full overflow-visible',
         className,
       )}
       {...props}
@@ -37,13 +37,13 @@ function Avatar({
       {props.children}
       {showOnlineStatus && (
         <span
-          className="pointer-events-none absolute -bottom-2 -right-2 z-10 rounded-full bg-background p-1"
+          className="pointer-events-none absolute -bottom-1 -right-1 z-10 rounded-full bg-background p-0.5"
           aria-label={isOnline ? '在线' : '离线'}
         >
           {isOnline ? (
-            <span className="block h-[clamp(0.625rem,25%,1.25rem)] w-[clamp(0.625rem,25%,1.25rem)] rounded-full border-2 border-background bg-[#2bac76]" />
+            <span className="block h-[13px] w-[13px] rounded-full border-2 border-background bg-[#2bac76]" />
           ) : (
-            <span className="block h-[clamp(0.625rem,25%,1.25rem)] w-[clamp(0.625rem,25%,1.25rem)] rounded-full border-[3px] border-gray-400 bg-transparent" />
+            <span className="block h-[13px] w-[13px] rounded-full border-2 border-gray-400 bg-transparent" />
           )}
         </span>
       )}
