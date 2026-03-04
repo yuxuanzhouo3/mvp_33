@@ -26,23 +26,43 @@ import {
   stopIncomingRingtone,
 } from '@/lib/call/incoming-ringtone'
 
-// Generate a short channel name that fits call room requirements.
-function generateChannelName(userId1: string, userId2: string, conversationId?: string): string {
-  const maxLen = 30 // keep margin from room ID conversion and URL-safe transport
-  // Use conversationId if available (shorter and more stable)
+function sanitizeCallToken(value?: string): string {
+  if (!value) return ''
+  return value.replace(/[^a-zA-Z0-9]/g, '').slice(-24)
+}
+
+// Prefer per-call unique channel to avoid stale room collision across consecutive calls.
+function generateChannelName(
+  userId1: string,
+  userId2: string,
+  conversationId?: string,
+  callSessionId?: string,
+): string {
+  const maxLen = 56
+  const sessionToken = sanitizeCallToken(callSessionId)
+  if (sessionToken) {
+    return `voice_${sessionToken}`.substring(0, maxLen)
+  }
+
   if (conversationId) {
-    // Take first 32 chars of conversationId and add a short suffix
     const shortId = conversationId.replace(/-/g, '').substring(0, 24)
     return `voice_${shortId}`.substring(0, maxLen)
   }
-  
-  // Otherwise, use a hash of user IDs
-  // Sort IDs to ensure same channel name for both users
+
   const sortedIds = [userId1, userId2].sort()
-  // Take first 16 chars of each ID (without dashes) and combine
   const id1 = sortedIds[0].replace(/-/g, '').substring(0, 16)
   const id2 = sortedIds[1].replace(/-/g, '').substring(0, 16)
   return `voice_${id1}_${id2}`.substring(0, maxLen)
+}
+
+function generateGroupChannelName(groupName?: string, callSessionId?: string): string {
+  const maxLen = 56
+  const groupToken = (groupName || 'group').substring(0, 15).replace(/[^a-zA-Z0-9]/g, '')
+  const sessionToken = sanitizeCallToken(callSessionId)
+  if (sessionToken) {
+    return `group_voice_${groupToken}_${sessionToken}`.substring(0, maxLen)
+  }
+  return `group_voice_${groupToken}_${Date.now().toString().slice(-10)}`.substring(0, maxLen)
 }
 
 function normalizeCallSessionId(value: unknown): string {
@@ -156,22 +176,34 @@ export function VoiceCallDialog({
     return callStatusRef.current !== 'connected' || !remoteUserJoined
   }
 
-  const getAgoraNumericUid = (userId: string) => {
-    const randomHigh = Math.floor(Math.random() * 0x7ffffff)
-    const timestamp = Date.now() % 0xffffff
-    const perfCounter = Math.floor((performance.now() * 1000) % 0xffff)
-    const userIdHash = (() => {
-      let hash = 2166136261
-      for (let i = 0; i < userId.length; i += 1) {
-        hash ^= userId.charCodeAt(i)
-        hash = Math.imul(hash, 16777619)
-      }
-      return (hash >>> 0) % 0xff
-    })()
+  const fallbackTrtcUserId = (value: string) => {
+    const input = typeof value === 'string' ? value : String(value)
+    let hash1 = 2166136261
+    let hash2 = 2166136261 ^ 0xffffffff
+    for (let i = 0; i < input.length; i += 1) {
+      const code = input.charCodeAt(i)
+      hash1 = Math.imul(hash1 ^ code, 16777619) >>> 0
+      hash2 = Math.imul(hash2 ^ (code + 2654435761), 16777619) >>> 0
+    }
+    const part1 = hash1.toString(16).padStart(8, '0')
+    const part2 = hash2.toString(16).padStart(8, '0')
+    return (part1 + part2 + part1 + part2).slice(0, 32)
+  }
 
-    const combined = randomHigh ^ timestamp ^ perfCounter
-    const finalUid = (combined % 0xffffff00) + userIdHash
-    return Math.max(1, Math.min(finalUid, 0xffffffff))
+  const getTrtcUserId = async (userId: string) => {
+    const subtle = globalThis.crypto?.subtle
+    if (subtle && typeof TextEncoder !== 'undefined') {
+      try {
+        const msg = new TextEncoder().encode(userId)
+        const hashBuffer = await subtle.digest('SHA-256', msg)
+        const hashArray = Array.from(new Uint8Array(hashBuffer))
+        const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
+        return hashHex.slice(0, 32)
+      } catch {
+        return fallbackTrtcUserId(userId)
+      }
+    }
+    return fallbackTrtcUserId(userId)
   }
 
   const fetchTrtcCredentials = async (uid: number | string, preferredAppId?: string) => {
@@ -182,7 +214,16 @@ export function VoiceCallDialog({
       throw new Error(data?.error || 'Failed to get TRTC userSig')
     }
 
-    const resolvedAppId = preferredAppId || (data?.sdkAppId ? String(data.sdkAppId) : '')
+    const serverAppId = data?.sdkAppId ? String(data.sdkAppId).trim() : ''
+    const preferred = String(preferredAppId || '').trim()
+    if (serverAppId && preferred && serverAppId !== preferred) {
+      console.warn('[VoiceCallDialog] TRTC SDKAppID mismatch between server and client env', {
+        serverAppId,
+        clientEnvAppId: preferred,
+      })
+    }
+    // Prefer server sdkAppId to avoid client-env mismatch causing enterRoom failures.
+    const resolvedAppId = serverAppId || preferred
     if (!resolvedAppId) {
       throw new Error('TRTC SDKAppID not configured')
     }
@@ -765,11 +806,11 @@ export function VoiceCallDialog({
     try {
       setCallStatus('calling')
       
-      // 生成频道名称（使用短格式以符合 Agora 64字节限制）
-      const channelName = isGroup 
-        ? `group_voice_${(groupName || 'group').substring(0, 15).replace(/[^a-zA-Z0-9]/g, '')}_${Date.now().toString().slice(-10)}`
-        : generateChannelName(currentUser.id, recipient.id, conversationId)
       const sessionId = ensureCallSessionId(undefined, callMessageIdRef.current || callMessageId)
+      // Use a per-call unique channel to avoid stale-room collisions in the same conversation.
+      const channelName = isGroup
+        ? generateGroupChannelName(groupName, sessionId)
+        : generateChannelName(currentUser.id, recipient.id, conversationId, sessionId)
       
       // 发送通话邀请消息
       const inviteExpiresAt = new Date(Date.now() + 35_000).toISOString()
@@ -1030,9 +1071,10 @@ export function VoiceCallDialog({
         }
 
         if (!resolvedChannelName) {
+          const fallbackSessionId = ensureCallSessionId(undefined, messageId)
           resolvedChannelName = isGroup
-            ? `group_voice_${(groupName || 'group').substring(0, 15).replace(/[^a-zA-Z0-9]/g, '')}_${Date.now().toString().slice(-10)}`
-            : generateChannelName(currentUser.id, recipient.id, conversationId)
+            ? generateGroupChannelName(groupName, fallbackSessionId)
+            : generateChannelName(currentUser.id, recipient.id, conversationId, fallbackSessionId)
         }
 
         if (resolvedChannelName.length > 64) {
@@ -1055,15 +1097,16 @@ export function VoiceCallDialog({
         }
 
         let appId = process.env.NEXT_PUBLIC_TRTC_SDK_APP_ID || ''
-        const numericUid = getAgoraNumericUid(currentUser.id)
-        uniqueUidRef.current = `${currentUser.id}_${numericUid}`
-        const credentials = await fetchTrtcCredentials(numericUid, appId)
+        const trtcUserId = await getTrtcUserId(currentUser.id)
+        uniqueUidRef.current = `${currentUser.id}_${trtcUserId.slice(0, 8)}`
+        const credentials = await fetchTrtcCredentials(trtcUserId, appId)
         appId = credentials.appId
 
         console.log('[VoiceCallDialog] initializeCall start', {
           source,
           callSessionId: callSessionIdRef.current,
-          uid: numericUid,
+          uid: trtcUserId,
+          appId,
           channel: resolvedChannelName,
           messageId,
           protocol,
@@ -1074,7 +1117,7 @@ export function VoiceCallDialog({
           appId,
           token: credentials.userSig,
           channel: resolvedChannelName,
-          uid: numericUid,
+          uid: trtcUserId,
         })
 
         client.setOnRemoteUserPublished((user) => {
@@ -1102,7 +1145,7 @@ export function VoiceCallDialog({
         agoraClientRef.current = client
         console.log('[VoiceCallDialog] initializeCall join begin', buildFlowContext({
           source,
-          uid: numericUid,
+          uid: trtcUserId,
           channel: resolvedChannelName,
         }))
         await client.join({ audioOnly: true })
@@ -1110,7 +1153,7 @@ export function VoiceCallDialog({
         console.log('[VoiceCallDialog] Joined voice channel successfully', {
           source,
           callSessionId: callSessionIdRef.current,
-          uid: numericUid,
+          uid: trtcUserId,
           channel: resolvedChannelName,
         })
 
