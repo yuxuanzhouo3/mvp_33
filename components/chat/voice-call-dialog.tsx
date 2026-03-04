@@ -102,7 +102,9 @@ export function VoiceCallDialog({
   const ringtoneOwnerRef = useRef<string>(createCallLockToken('ringtone_voice'))
   const outgoingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const incomingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const outgoingAnsweredTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const outgoingInviteStartedRef = useRef(false)
+  const initializeContextRef = useRef<'answer' | 'outgoing' | 'signal' | null>(null)
   const callSessionIdRef = useRef<string>(normalizeCallSessionId(callSessionId) || fallbackCallSessionId(callMessageId))
 
   const resolveIncomingSessionId = (candidate: unknown, messageId?: string): string => {
@@ -134,6 +136,108 @@ export function VoiceCallDialog({
     if (!incomingSessionId) return true
     const activeSessionId = ensureCallSessionId(undefined, messageId)
     return !activeSessionId || activeSessionId === incomingSessionId
+  }
+
+  const getAgoraNumericUid = (userId: string) => {
+    const randomHigh = Math.floor(Math.random() * 0x7ffffff)
+    const timestamp = Date.now() % 0xffffff
+    const perfCounter = Math.floor((performance.now() * 1000) % 0xffff)
+    const userIdHash = (() => {
+      let hash = 2166136261
+      for (let i = 0; i < userId.length; i += 1) {
+        hash ^= userId.charCodeAt(i)
+        hash = Math.imul(hash, 16777619)
+      }
+      return (hash >>> 0) % 0xff
+    })()
+
+    const combined = randomHigh ^ timestamp ^ perfCounter
+    const finalUid = (combined % 0xffffff00) + userIdHash
+    return Math.max(1, Math.min(finalUid, 0xffffffff))
+  }
+
+  const fetchTrtcCredentials = async (uid: number | string, preferredAppId?: string) => {
+    const response = await fetch(`/api/trtc/user-sig?userId=${encodeURIComponent(String(uid))}`)
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok || !data?.userSig) {
+      throw new Error(data?.error || 'Failed to get TRTC userSig')
+    }
+
+    const resolvedAppId = preferredAppId || (data?.sdkAppId ? String(data.sdkAppId) : '')
+    if (!resolvedAppId) {
+      throw new Error('TRTC SDKAppID not configured')
+    }
+
+    return {
+      appId: resolvedAppId,
+      userSig: String(data.userSig),
+    }
+  }
+
+  const clearOutgoingAnsweredTimeout = () => {
+    if (outgoingAnsweredTimeoutRef.current) {
+      clearTimeout(outgoingAnsweredTimeoutRef.current)
+      outgoingAnsweredTimeoutRef.current = null
+    }
+  }
+
+  const writeCallConnectionFailure = async (
+    reason: 'connect_failed' | 'connect_timeout',
+    messageIdInput?: string,
+  ) => {
+    const messageId = messageIdInput || callMessageIdRef.current || callMessageId
+    if (!messageId) return
+
+    try {
+      const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}`)
+      const msgData = await msgResponse.json()
+      if (!msgData?.success) return
+
+      const callMessage = msgData.messages.find((m: any) => m.id === messageId)
+      if (!callMessage) return
+
+      const currentStatus = String(callMessage.metadata?.call_status || '')
+      if (currentStatus === 'ended' || currentStatus === 'cancelled' || currentStatus === 'missed') {
+        return
+      }
+
+      const sessionId = ensureCallSessionId(callMessage.metadata?.call_session_id, messageId)
+      const nowIso = new Date().toISOString()
+      const updatedMetadata = {
+        ...(callMessage.metadata || {}),
+        call_status: 'cancelled',
+        ended_at: nowIso,
+        reject_reason: reason,
+        connect_failed_by: currentUser.id,
+        connect_failed_at: nowIso,
+        call_session_id: sessionId,
+      }
+
+      const updateResponse = await fetch(`/api/messages/${messageId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          metadata: updatedMetadata,
+        }),
+      })
+
+      if (!updateResponse.ok) {
+        const errorText = await updateResponse.text()
+        console.error('[VoiceCallDialog] Failed to sync connection failure status:', {
+          messageId,
+          reason,
+          status: updateResponse.status,
+          errorText,
+        })
+      }
+    } catch (error) {
+      console.error('[VoiceCallDialog] Failed to write connection failure status:', {
+        messageId,
+        reason,
+        error,
+      })
+    }
   }
 
   useEffect(() => {
@@ -258,9 +362,10 @@ export function VoiceCallDialog({
               // 从消息中获取频道名称，确保使用最新的值
               const channelNameToUse = callMessage?.metadata?.channel_name || channelName
               console.log('[Polling] Joining channel:', channelNameToUse)
-              await initializeCall(channelNameToUse)
+              await initializeCall(channelNameToUse, 'outgoing')
             } catch (error) {
               console.error('[Polling] ❌ Failed to initialize call after answer:', error)
+              await writeCallConnectionFailure('connect_failed', messageId)
               // Keep dialog open so user can still hang up manually after answer failure.
               setCallStatus('ended')
             }
@@ -338,13 +443,7 @@ export function VoiceCallDialog({
       return
     }
 
-    // Generate unique numeric UID for this call session to avoid conflicts
-    // This ensures each call attempt uses a different UID
-    const timestamp = Date.now()
-    const random = Math.floor(Math.random() * 100000)
-    const uniqueNumericUid = Math.floor(timestamp / 1000) * 100000 + random
-    uniqueUidRef.current = `${currentUser.id}_${uniqueNumericUid}`
-    
+    // UID is generated in initializeCall to avoid stale/duplicate values across retries.
     if (isIncoming) {
       // 来电场景：默认显示响铃界面。
       // 如果来自消息列表点击“接听”，会在 autoAnswer effect 中自动执行接听流程。
@@ -367,6 +466,7 @@ export function VoiceCallDialog({
       outgoingInviteStartedRef.current = false
       callSessionIdRef.current = ''
       uniqueUidRef.current = null
+      clearOutgoingAnsweredTimeout()
       if (outgoingTimeoutRef.current) {
         clearTimeout(outgoingTimeoutRef.current)
         outgoingTimeoutRef.current = null
@@ -423,8 +523,9 @@ export function VoiceCallDialog({
         setCallStatus('connected')
         updateCallUiLock(lockTokenRef.current, { phase: 'active' })
         if (!agoraClientRef.current) {
-          void initializeCall(detail.channelName).catch((error) => {
+          void initializeCall(detail.channelName, 'signal').catch(async (error) => {
             console.error('[VoiceCallDialog] Failed to initialize call from signal:', error)
+            await writeCallConnectionFailure('connect_failed', currentMessageId)
             // Keep dialog open so user can still hang up manually after answer failure.
             setCallStatus('ended')
           })
@@ -531,6 +632,32 @@ export function VoiceCallDialog({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isIncoming, callStatus])
 
+  // Outgoing: once answered, fail-fast if peer never joins media channel.
+  useEffect(() => {
+    if (!open || isIncoming || callStatus !== 'connected' || remoteUserJoined) {
+      clearOutgoingAnsweredTimeout()
+      return
+    }
+
+    clearOutgoingAnsweredTimeout()
+    outgoingAnsweredTimeoutRef.current = setTimeout(() => {
+      if (callStatusRef.current !== 'connected' || remoteUserJoined) return
+      console.warn('[VoiceCallDialog] Outgoing connect timeout after answered', {
+        conversationId,
+        messageId: callMessageIdRef.current || callMessageId,
+        callSessionId: callSessionIdRef.current,
+      })
+      void writeCallConnectionFailure('connect_timeout')
+      setCallStatus('ended')
+      onOpenChange(false)
+    }, 15_000)
+
+    return () => {
+      clearOutgoingAnsweredTimeout()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isIncoming, callStatus, remoteUserJoined, conversationId])
+
   // 发送通话邀请消息
   const sendCallInvitation = async () => {
     // Guard against duplicate invites when parent re-renders while dialog is open.
@@ -601,50 +728,57 @@ export function VoiceCallDialog({
       // 先获取消息以获取 channelName 和现有 metadata
       const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}`)
       const msgData = await msgResponse.json()
-        if (msgData.success) {
-          const callMessage = msgData.messages.find((m: any) => m.id === messageId)
-          if (callMessage) {
-            const sessionId = ensureCallSessionId(callMessage.metadata?.call_session_id, messageId)
-            // 合并 metadata（确保 metadata 不为 null）
-            const updatedMetadata = {
-              ...(callMessage.metadata || {}),
-              call_status: 'answered',
-              answered_at: new Date().toISOString(),
-              answered_by: currentUser.id,
-              call_session_id: sessionId,
-            }
-          
-          // 更新消息状态为已接听
-          const updateResponse = await fetch(`/api/messages/${messageId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              metadata: updatedMetadata,
-            }),
-          })
-          
-          if (!updateResponse.ok) {
-            const errorText = await updateResponse.text()
-            console.error('Failed to update call status:', updateResponse.status, errorText)
-            // 即使更新失败，也继续接听流程（可能是网络问题，但通话可以继续）
-            console.warn('Continuing call despite status update failure')
-          }
+      if (msgData.success) {
+        const callMessage = msgData.messages.find((m: any) => m.id === messageId)
+        if (!callMessage) {
+          console.error('Call message not found when answering:', messageId)
+          setCallStatus('ended')
+          return
+        }
 
-          // 开始连接
-          if (incomingTimeoutRef.current) {
-            clearTimeout(incomingTimeoutRef.current)
-            incomingTimeoutRef.current = null
-          }
-          // Switch to connecting state immediately after answer to avoid ringing/missed regressions.
-          if (!callStartTimeRef.current) {
-            callStartTimeRef.current = Date.now()
-          }
-          setCallStatus('connected')
-          updateCallUiLock(lockTokenRef.current, {
-            messageId,
-            phase: 'active',
-          })
-          await initializeCall(callMessage.metadata?.channel_name)
+        const sessionId = ensureCallSessionId(callMessage.metadata?.call_session_id, messageId)
+        const updatedMetadata = {
+          ...(callMessage.metadata || {}),
+          call_status: 'answered',
+          answered_at: new Date().toISOString(),
+          answered_by: currentUser.id,
+          call_session_id: sessionId,
+        }
+
+        const updateResponse = await fetch(`/api/messages/${messageId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            metadata: updatedMetadata,
+          }),
+        })
+
+        if (!updateResponse.ok) {
+          const errorText = await updateResponse.text()
+          console.error('Failed to update call status:', updateResponse.status, errorText)
+          console.warn('Continuing call despite status update failure')
+        }
+
+        if (incomingTimeoutRef.current) {
+          clearTimeout(incomingTimeoutRef.current)
+          incomingTimeoutRef.current = null
+        }
+        clearOutgoingAnsweredTimeout()
+        if (!callStartTimeRef.current) {
+          callStartTimeRef.current = Date.now()
+        }
+        setCallStatus('connected')
+        updateCallUiLock(lockTokenRef.current, {
+          messageId,
+          phase: 'active',
+        })
+
+        try {
+          await initializeCall(callMessage.metadata?.channel_name, 'answer')
+        } catch (initError) {
+          console.error('[VoiceCallDialog] Failed to initialize answered call:', initError)
+          await writeCallConnectionFailure('connect_failed', messageId)
+          setCallStatus('ended')
         }
       }
     } catch (error) {
@@ -655,7 +789,9 @@ export function VoiceCallDialog({
   }
 
   // 拒绝通话
-  const handleRejectCall = async (reason: 'declined' | 'busy' | 'timeout' = 'declined') => {
+  const handleRejectCall = async (
+    reason: 'declined' | 'busy' | 'timeout' | 'connect_failed' | 'connect_timeout' = 'declined'
+  ) => {
     const messageId = callMessageIdRef.current || callMessageId
     if (messageId) {
       try {
@@ -693,35 +829,33 @@ export function VoiceCallDialog({
       }
     }
     setCallStatus('ended')
+    clearOutgoingAnsweredTimeout()
     onOpenChange(false)
     if (onCallEnd) {
       onCallEnd(0, 'missed')
     }
   }
 
-  const initializeCall = async (channelName?: string) => {
+  const initializeCall = async (
+    channelName?: string,
+    source: 'answer' | 'outgoing' | 'signal' = 'outgoing',
+  ) => {
+    initializeContextRef.current = source
+
     try {
-      // 检测 HTTPS 或 localhost（浏览器安全要求）
-      const isSecure = window.location.protocol === 'https:' || 
-                       window.location.hostname === 'localhost' || 
+      const isSecure = window.location.protocol === 'https:' ||
+                       window.location.hostname === 'localhost' ||
                        window.location.hostname === '127.0.0.1'
-      
       if (!isSecure) {
-        const errorMsg = 'Voice calls require HTTPS or localhost. Please use HTTPS or access from localhost.'
-        console.error(errorMsg)
-        alert(errorMsg + '\n\nFor testing: Use HTTPS or access from localhost (http://localhost:3001)')
-        setCallStatus('ended')
-        onOpenChange(false)
-        return
+        throw new Error('WEB_SECURITY_RESTRICT: Voice calls require HTTPS or localhost')
       }
 
-      // 如果没有传入 channelName，说明是发起者，需要从消息中获取
-      if (!channelName && callMessageId) {
-        // 获取消息以获取 channelName
+      const messageId = callMessageIdRef.current || callMessageId
+      if (!channelName && messageId) {
         const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}`)
         const msgData = await msgResponse.json()
         if (msgData.success) {
-          const callMessage = msgData.messages.find((m: any) => m.id === callMessageId)
+          const callMessage = msgData.messages.find((m: any) => m.id === messageId)
           if (callMessage?.metadata?.channel_name) {
             channelName = callMessage.metadata.channel_name
           }
@@ -729,88 +863,55 @@ export function VoiceCallDialog({
       }
 
       if (!channelName) {
-        // 如果没有 channelName，生成一个新的（使用短格式）
-        channelName = isGroup 
+        channelName = isGroup
           ? `group_voice_${(groupName || 'group').substring(0, 15).replace(/[^a-zA-Z0-9]/g, '')}_${Date.now().toString().slice(-10)}`
           : generateChannelName(currentUser.id, recipient.id, conversationId)
       }
-      
-      // Validate channel name length before converting to roomId
+
       if (channelName.length > 64) {
-        console.error('Channel name too long:', channelName.length, 'bytes')
-        // Truncate to 64 chars
+        console.warn('[VoiceCallDialog] Channel name too long, truncating', {
+          originalLength: channelName.length,
+          channelName,
+        })
         channelName = channelName.substring(0, 64)
       }
 
-      // Clean up any existing client first to avoid conflicts
       if (agoraClientRef.current) {
         const oldClient = agoraClientRef.current
         agoraClientRef.current = null
         oldClient.leave().catch(() => {})
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise((resolve) => setTimeout(resolve, 100))
       }
 
-      // Generate numeric UID within Agora's allowed range [0, 10000]
-      const numericUid = (() => {
-        if (uniqueUidRef.current) {
-          const parsed = parseInt(uniqueUidRef.current.split('_').pop() || '0', 10)
-          if (!Number.isNaN(parsed) && parsed > 0 && parsed <= 10000) return parsed
-        }
-        // Base on timestamp but clamp to 1-9999
-        const base = (Math.floor(Date.now() / 1000) % 9000) + 1000
-        return base
-      })()
-      
-      // Store the UID string for reference
+      let appId = process.env.NEXT_PUBLIC_TRTC_SDK_APP_ID || ''
+      const numericUid = getAgoraNumericUid(currentUser.id)
       uniqueUidRef.current = `${currentUser.id}_${numericUid}`
+      const credentials = await fetchTrtcCredentials(numericUid, appId)
+      appId = credentials.appId
 
-      let appId = process.env.NEXT_PUBLIC_TRTC_SDK_APP_ID
+      console.log('[VoiceCallDialog] initializeCall start', {
+        source,
+        callSessionId: callSessionIdRef.current,
+        uid: numericUid,
+        channel: channelName,
+        messageId,
+      })
 
-      // 获取 TRTC userSig
-      let token: string | undefined
-      try {
-        const tokenResponse = await fetch(`/api/trtc/user-sig?userId=${encodeURIComponent(String(numericUid))}`)
-        const tokenData = await tokenResponse.json()
-        if (tokenResponse.ok && tokenData?.userSig) {
-          token = tokenData.userSig
-          if (!appId && tokenData?.sdkAppId) {
-            appId = String(tokenData.sdkAppId)
-          }
-        }
-      } catch (error) {
-        console.warn('Failed to get TRTC userSig:', error)
-      }
-
-      if (!appId) {
-        console.error('TRTC SDKAppID not configured')
-        setCallStatus('ended')
-        return
-      }
-
-      if (!token) {
-        console.error('TRTC userSig not configured')
-        setCallStatus('ended')
-        return
-      }
-
-      // 创建 TRTC 客户端（纯音频模式）
       const client = new TrtcClient({
         appId,
-        token,
+        token: credentials.userSig,
         channel: channelName,
         uid: numericUid,
       })
 
-      // 设置远程用户回调
       client.setOnRemoteUserPublished((user) => {
         console.log('Remote user published:', user.uid, 'Audio track:', !!user.audioTrack)
         if (user.audioTrack) {
-          // 播放远程音频
           user.audioTrack.play()
         }
-        // Update status to connected when remote user joins
+        clearOutgoingAnsweredTimeout()
         setRemoteUserJoined(true)
-        setCallStatus(prev => {
+        setCallStatus((prev) => {
           if (prev !== 'connected') {
             if (!callStartTimeRef.current) {
               callStartTimeRef.current = Date.now()
@@ -826,47 +927,63 @@ export function VoiceCallDialog({
       })
 
       agoraClientRef.current = client
-
-      // 加入频道（纯音频模式）
       await client.join({ audioOnly: true })
-      console.log('Joined voice channel successfully')
-      
-      // Set status to connected after joining
+      clearOutgoingAnsweredTimeout()
+      console.log('[VoiceCallDialog] Joined voice channel successfully', {
+        source,
+        callSessionId: callSessionIdRef.current,
+        uid: numericUid,
+        channel: channelName,
+      })
+
       setCallStatus('connected')
       updateCallUiLock(lockTokenRef.current, { phase: 'active' })
-      // 注意：callStartTimeRef 只在远程用户加入时设置，这样双方的时间是同步的
     } catch (error: any) {
-      const errorMsg = error?.message || 'Failed to connect to call'
-      const errorCode = error?.code || ''
-      
-      // 处理 HTTPS/安全限制错误
-      if (errorMsg.includes('WEB_SECURITY_RESTRICT') || 
-          errorMsg.includes('NOT_SUPPORTED') ||
-          errorMsg.includes('getUserMedia')) {
-        const httpsErrorMsg = 'Voice calls require HTTPS or localhost. Please use HTTPS or access from localhost (http://localhost:3001).'
-        console.error(httpsErrorMsg, error)
-        alert(httpsErrorMsg)
-        agoraClientRef.current = null
-        setCallStatus('ended')
-        onOpenChange(false)
-        return
+      const errorMessage = String(error?.message || 'Failed to connect to call')
+      const errorCode = String(error?.code || '')
+      const isSecurityError =
+        errorMessage.includes('WEB_SECURITY_RESTRICT') ||
+        errorMessage.includes('NOT_SUPPORTED') ||
+        errorMessage.includes('getUserMedia')
+      const isAbortLikeError =
+        errorMessage.includes('WS_ABORT') ||
+        errorMessage.includes('OPERATION_ABORTED') ||
+        errorMessage.includes('LEAVE') ||
+        errorCode === 'WS_ABORT' ||
+        errorCode === 'OPERATION_ABORTED'
+      const isUserInitiatedAbort =
+        endingCallRef.current || callStatusRef.current === 'ended' || !open
+
+      const structuredLog = {
+        source: initializeContextRef.current,
+        callSessionId: callSessionIdRef.current,
+        uid: uniqueUidRef.current,
+        channel: channelName,
+        errorCode,
+        errorMessage,
+        isIncoming,
+        currentStatus: callStatusRef.current,
+        isUserInitiatedAbort,
       }
-      
-      // 某些场景（快速关闭/切换）Agora 会抛 WS_ABORT/OPERATION_ABORTED，视为正常中断
-      if (errorMsg.includes('WS_ABORT') || 
-          errorMsg.includes('OPERATION_ABORTED') || 
-          errorMsg.includes('LEAVE') ||
-          errorCode === 'WS_ABORT' ||
-          errorCode === 'OPERATION_ABORTED') {
+
+      if (isSecurityError) {
+        console.error('[VoiceCallDialog] initializeCall blocked by browser security', structuredLog)
+        alert('Voice calls require HTTPS or localhost. Please use HTTPS or access from localhost (http://localhost:3001).')
         agoraClientRef.current = null
-        setCallStatus('ended')
+        throw error
+      }
+
+      if (isAbortLikeError && isUserInitiatedAbort) {
+        console.warn('[VoiceCallDialog] initializeCall aborted by local teardown', structuredLog)
+        agoraClientRef.current = null
         return
       }
 
-      console.error('Failed to initialize call:', error)
+      console.error('[VoiceCallDialog] initializeCall failed', structuredLog)
       agoraClientRef.current = null
-      setCallStatus('ended')
       throw error
+    } finally {
+      initializeContextRef.current = null
     }
   }
 
@@ -901,6 +1018,7 @@ export function VoiceCallDialog({
   const handleEndCall = async () => {
     if (endingCallRef.current) return
     endingCallRef.current = true
+    clearOutgoingAnsweredTimeout()
 
     // 保存当前状态，因为后面会设置为 ended
     const currentStatus = callStatus

@@ -114,6 +114,21 @@ export interface MessageMetadata {
   mentions?: string[]
   code_language?: string
   code_content?: string
+  call_type?: 'voice' | 'video'
+  call_status?: 'calling' | 'answered' | 'missed' | 'cancelled' | 'ended'
+  channel_name?: string
+  caller_id?: string
+  caller_name?: string
+  call_duration?: number
+  invite_expires_at?: string
+  answered_at?: string
+  answered_by?: string
+  rejected_at?: string
+  ended_at?: string
+  reject_reason?: 'declined' | 'busy' | 'timeout' | 'connect_failed' | 'connect_timeout'
+  connect_failed_by?: string
+  connect_failed_at?: string
+  call_session_id?: string
 }
 
 export interface MessageReaction {
