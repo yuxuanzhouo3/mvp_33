@@ -17,6 +17,7 @@ import { VideoCallDialog } from './video-call-dialog'
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useOnlineStatus } from '@/hooks/use-online-status'
 import { cn } from '@/lib/utils'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getCallUiLock } from '@/lib/call/call-ui-lock'
@@ -157,21 +158,17 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
       if (!otherUser) {
         otherUser = currentUser
       }
-      // Prioritize title (job position) over status
-      const subtitle = otherUser?.title 
-        ? otherUser.title 
-        : (otherUser?.status ? t(otherUser.status as 'online' | 'offline' | 'away' | 'busy') : '')
       // Removed console.log to reduce noise in console
       // Uncomment for debugging if needed:
       // console.log('👤 Chat header display:', {
       //   name: otherUser?.full_name,
       //   title: otherUser?.title,
       //   status: otherUser?.status,
-      //   subtitle: subtitle
+      //   subtitle: otherUser?.title || otherUser?.status || 'offline'
       // })
       return {
         name: otherUser?.full_name || otherUser?.username || otherUser?.email || 'User',
-        subtitle: subtitle,
+        subtitle: otherUser?.title || t((otherUser?.status || 'offline') as 'online' | 'offline' | 'away' | 'busy'),
         avatar: otherUser?.avatar_url,
         status: otherUser?.status,
         user: otherUser,
@@ -200,6 +197,13 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
   }
 
   const display = getConversationDisplay()
+  const isDirectUserOnline = useOnlineStatus(
+    conversation.type === 'direct' ? display.user?.id : undefined,
+    conversation.type === 'direct' ? display.user?.region : undefined
+  )
+  const displaySubtitle = conversation.type === 'direct'
+    ? (display.user?.title || t(isDirectUserOnline ? 'online' : 'offline'))
+    : display.subtitle
 
   const isGroupCall = conversation.type === 'group' || conversation.type === 'channel'
   // 确保 callRecipient 始终是对话中的另一个用户（不是当前用户）
@@ -285,7 +289,12 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
                   className="cursor-pointer hover:opacity-80 transition-opacity"
                   title="View contact details"
                 >
-                  <Avatar className={cn("h-10 w-10", isMobile && "h-9 w-9")} userId={display.user?.id} showOnlineStatus={true}>
+                  <Avatar
+                    className={cn("h-10 w-10", isMobile && "h-9 w-9")}
+                    userId={display.user?.id}
+                    userRegion={display.user?.region}
+                    showOnlineStatus={true}
+                  >
                     <AvatarImage src={display.avatar || undefined} />
                     <AvatarFallback name={display.name}>
                       {display.name
@@ -304,7 +313,7 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
             )}
             <div className="min-w-0">
               <h2 className={cn("font-semibold text-base", isMobile && "text-[15px] truncate max-w-[160px]")}>{display.name}</h2>
-              {!isMobile && <p className="text-sm text-muted-foreground">{display.subtitle}</p>}
+              {!isMobile && <p className="text-sm text-muted-foreground">{displaySubtitle}</p>}
             </div>
           </div>
 

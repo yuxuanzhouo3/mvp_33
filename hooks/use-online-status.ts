@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { IS_DOMESTIC_VERSION } from '@/config'
 
-export function useOnlineStatus(userId?: string) {
+export function useOnlineStatus(
+  userId?: string,
+  regionHint?: 'cn' | 'global'
+) {
   const [isOnline, setIsOnline] = useState(false)
 
   useEffect(() => {
@@ -13,7 +16,8 @@ export function useOnlineStatus(userId?: string) {
       return
     }
 
-    const isGlobal = !IS_DOMESTIC_VERSION
+    const resolvedRegion = regionHint || (IS_DOMESTIC_VERSION ? 'cn' : 'global')
+    const isGlobal = resolvedRegion === 'global'
 
     if (isGlobal) {
       let supabase: any
@@ -64,7 +68,7 @@ export function useOnlineStatus(userId?: string) {
 
       return () => clearInterval(interval)
     }
-  }, [userId])
+  }, [userId, regionHint])
 
   return isOnline
 }

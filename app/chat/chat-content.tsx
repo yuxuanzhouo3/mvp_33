@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
+import { useEffect, useLayoutEffect, useState, useCallback, useRef, Suspense } from 'react'
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 
@@ -11,6 +11,7 @@ import { Sidebar } from '@/components/chat/sidebar'
 import { WorkspaceHeader } from '@/components/chat/workspace-header'
 
 import { ChatHeader } from '@/components/chat/chat-header'
+import { ConversationMetaSkeleton } from '@/components/chat/conversation-meta-skeleton'
 
 import { ChatTabs } from '@/components/chat/chat-tabs'
 
@@ -94,6 +95,8 @@ const SYSTEM_ASSISTANT_IDS = new Set([
   '00000000-0000-0000-0000-000000000001',
 ])
 
+type ConversationMetaState = 'idle' | 'loading' | 'ready' | 'failed'
+
 const isSystemAssistantUserId = (userId?: string | null): boolean => {
   if (!userId) return false
   return SYSTEM_ASSISTANT_IDS.has(userId)
@@ -116,6 +119,7 @@ function ChatPageContent() {
   const [selectedConversationId, setSelectedConversationId] = useState<string>()
 
   const [messages, setMessages] = useState<MessageWithSender[]>([])
+  const [conversationMetaState, setConversationMetaState] = useState<ConversationMetaState>('idle')
 
   const [showNewConversation, setShowNewConversation] = useState(false)
 
@@ -189,7 +193,7 @@ function ChatPageContent() {
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
 
-  useHeartbeat(currentUser?.id)
+  useHeartbeat(currentUser?.id, currentUser?.region)
   useNotifications(currentUser?.id)
 
   const loadingConversationsRef = useRef<Set<string>>(new Set())
@@ -214,6 +218,9 @@ function ChatPageContent() {
 
   const conversationsRef = useRef<ConversationWithDetails[]>([])
   const messagesByConversationRef = useRef<Map<string, MessageWithSender[]>>(new Map())
+  const messagesConversationIdRef = useRef<string | undefined>(undefined)
+  const conversationMetaTokenRef = useRef(0)
+  const conversationMetaLoadRequestedRef = useRef<string | null>(null)
 
   const pendingConversationMapRef = useRef<Map<string, ConversationWithDetails>>(new Map())
 
@@ -226,6 +233,29 @@ function ChatPageContent() {
   const hasForcedInitialReloadRef = useRef<boolean>(false)
 
   const lastLoadSignatureRef = useRef<string>('')
+
+  const getValidatedCachedMessages = useCallback((conversationId: string): MessageWithSender[] | undefined => {
+    const cached = messagesByConversationRef.current.get(conversationId)
+    if (!cached || cached.length === 0) {
+      return undefined
+    }
+
+    const isValid = cached.every((msg) => {
+      if (!msg) return false
+      return String(msg.conversation_id || '') === conversationId
+    })
+
+    if (!isValid) {
+      console.warn('⚠️ Dropping invalid cached messages for conversation:', conversationId, {
+        total: cached.length,
+        sampleConversationIds: cached.slice(0, 3).map((m) => m?.conversation_id),
+      })
+      messagesByConversationRef.current.delete(conversationId)
+      return undefined
+    }
+
+    return cached
+  }, [])
 
   const getPendingConversationsKey = useCallback((userId: string, workspaceId: string) => {
 
@@ -337,10 +367,18 @@ function ChatPageContent() {
     }
   }, [isMobile, activeChannel, searchParams])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!selectedConversationId) return
-    messagesByConversationRef.current.set(selectedConversationId, messages)
-  }, [selectedConversationId, messages])
+    // Track which conversation the current message panel is bound to.
+    // Avoid writing old conversation messages into the newly selected cache.
+    messagesConversationIdRef.current = selectedConversationId
+  }, [selectedConversationId])
+
+  useEffect(() => {
+    const conversationId = messagesConversationIdRef.current || selectedConversationIdRef.current
+    if (!conversationId) return
+    messagesByConversationRef.current.set(conversationId, messages)
+  }, [messages])
 
   useEffect(() => {
     messagesByConversationRef.current.clear()
@@ -618,6 +656,17 @@ function ChatPageContent() {
 
   }, [])
 
+  const isGroupConversationType = useCallback((conversation?: ConversationWithDetails | null) => {
+    if (!conversation) return false
+    return conversation.type === 'group' || conversation.type === 'channel'
+  }, [])
+
+  const isConversationMetaReady = useCallback((conversation?: ConversationWithDetails | null) => {
+    if (!conversation) return false
+    if (!isGroupConversationType(conversation)) return true
+    return hasMemberDetails(conversation.members)
+  }, [hasMemberDetails, isGroupConversationType])
+
   const updateConversationDetailsCache = useCallback((conversation?: ConversationWithDetails | null) => {
 
     if (!conversation) return
@@ -876,10 +925,12 @@ function ChatPageContent() {
     // This avoids recreating the function when conversations change
 
     let existsInList = false
+    let existingConversationSnapshot: ConversationWithDetails | undefined
 
     setConversations(prev => {
 
-      existsInList = prev.some(c => c.id === conversationId)
+      existingConversationSnapshot = prev.find(c => c.id === conversationId)
+      existsInList = !!existingConversationSnapshot
 
       return prev // No change, just checking
 
@@ -889,9 +940,19 @@ function ChatPageContent() {
 
     if (existsInList && retryCount === 0) {
 
-      console.log('✅ Conversation already exists in list, skipping load:', conversationId)
+      const needsMetaReload = !!existingConversationSnapshot &&
+        (existingConversationSnapshot.type === 'group' || existingConversationSnapshot.type === 'channel') &&
+        !hasMemberDetails(existingConversationSnapshot.members)
 
-      return true
+      if (needsMetaReload) {
+        console.log('⚠️ Conversation exists but meta is incomplete, forcing reload:', conversationId)
+      } else {
+
+        console.log('✅ Conversation already exists in list, skipping load:', conversationId)
+
+        return true
+
+      }
 
     }
 
@@ -1342,7 +1403,7 @@ function ChatPageContent() {
       if (data.success) {
 
         console.log('Setting messages:', data.messages.length, 'messages')
-        const cachedMessages = messagesByConversationRef.current.get(conversationId) || []
+        const cachedMessages = getValidatedCachedMessages(conversationId) || []
         let nextMessages: MessageWithSender[] = data.messages
 
         if (cachedMessages.length > 0) {
@@ -1391,6 +1452,7 @@ function ChatPageContent() {
 
         // Stale-request guard: if user has switched conversation, don't overwrite current panel.
         if (selectedConversationIdRef.current === conversationId) {
+          messagesConversationIdRef.current = conversationId
           setMessages(nextMessages)
         } else {
           console.log('⏭️ Skip stale messages update for conversation:', conversationId)
@@ -1464,7 +1526,7 @@ function ChatPageContent() {
 
     }
 
-  }, [])
+  }, [getValidatedCachedMessages])
 
   const loadConversations = useCallback(async (userId: string, workspaceId: string, skipCache = false) => {
 
@@ -3946,10 +4008,11 @@ function ChatPageContent() {
 
   }, [pathname, searchParams, currentWorkspace, loadSingleConversation, router])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!selectedConversationId) return
 
-    const cachedMessages = messagesByConversationRef.current.get(selectedConversationId)
+    messagesConversationIdRef.current = selectedConversationId
+    const cachedMessages = getValidatedCachedMessages(selectedConversationId)
     if (cachedMessages && cachedMessages.length > 0) {
       // Instant switch: render cached messages first, then silently refresh.
       setMessages(cachedMessages)
@@ -3965,7 +4028,7 @@ function ChatPageContent() {
     loadMessages(selectedConversationId).catch((error) => {
       console.error('Failed to load messages for selected conversation:', error)
     })
-  }, [selectedConversationId, loadMessages])
+  }, [selectedConversationId, loadMessages, getValidatedCachedMessages])
 
   // 通话挂断后，立刻刷新当前会话的消息列表（显示最新的通话时长等）
   useEffect(() => {
@@ -7084,6 +7147,97 @@ function ChatPageContent() {
 
   }, [selectedConversationId, conversations.length]) // Only depend on length to reduce updates
 
+  useEffect(() => {
+    const conversationId = selectedConversationId
+    const requestToken = ++conversationMetaTokenRef.current
+
+    if (!conversationId) {
+      conversationMetaLoadRequestedRef.current = null
+      setConversationMetaState('idle')
+      return
+    }
+
+    const fromList = conversations.find(c => c.id === conversationId)
+    const fromTemp = tempConversation?.id === conversationId ? tempConversation : null
+    const targetConversation = fromList || fromTemp
+
+    if (targetConversation && isConversationMetaReady(targetConversation)) {
+      conversationMetaLoadRequestedRef.current = null
+      setConversationMetaState('ready')
+      return
+    }
+
+    setConversationMetaState('loading')
+
+    if (!currentWorkspace?.id) {
+      return
+    }
+
+    if (conversationMetaLoadRequestedRef.current === conversationId) {
+      return
+    }
+
+    conversationMetaLoadRequestedRef.current = conversationId
+
+    loadSingleConversation(conversationId, currentWorkspace.id, 0)
+      .then(() => {
+        if (conversationMetaTokenRef.current !== requestToken) return
+        if (selectedConversationIdRef.current !== conversationId) return
+
+        const latestConversation = conversationsRef.current.find(c => c.id === conversationId)
+        if (isConversationMetaReady(latestConversation || null)) {
+          conversationMetaLoadRequestedRef.current = null
+          setConversationMetaState('ready')
+          return
+        }
+
+        setConversationMetaState('failed')
+      })
+      .catch((error) => {
+        console.error('Failed to sync conversation meta:', error)
+        if (conversationMetaTokenRef.current !== requestToken) return
+        if (selectedConversationIdRef.current !== conversationId) return
+        setConversationMetaState('failed')
+      })
+  }, [
+    selectedConversationId,
+    conversations,
+    tempConversation,
+    currentWorkspace?.id,
+    loadSingleConversation,
+    isConversationMetaReady,
+  ])
+
+  const handleRetryConversationMeta = useCallback(() => {
+    const conversationId = selectedConversationIdRef.current
+    const workspaceId = currentWorkspaceRef.current?.id
+    if (!conversationId || !workspaceId) return
+
+    conversationMetaLoadRequestedRef.current = null
+    const requestToken = ++conversationMetaTokenRef.current
+    setConversationMetaState('loading')
+
+    loadSingleConversation(conversationId, workspaceId, 0)
+      .then(() => {
+        if (conversationMetaTokenRef.current !== requestToken) return
+        if (selectedConversationIdRef.current !== conversationId) return
+
+        const latestConversation = conversationsRef.current.find(c => c.id === conversationId)
+        if (isConversationMetaReady(latestConversation || null)) {
+          conversationMetaLoadRequestedRef.current = null
+          setConversationMetaState('ready')
+          return
+        }
+        setConversationMetaState('failed')
+      })
+      .catch((error) => {
+        console.error('Failed to retry conversation meta sync:', error)
+        if (conversationMetaTokenRef.current !== requestToken) return
+        if (selectedConversationIdRef.current !== conversationId) return
+        setConversationMetaState('failed')
+      })
+  }, [loadSingleConversation, isConversationMetaReady])
+
   // Real-time message subscription to update conversation list
 
   useEffect(() => {
@@ -7873,9 +8027,10 @@ function ChatPageContent() {
 
   
 
-  // Use temp conversation if selected conversation is not in list
-
-  const displayConversation = selectedConversation || tempConversation
+  // Use temp conversation only if it matches current selected id, avoid stale cross-conversation display.
+  const displayConversation =
+    selectedConversation ||
+    (tempConversation?.id === selectedConversationId ? tempConversation : null)
 
   // Check if this is a system assistant conversation (用户不能回复系统通知)
   const isSystemAssistantConversation = (() => {
@@ -7891,6 +8046,12 @@ function ChatPageContent() {
   // The conversation will be loaded shortly
 
   const showChatInterface = selectedConversationId !== undefined && displayConversation !== null
+  const isGroupConversationForMeta = isGroupConversationType(displayConversation)
+  const shouldShowGroupMetaSkeleton =
+    isGroupConversationForMeta && conversationMetaState === 'loading'
+  const shouldShowGroupMetaFailed =
+    isGroupConversationForMeta && conversationMetaState === 'failed'
+  const shouldGateGroupMeta = shouldShowGroupMetaSkeleton || shouldShowGroupMetaFailed
 
   return (
     <>
@@ -7976,7 +8137,8 @@ function ChatPageContent() {
               // If switching to a different conversation, clear messages and show loading
 
               if (selectedConversationId !== conversationId) {
-                const cachedMessages = messagesByConversationRef.current.get(conversationId)
+                messagesConversationIdRef.current = conversationId
+                const cachedMessages = getValidatedCachedMessages(conversationId)
                 if (cachedMessages && cachedMessages.length > 0) {
                   setMessages(cachedMessages)
                   setIsLoadingMessages(false)
@@ -8137,28 +8299,41 @@ function ChatPageContent() {
 
             <>
 
-              <ChatHeader
-                conversation={displayConversation}
-                currentUser={currentUser}
-                onToggleSidebar={isMobile ? () => setMobileView('list') : undefined}
-                onToggleGroupInfo={() => setGroupInfoOpen(prev => !prev)}
-              />
-
-              {displayConversation.type === 'group' && (
-                <ChatTabs
-                  activeTab={activeTab}
-                  onTabChange={setActiveTab}
+              {shouldGateGroupMeta ? (
+                <ConversationMetaSkeleton
+                  variant="header"
+                  isMobile={isMobile}
+                  mode={shouldShowGroupMetaFailed ? 'failed' : 'loading'}
+                  onRetry={shouldShowGroupMetaFailed ? handleRetryConversationMeta : undefined}
                 />
-              )}
+              ) : (
+                <>
+                  <ChatHeader
+                    key={displayConversation.id}
+                    conversation={displayConversation}
+                    currentUser={currentUser}
+                    onToggleSidebar={isMobile ? () => setMobileView('list') : undefined}
+                    onToggleGroupInfo={() => setGroupInfoOpen(prev => !prev)}
+                  />
 
-              {displayConversation.type === 'group' && activeTab === 'messages' && (
-                <AnnouncementBanner
-                  conversationId={displayConversation.id}
-                  isAdmin={displayConversation.members?.some(
-                    (m: any) => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
-                  ) || false}
-                  onOpenDrawer={() => setAnnouncementDrawerOpen(true)}
-                />
+                  {displayConversation.type === 'group' && (
+                    <ChatTabs
+                      activeTab={activeTab}
+                      onTabChange={setActiveTab}
+                    />
+                  )}
+
+                  {displayConversation.type === 'group' && activeTab === 'messages' && (
+                    <AnnouncementBanner
+                      key={`announcement-banner-${displayConversation.id}`}
+                      conversationId={displayConversation.id}
+                      isAdmin={displayConversation.members?.some(
+                        (m: any) => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
+                      ) || false}
+                      onOpenDrawer={() => setAnnouncementDrawerOpen(true)}
+                    />
+                  )}
+                </>
               )}
 
               {activeTab === 'messages' && (
@@ -8200,6 +8375,7 @@ function ChatPageContent() {
 
               {activeTab === 'announcements' && displayConversation.type === 'group' && (
                 <AnnouncementsView
+                  key={`announcements-view-${displayConversation.id}`}
                   conversationId={displayConversation.id}
                   isAdmin={displayConversation.members?.some(
                     (m: any) => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
@@ -8209,6 +8385,7 @@ function ChatPageContent() {
 
               {activeTab === 'files' && displayConversation.type === 'group' && (
                 <FilesView
+                  key={`files-view-${displayConversation.id}`}
                   conversationId={displayConversation.id}
                   isAdmin={displayConversation.members?.some(
                     (m: any) => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
@@ -8288,17 +8465,27 @@ function ChatPageContent() {
 
           {/* Group Info Panel */}
           {!isMobile && displayConversation && displayConversation.type === 'group' && (
-            <GroupInfoPanel
-              conversation={displayConversation}
-              currentUser={currentUser}
-              isOpen={groupInfoOpen}
-              onClose={() => setGroupInfoOpen(false)}
-              onUpdate={() => {
-                if (currentUser && currentWorkspace) {
-                  loadConversations(currentUser.id, currentWorkspace.id, true)
-                }
-              }}
-            />
+            shouldGateGroupMeta ? (
+              <ConversationMetaSkeleton
+                variant="panel"
+                isOpen={groupInfoOpen}
+                mode={shouldShowGroupMetaFailed ? 'failed' : 'loading'}
+                onRetry={shouldShowGroupMetaFailed ? handleRetryConversationMeta : undefined}
+              />
+            ) : (
+              <GroupInfoPanel
+                key={displayConversation.id}
+                conversation={displayConversation}
+                currentUser={currentUser}
+                isOpen={groupInfoOpen}
+                onClose={() => setGroupInfoOpen(false)}
+                onUpdate={() => {
+                  if (currentUser && currentWorkspace) {
+                    loadConversations(currentUser.id, currentWorkspace.id, true)
+                  }
+                }}
+              />
+            )
           )}
 
         </div>

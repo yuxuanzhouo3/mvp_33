@@ -3,12 +3,15 @@
 import { useEffect } from 'react'
 import { IS_DOMESTIC_VERSION } from '@/config'
 
-export function useHeartbeat(userId?: string) {
+export function useHeartbeat(
+  userId?: string,
+  regionHint?: 'cn' | 'global'
+) {
   useEffect(() => {
     if (!userId) return
 
-    const isGlobal = !IS_DOMESTIC_VERSION
-    if (isGlobal) return
+    const resolvedRegion = regionHint || (IS_DOMESTIC_VERSION ? 'cn' : 'global')
+    if (resolvedRegion !== 'cn') return
 
     const sendHeartbeat = async () => {
       try {
@@ -26,5 +29,5 @@ export function useHeartbeat(userId?: string) {
     const interval = setInterval(sendHeartbeat, 30000)
 
     return () => clearInterval(interval)
-  }, [userId])
+  }, [userId, regionHint])
 }

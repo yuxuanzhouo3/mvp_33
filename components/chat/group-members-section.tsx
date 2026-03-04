@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Input } from '@/components/ui/input'
 import { User } from '@/lib/types'
@@ -21,18 +21,28 @@ export function GroupMembersSection({
   const [searchQuery, setSearchQuery] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const requestVersionRef = useRef(0)
 
   useEffect(() => {
+    // Clear previous group's members immediately when switching conversation
+    // so we don't render stale group info while waiting for the new request.
+    setMembers([])
+    setSearchQuery('')
     loadMembers()
   }, [conversationId])
 
   const loadMembers = async () => {
+    const requestVersion = ++requestVersionRef.current
     setIsLoading(true)
     try {
       console.log('[GroupMembersSection] 开始加载成员', { conversationId })
       const response = await fetch(`/api/groups/${conversationId}/members`)
       console.log('[GroupMembersSection] API 响应状态', { status: response.status, ok: response.ok })
       const data = await response.json()
+      if (requestVersion !== requestVersionRef.current) {
+        console.log('[GroupMembersSection] 忽略过期成员请求结果', { conversationId, requestVersion })
+        return
+      }
       console.log('[GroupMembersSection] API 响应数据', data)
       if (data.success && data.members) {
         console.log('[GroupMembersSection] 设置成员列表', {
@@ -47,7 +57,9 @@ export function GroupMembersSection({
     } catch (error) {
       console.error('[GroupMembersSection] 加载成员失败:', error)
     } finally {
-      setIsLoading(false)
+      if (requestVersion === requestVersionRef.current) {
+        setIsLoading(false)
+      }
     }
   }
 

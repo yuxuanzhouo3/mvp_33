@@ -53,6 +53,10 @@ function ConversationItem({
   const containerRef = useRef<HTMLButtonElement>(null)
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
+  const directTargetUser =
+    conversation.type === 'direct'
+      ? (conversation.members.find(m => m.id !== currentUser.id) || currentUser)
+      : undefined
 
   const getLastMessagePreview = () => {
     const lastMessage = conversation.last_message
@@ -111,7 +115,12 @@ function ConversationItem({
         >
       <div className="relative shrink-0">
         {conversation.type === 'direct' ? (
-          <Avatar className="h-10 w-10 rounded-lg" userId={conversation.members.find(m => m.id !== currentUser.id)?.id} showOnlineStatus={true}>
+          <Avatar
+            className="h-10 w-10 rounded-lg"
+            userId={directTargetUser?.id}
+            userRegion={directTargetUser?.region}
+            showOnlineStatus={true}
+          >
             <AvatarImage src={display.avatar || undefined} />
             <AvatarFallback name={display.name}>
               {display.name.split(' ').map(n => n[0]).join('')}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { mockAuth } from '@/lib/mock-auth'
 import { mockUsers, pinConversation, unpinConversation, hideConversation, deleteConversation } from '@/lib/mock-data'
@@ -38,6 +38,7 @@ export default function ChannelsPage() {
   const [isConversationsLoading, setIsConversationsLoading] = useState(() => !!(mockAuth.getCurrentUser() && mockAuth.getCurrentWorkspace()))
   const [selectedChannelId, setSelectedChannelId] = useState<string>()
   const [messages, setMessages] = useState<MessageWithSender[]>([])
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false)
   const [showChannelInfo, setShowChannelInfo] = useState(false)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
@@ -45,6 +46,10 @@ export default function ChannelsPage() {
   const isMobile = useIsMobile()
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
+  const selectedChannelIdRef = useRef<string | undefined>(undefined)
+  const messagesConversationIdRef = useRef<string | undefined>(undefined)
+  const messagesByConversationRef = useRef<Map<string, MessageWithSender[]>>(new Map())
+  const pendingMessageRequestsRef = useRef<Map<string, Promise<any>>>(new Map())
 
   useEffect(() => {
     const user = mockAuth.getCurrentUser()
@@ -97,20 +102,7 @@ export default function ChannelsPage() {
   }, [conversations, currentUser, currentWorkspace, isConversationsLoading])
 
   useEffect(() => {
-    if (selectedChannelId) {
-      loadMessages(selectedChannelId)
-    }
-  }, [selectedChannelId])
-
-  // Poll for new messages every 2 seconds
-  useEffect(() => {
-    if (!selectedChannelId) return
-
-    const interval = setInterval(() => {
-      loadMessages(selectedChannelId)
-    }, 2000)
-
-    return () => clearInterval(interval)
+    selectedChannelIdRef.current = selectedChannelId
   }, [selectedChannelId])
 
   useEffect(() => {
@@ -120,6 +112,22 @@ export default function ChannelsPage() {
     }
     setMobileView(selectedChannelId ? 'detail' : 'list')
   }, [isMobile, selectedChannelId])
+
+  useLayoutEffect(() => {
+    if (!selectedChannelId) return
+    messagesConversationIdRef.current = selectedChannelId
+  }, [selectedChannelId])
+
+  useEffect(() => {
+    const conversationId = messagesConversationIdRef.current || selectedChannelIdRef.current
+    if (!conversationId) return
+    messagesByConversationRef.current.set(conversationId, messages)
+  }, [messages])
+
+  useEffect(() => {
+    messagesByConversationRef.current.clear()
+    pendingMessageRequestsRef.current.clear()
+  }, [currentUser?.id, currentWorkspace?.id])
 
   const loadConversations = async (
     userId: string,
@@ -149,18 +157,81 @@ export default function ChannelsPage() {
     }
   }
 
-  const loadMessages = async (conversationId: string) => {
-    try {
+  const loadMessages = useCallback(async (conversationId: string, options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false
+    const requestKey = `messages-${conversationId}`
+
+    if (pendingMessageRequestsRef.current.has(requestKey)) {
+      try {
+        await pendingMessageRequestsRef.current.get(requestKey)
+      } catch {
+        // ignore pending request errors
+      }
+      return
+    }
+
+    if (!silent && selectedChannelIdRef.current === conversationId) {
+      setIsLoadingMessages(true)
+    }
+
+    const requestPromise = (async () => {
       const response = await fetch(`/api/messages?conversationId=${conversationId}`)
-      const data = await response.json()
+      return response.json()
+    })()
+
+    pendingMessageRequestsRef.current.set(requestKey, requestPromise)
+
+    try {
+      const data = await requestPromise
       if (data.success) {
-        setMessages(data.messages)
+        messagesByConversationRef.current.set(conversationId, data.messages)
+        if (selectedChannelIdRef.current === conversationId) {
+          messagesConversationIdRef.current = conversationId
+          setMessages(data.messages)
+        }
       }
     } catch (error) {
       console.error('Failed to load messages:', error)
-      // Don't clear messages on error, keep existing ones
+    } finally {
+      pendingMessageRequestsRef.current.delete(requestKey)
+      if (!silent && selectedChannelIdRef.current === conversationId) {
+        setIsLoadingMessages(false)
+      }
     }
-  }
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!selectedChannelId) return
+
+    messagesConversationIdRef.current = selectedChannelId
+    const cachedMessages = messagesByConversationRef.current.get(selectedChannelId)
+
+    if (cachedMessages && cachedMessages.length > 0) {
+      setMessages(cachedMessages)
+      setIsLoadingMessages(false)
+      loadMessages(selectedChannelId, { silent: true }).catch((error) => {
+        console.error('Failed to refresh channel messages:', error)
+      })
+      return
+    }
+
+    setMessages([])
+    setIsLoadingMessages(true)
+    loadMessages(selectedChannelId).catch((error) => {
+      console.error('Failed to load messages for selected channel:', error)
+    })
+  }, [selectedChannelId, loadMessages])
+
+  // Poll for new messages every 2 seconds
+  useEffect(() => {
+    if (!selectedChannelId) return
+
+    const interval = setInterval(() => {
+      loadMessages(selectedChannelId, { silent: true })
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [selectedChannelId, loadMessages])
 
   const handleSendMessage = useCallback(async (content: string, type: string = 'text', file?: File) => {
     if (!selectedChannelId || !currentUser || !content.trim()) return
@@ -395,6 +466,18 @@ export default function ChannelsPage() {
             conversations={conversations}
             isLoading={isConversationsLoading}
             onSelectChannel={(id) => {
+              if (selectedChannelId !== id) {
+                messagesConversationIdRef.current = id
+                const cachedMessages = messagesByConversationRef.current.get(id)
+                if (cachedMessages && cachedMessages.length > 0) {
+                  setMessages(cachedMessages)
+                  setIsLoadingMessages(false)
+                } else {
+                  setMessages([])
+                  setIsLoadingMessages(true)
+                }
+              }
+              selectedChannelIdRef.current = id
               setSelectedChannelId(id)
               if (isMobile) setMobileView('detail')
             }}
@@ -417,13 +500,16 @@ export default function ChannelsPage() {
           {selectedChannel ? (
             <>
               <ChatHeader 
+                key={`channel-header-${selectedChannel.id}`}
                 conversation={selectedChannel} 
                 currentUser={currentUser}
                 onToggleSidebar={isMobile ? () => setMobileView('list') : undefined}
               />
               <MessageList 
+                key={`channel-messages-${selectedChannel.id}`}
                 messages={messages} 
                 currentUser={currentUser}
+                isLoading={isLoadingMessages}
                 onEditMessage={handleEditMessage}
                 onDeleteMessage={handleDeleteMessage}
                 onAddReaction={handleAddReaction}
@@ -456,6 +542,7 @@ export default function ChannelsPage() {
 
         {selectedChannel && !isMobile && (
           <ChannelInfoPanel
+            key={`channel-info-${selectedChannel.id}`}
             conversation={selectedChannel}
             isOpen={showChannelInfo}
             onClose={() => setShowChannelInfo(false)}

@@ -43,11 +43,11 @@ function ContactsPageContent() {
   const isMobile = useIsMobile()
 
   // Keep online heartbeat active in contacts page for CN deployments.
-  useHeartbeat(currentUser?.id)
+  useHeartbeat(currentUser?.id, currentUser?.region)
 
   // Keep Supabase presence active in contacts page for INTL deployments.
   useEffect(() => {
-    if (!currentUser || IS_DOMESTIC_VERSION) return
+    if (!currentUser || currentUser.region !== 'global') return
 
     let supabase: ReturnType<typeof createClient> | null = null
     try {
