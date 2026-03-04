@@ -367,8 +367,8 @@ export async function getUserConversations(
         const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0
         const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
         if (aTime !== bTime) return bTime - aTime // Most recent first
-        const aCreated = new Date(a.created_at).getTime()
-        const bCreated = new Date(b.created_at).getTime()
+        const aCreated = new Date(a.created_at || 0).getTime()
+        const bCreated = new Date(b.created_at || 0).getTime()
         if (aCreated !== bCreated) return aCreated - bCreated // Oldest first
         // Finally, use ID for deterministic sorting
         return a.id.localeCompare(b.id)

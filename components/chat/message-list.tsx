@@ -606,9 +606,9 @@ export function MessageList({
 
     const prevMsg = messages[index - 1]
 
-    const currentDate = new Date(currentMsg.created_at).toDateString()
+    const currentDate = new Date(currentMsg.created_at || 0).toDateString()
 
-    const prevDate = new Date(prevMsg.created_at).toDateString()
+    const prevDate = new Date(prevMsg.created_at || 0).toDateString()
 
     return currentDate !== prevDate
 
@@ -634,7 +634,7 @@ export function MessageList({
 
     // Within 5 minutes
 
-    const timeDiff = new Date(currentMsg.created_at).getTime() - new Date(prevMsg.created_at).getTime()
+    const timeDiff = new Date(currentMsg.created_at || 0).getTime() - new Date(prevMsg.created_at || 0).getTime()
 
     return timeDiff < 5 * 60 * 1000
 
@@ -720,7 +720,7 @@ export function MessageList({
 
     
 
-    const reaction = message.reactions.find(r => r.emoji === emoji)
+    const reaction = (message.reactions || []).find(r => r.emoji === emoji)
 
     const hasReacted = reaction?.user_ids.includes(currentUser.id) || false
 
@@ -931,7 +931,7 @@ export function MessageList({
 
                     <span className="text-xs text-muted-foreground font-medium">
 
-                      {formatDate(message.created_at)}
+                      {formatDate(message.created_at || '')}
 
                     </span>
 
@@ -1008,7 +1008,7 @@ export function MessageList({
 
                         <span className="text-xs text-gray-400">
 
-                          {formatTime(message.created_at)}
+                          {formatTime(message.created_at || '')}
 
                         </span>
 

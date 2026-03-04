@@ -373,7 +373,7 @@ async function handleCloudBaseRegister(
       email: email,
       username: email.split('@')[0],
       full_name: name,
-      avatar_url: null,
+      avatar_url: undefined,
       password_hash: passwordHash,
       provider: 'email',
       provider_id: email,

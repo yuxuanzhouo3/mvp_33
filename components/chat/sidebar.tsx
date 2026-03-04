@@ -23,7 +23,7 @@ import { CreateGroupDialog } from './create-group-dialog'
 
 interface ConversationItemProps {
   conversation: ConversationWithDetails
-  display: { name: string; avatar?: string; subtitle: string }
+  display: { name: string; avatar?: string | null; subtitle: string }
   isActive: boolean
   onSelect: () => void
   getConversationIcon: (type: string, isPrivate: boolean) => React.ReactNode
@@ -121,7 +121,7 @@ function ConversationItem({
           <Avatar className="h-10 w-10 rounded-lg">
             <AvatarImage src={conversation.avatar_url || undefined} />
             <AvatarFallback className="bg-primary/10">
-              {getConversationIcon(conversation.type, conversation.is_private)}
+              {getConversationIcon(conversation.type, Boolean(conversation.is_private))}
             </AvatarFallback>
           </Avatar>
         )}
@@ -460,13 +460,13 @@ export function Sidebar({
       }
       return {
         name: otherUser?.full_name || otherUser?.username || otherUser?.email || 'User',
-        avatar: otherUser?.avatar_url,
+        avatar: otherUser?.avatar_url || undefined,
         subtitle: otherUser?.title || '',
       }
     }
     return {
       name: conversation.name || 'Unnamed',
-      avatar: conversation.avatar_url,
+      avatar: conversation.avatar_url || undefined,
       subtitle: `${conversation.members.length} members`,
     }
   }

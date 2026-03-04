@@ -122,10 +122,11 @@ export async function GET(request: NextRequest) {
     })).filter(Boolean)
 
     // 获取当前用户角色
+    const fallbackWorkspaceId = workspaceId || (members as any[])?.[0]?.workspace_id
     const { data: currentUserMembership } = await supabase
       .from('workspace_members')
       .select('role')
-      .eq('workspace_id', workspaceId || members?.[0]?.workspace_id)
+      .eq('workspace_id', fallbackWorkspaceId)
       .eq('user_id', user.id)
       .single()
 

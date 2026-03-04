@@ -179,7 +179,7 @@ export async function GET(request: NextRequest) {
         ...contact,
         user: contact.users,
       }))
-      .filter((contact) => {
+      .filter((contact: any) => {
         const region = contact.user?.region || 'global'
         return region === currentRegionSupabase
       })

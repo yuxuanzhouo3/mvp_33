@@ -46,7 +46,7 @@ export async function PUT(
       }
     } else {
       supabase = dbClient.supabase || await createClient()
-      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      const { data: { user: supabaseUser } } = await supabase!.auth.getUser()
       if (supabaseUser) {
         user = { id: supabaseUser.id }
       }
@@ -380,7 +380,7 @@ export async function DELETE(
       }
     } else {
       supabase = dbClient.supabase || await createClient()
-      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      const { data: { user: supabaseUser } } = await supabase!.auth.getUser()
       if (supabaseUser) {
         user = { id: supabaseUser.id }
       }
@@ -532,7 +532,7 @@ export async function PATCH(
       }
     } else {
       supabase = dbClient.supabase || await createClient()
-      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      const { data: { user: supabaseUser } } = await supabase!.auth.getUser()
       if (supabaseUser) {
         user = { id: supabaseUser.id }
       }

@@ -149,10 +149,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Return format required by Alipay
-    return NextResponse.text('success')
+    return new NextResponse('success', {
+      status: 200,
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+    })
   } catch (error: any) {
     console.error('[Alipay Callback] Error:', error)
-    return NextResponse.text('fail', { status: 500 })
+    return new NextResponse('fail', {
+      status: 500,
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+    })
   }
 }
 

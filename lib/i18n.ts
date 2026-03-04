@@ -621,5 +621,6 @@ export const translations = {
 }
 
 export function getTranslation(language: Language, key: keyof typeof translations.en): string {
-  return translations[language][key] || translations.en[key]
+  const current = translations[language] as Record<string, string>
+  return current[key] || translations.en[key]
 }

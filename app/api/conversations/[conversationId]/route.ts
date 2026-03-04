@@ -40,7 +40,7 @@ export async function PATCH(
       }
     } else {
       supabase = dbClient.supabase || await createClient()
-      const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+      const { data: { user: supabaseUser } } = await supabase!.auth.getUser()
       if (supabaseUser) {
         user = { id: supabaseUser.id }
       }
@@ -96,7 +96,7 @@ export async function PATCH(
       }
     } else {
       // Supabase: Check membership in Supabase
-      const { data: membership, error: membershipError } = await supabase
+      const { data: membership, error: membershipError } = await supabase!
         .from('conversation_members')
         .select('conversation_id')
         .eq('conversation_id', conversationId)

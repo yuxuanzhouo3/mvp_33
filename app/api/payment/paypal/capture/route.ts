@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import paypal from '@paypal/checkout-server-sdk'
 
-let paypalClient: paypal.core.PayPalHttpClient | null = null
+let paypalClient: any = null
 
 // Fallback sandbox credentials copied from mvp6 (for local sandbox testing)
 // NOTE: These are PUBLICLY VISIBLE in the mvp6 repository and are for sandbox only.

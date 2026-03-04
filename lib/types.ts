@@ -5,24 +5,30 @@ export interface User {
   email: string
   username: string
   full_name: string
-  avatar_url?: string
+  avatar_url?: string | null
   auth_email?: string | null
   provider?: string | null
   provider_id?: string | null
   wechat_openid?: string | null
   wechat_unionid?: string | null
-  phone?: string
-  department?: string
-  title?: string
-  status: 'online' | 'offline' | 'away' | 'busy'
-  status_message?: string
+  phone?: string | null
+  department?: string | null
+  title?: string | null
+  status?: 'online' | 'offline' | 'away' | 'busy'
+  status_message?: string | null
   region?: 'cn' | 'global' // Registered region (cn = China, global = international)
   country?: string | null // Country code (e.g., 'CN', 'US')
   subscription_type?: 'free' | 'monthly' | 'yearly' | null
   subscription_expires_at?: string | null
   last_seen_at?: string
-  created_at: string
-  updated_at: string
+  // Conversation membership-derived fields (optional for UI convenience)
+  user_id?: string
+  role?: 'owner' | 'admin' | 'member' | 'guest'
+  is_muted?: boolean
+  can_send_messages?: boolean
+  group_nickname?: string
+  created_at?: string
+  updated_at?: string
 }
 
 export interface Workspace {
@@ -30,11 +36,12 @@ export interface Workspace {
   name: string
   logo_url?: string
   domain: string
-  owner_id: string
-  settings: WorkspaceSettings
+  description?: string
+  owner_id?: string
+  settings?: WorkspaceSettings
   invite_code?: string
-  created_at: string
-  updated_at: string
+  created_at?: string
+  updated_at?: string
 }
 
 export interface WorkspaceSettings {
@@ -54,7 +61,7 @@ export interface WorkspaceMember {
 
 export interface Conversation {
   id: string
-  workspace_id: string
+  workspace_id: string | null
   type: 'direct' | 'group' | 'channel'
   name?: string
   description?: string

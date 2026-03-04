@@ -1513,7 +1513,7 @@ function ChatPageContent() {
     
 
     // Load from cache first for instant display (like WeChat)
-    let cachedConversations: ConversationWithDetails[] | null = null
+    let cachedConversations: ConversationWithDetails[] = []
     
     try {
       // Check cache first (unless skipCache is true)
@@ -1525,7 +1525,7 @@ function ChatPageContent() {
           const cacheAge = Date.now() - parseInt(cachedTimestamp, 10)
           if (cacheAge < CACHE_DURATION) {
             try {
-              cachedConversations = JSON.parse(cachedData)
+              cachedConversations = JSON.parse(cachedData) || []
               console.log('📦 Loading conversations from cache for instant display:', cachedConversations.length, 'conversations')
               
               // CRITICAL: Filter out conversations where the other user is not in contacts
@@ -1616,7 +1616,7 @@ function ChatPageContent() {
               }
             } catch (e) {
               console.warn('Failed to parse cached conversations:', e)
-              cachedConversations = null
+              cachedConversations = []
             }
           } else {
             console.log('Cache expired, will load from API')
@@ -1876,9 +1876,9 @@ function ChatPageContent() {
 
                 if (aTime !== bTime) return bTime - aTime
 
-                const aCreated = new Date(a.created_at).getTime()
+                const aCreated = new Date(a.created_at || 0).getTime()
 
-                const bCreated = new Date(b.created_at).getTime()
+                const bCreated = new Date(b.created_at || 0).getTime()
 
                 if (aCreated !== bCreated) return aCreated - bCreated
 
@@ -2292,9 +2292,9 @@ function ChatPageContent() {
 
             // This ensures conversations without messages are still sorted correctly
 
-            const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : new Date(a.created_at).getTime()
+            const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : new Date(a.created_at || 0).getTime()
 
-            const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : new Date(b.created_at).getTime()
+            const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : new Date(b.created_at || 0).getTime()
 
             const timeDiff = bTime - aTime
 
@@ -2549,9 +2549,9 @@ function ChatPageContent() {
 
                 if (aTime !== bTime) return bTime - aTime
 
-                const aCreated = new Date(a.created_at).getTime()
+                const aCreated = new Date(a.created_at || 0).getTime()
 
-                const bCreated = new Date(b.created_at).getTime()
+                const bCreated = new Date(b.created_at || 0).getTime()
 
                 if (aCreated !== bCreated) return aCreated - bCreated
 
@@ -4227,9 +4227,9 @@ function ChatPageContent() {
 
                     if (aTime !== bTime) return bTime - aTime
 
-                    const aCreated = new Date(a.created_at).getTime()
+                    const aCreated = new Date(a.created_at || 0).getTime()
 
-                    const bCreated = new Date(b.created_at).getTime()
+                    const bCreated = new Date(b.created_at || 0).getTime()
 
                     if (aCreated !== bCreated) return aCreated - bCreated
 
@@ -7629,12 +7629,19 @@ function ChatPageContent() {
                 if (conv.id === conversationId) {
                   return {
                     ...conv,
-                    last_message: {
-                      id: updatedMessage.id,
-                      content: getTranslation(language, 'messageRecalled'),
-                      type: updatedMessage.type || conv.last_message?.type || 'text',
-                      created_at: updatedMessage.created_at || conv.last_message?.created_at || conv.created_at,
-                    },
+                      last_message: {
+                        ...(conv.last_message || {}),
+                        id: updatedMessage.id,
+                        conversation_id: updatedMessage.conversation_id || conv.id,
+                        sender_id: updatedMessage.sender_id || conv.last_message?.sender_id || currentUser.id,
+                        content: getTranslation(language, 'messageRecalled'),
+                        type: updatedMessage.type || conv.last_message?.type || 'text',
+                        reactions: updatedMessage.reactions || conv.last_message?.reactions || [],
+                        is_edited: updatedMessage.is_edited ?? conv.last_message?.is_edited ?? false,
+                        is_deleted: updatedMessage.is_deleted ?? conv.last_message?.is_deleted ?? false,
+                        created_at: updatedMessage.created_at || conv.last_message?.created_at || conv.created_at,
+                        updated_at: updatedMessage.updated_at || conv.last_message?.updated_at || conv.updated_at || conv.created_at,
+                      } as Message,
                     // Keep last_message_at unchanged to maintain conversation order
                     last_message_at: conv.last_message_at || updatedMessage.created_at || conv.created_at,
                   }
@@ -8148,7 +8155,7 @@ function ChatPageContent() {
                 <AnnouncementBanner
                   conversationId={displayConversation.id}
                   isAdmin={displayConversation.members?.some(
-                    m => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
+                    (m: any) => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
                   ) || false}
                   onOpenDrawer={() => setAnnouncementDrawerOpen(true)}
                 />
@@ -8195,7 +8202,7 @@ function ChatPageContent() {
                 <AnnouncementsView
                   conversationId={displayConversation.id}
                   isAdmin={displayConversation.members?.some(
-                    m => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
+                    (m: any) => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
                   ) || false}
                 />
               )}
@@ -8204,7 +8211,7 @@ function ChatPageContent() {
                 <FilesView
                   conversationId={displayConversation.id}
                   isAdmin={displayConversation.members?.some(
-                    m => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
+                    (m: any) => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
                   ) || false}
                 />
               )}
@@ -8376,7 +8383,7 @@ function ChatPageContent() {
           onOpenChange={setAnnouncementDrawerOpen}
           conversationId={displayConversation.id}
           isAdmin={displayConversation.members?.some(
-            m => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
+            (m: any) => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'owner')
           ) || false}
         />
       )}

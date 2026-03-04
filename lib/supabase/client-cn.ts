@@ -1,4 +1,4 @@
-import { createBrowserClient } from '@supabase/supabase-js'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 /**
  * China region Supabase client
@@ -12,7 +12,7 @@ export function createCNClient() {
     throw new Error('Missing Supabase environment variables for China region')
   }
 
-  return createBrowserClient(supabaseUrl, supabaseAnonKey)
+  return createSupabaseClient(supabaseUrl, supabaseAnonKey)
 }
 
 

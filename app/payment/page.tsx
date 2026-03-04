@@ -47,7 +47,8 @@ interface PaymentMethod {
 
 export default function PaymentPage() {
   const router = useRouter()
-  const { region, isChina, loading: regionLoading } = useRegion()
+  const { region, isChina } = useRegion()
+  const regionLoading = false
   const { subscription, refresh: refreshSubscription } = useSubscription()
   const { t, language } = useSettings()
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
@@ -340,10 +341,11 @@ export default function PaymentPage() {
   ]
 
   const billingUnit = selectedPlan?.name?.includes('Yearly') ? 'year' : 'month'
+  const subscriptionType = subscription.type || 'free'
   const currentPlanLabel =
-    subscription.type === 'yearly' ? 'Pro Annual' :
-    subscription.type === 'monthly' ? 'Pro Monthly' :
-    subscription.type.charAt(0).toUpperCase() + subscription.type.slice(1)
+    subscriptionType === 'yearly' ? 'Pro Annual' :
+    subscriptionType === 'monthly' ? 'Pro Monthly' :
+    subscriptionType.charAt(0).toUpperCase() + subscriptionType.slice(1)
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl space-y-6">

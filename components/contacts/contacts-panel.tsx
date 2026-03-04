@@ -378,7 +378,7 @@ export function ContactsPanel({
     return acc
   }, {} as Record<string, User[]>)
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status?: string) => {
     switch (status) {
       case 'online': return 'bg-green-500'
       case 'away': return 'bg-yellow-500'
@@ -387,8 +387,8 @@ export function ContactsPanel({
     }
   }
 
-  const getStatusText = (status: string) => {
-    const statusKey = status as 'online' | 'away' | 'busy' | 'offline'
+  const getStatusText = (status?: string) => {
+    const statusKey = (status || 'offline') as 'online' | 'away' | 'busy' | 'offline'
     return t(statusKey)
   }
 
@@ -649,7 +649,7 @@ export function ContactsPanel({
                   </h2>
                   <p className="text-muted-foreground mb-2">{selectedUser.title}</p>
                   <Badge variant="secondary">
-                    {getStatusText(selectedUser.status)}
+                    {getStatusText(selectedUser.status || 'offline')}
                   </Badge>
                 </div>
               </div>

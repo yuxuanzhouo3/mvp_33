@@ -29,13 +29,16 @@ export async function getGroupMembers(groupId: string): Promise<User[]> {
 
   if (error || !data) return []
 
-  const result = data.map(m => ({
-    ...m.users,
-    role: m.role,
-    is_muted: m.is_muted,
-    can_send_messages: m.can_send_messages,
-    group_nickname: m.group_nickname
-  })) as User[]
+  const result = data.map((m: any) => {
+    const user = Array.isArray(m.users) ? m.users[0] : m.users
+    return {
+      ...(user || {}),
+      role: m.role,
+      is_muted: m.is_muted,
+      can_send_messages: m.can_send_messages,
+      group_nickname: m.group_nickname,
+    }
+  }) as User[]
 
   console.log('[getGroupMembers] 返回成员数量', { count: result.length })
   return result

@@ -324,8 +324,8 @@ export async function GET(request: NextRequest) {
           const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0
           const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
           if (aTime !== bTime) return bTime - aTime
-          const aCreated = new Date(a.created_at).getTime()
-          const bCreated = new Date(b.created_at).getTime()
+          const aCreated = new Date(a.created_at || 0).getTime()
+          const bCreated = new Date(b.created_at || 0).getTime()
           if (aCreated !== bCreated) return aCreated - bCreated
           return a.id.localeCompare(b.id) // Deterministic by ID
         })
@@ -838,6 +838,7 @@ export async function POST(request: NextRequest) {
               is_private: conv.is_private,
               created_by: conv.created_by,
               created_at: conv.created_at,
+              updated_at: conv.updated_at || conv.created_at,
               last_message_at: conv.last_message_at || conv.created_at,
               members: members as any,
               unread_count: 0,

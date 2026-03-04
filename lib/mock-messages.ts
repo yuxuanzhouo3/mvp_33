@@ -350,6 +350,9 @@ export const mockMessageService = {
     const message = mockMessageService.getMessageById(messageId)
     if (!message) return null
 
+    if (!message.reactions) {
+      message.reactions = []
+    }
     const existingReaction = message.reactions.find(r => r.emoji === emoji)
     if (existingReaction) {
       if (!existingReaction.user_ids.includes(userId)) {
@@ -372,6 +375,9 @@ export const mockMessageService = {
     const message = mockMessageService.getMessageById(messageId)
     if (!message) return null
 
+    if (!message.reactions) {
+      message.reactions = []
+    }
     const reaction = message.reactions.find(r => r.emoji === emoji)
     if (reaction) {
       reaction.user_ids = reaction.user_ids.filter(id => id !== userId)

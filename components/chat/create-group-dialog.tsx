@@ -170,7 +170,7 @@ export function CreateGroupDialog({
                     onCheckedChange={() => toggleUser(contact)}
                   />
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src={contact.avatar_url} />
+                    <AvatarImage src={contact.avatar_url || undefined} />
                     <AvatarFallback>{contact.full_name[0]}</AvatarFallback>
                   </Avatar>
                   <span>{contact.full_name}</span>
@@ -188,7 +188,7 @@ export function CreateGroupDialog({
             <div className="flex gap-2 flex-wrap">
               {selectedUsers.map(user => (
                 <Avatar key={user.id} className="h-8 w-8">
-                  <AvatarImage src={user.avatar_url} />
+                  <AvatarImage src={user.avatar_url || undefined} />
                   <AvatarFallback>{user.full_name[0]}</AvatarFallback>
                 </Avatar>
               ))}

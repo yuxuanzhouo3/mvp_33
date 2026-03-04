@@ -91,7 +91,7 @@ export async function updateUserSubscriptionAfterPayment(
             } else {
               currentExpiresAt = new Date(user.subscription_expires_at)
             }
-            if (isNaN(currentExpiresAt.getTime())) {
+            if (!currentExpiresAt || isNaN(currentExpiresAt.getTime())) {
               currentExpiresAt = null
             }
           }
@@ -103,9 +103,9 @@ export async function updateUserSubscriptionAfterPayment(
           }
           
           // Calculate new expiration time
-          const isActive = currentExpiresAt && daysRemaining > 0
+          const isActive = !!currentExpiresAt && daysRemaining > 0
           
-          if (isActive) {
+          if (currentExpiresAt && isActive) {
             // Accumulate days if membership is still active
             if (subscriptionType === 'monthly') {
               expiresAt = new Date(currentExpiresAt.getTime() + 30 * 24 * 60 * 60 * 1000)

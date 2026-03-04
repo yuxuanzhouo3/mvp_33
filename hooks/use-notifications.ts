@@ -3,7 +3,7 @@
 import { useEffect, useCallback, useRef } from 'react'
 
 export function useNotifications(userId?: string) {
-  const intervalRef = useRef<NodeJS.Timeout>()
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const checkNotifications = useCallback(async () => {
     if (!userId) return

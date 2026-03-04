@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCloudBaseDb } from '@/lib/cloudbase/client'
 import { IS_DOMESTIC_VERSION } from '@/config'
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     let user: any = null
 

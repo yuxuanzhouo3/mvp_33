@@ -212,7 +212,7 @@ export default function LoginPageClient({ initialStep = 'login' }: LoginPageClie
     if (user && workspace) {
       // User is already logged in with workspace, redirect to chat
       router.replace('/chat')
-    } else if (user && initialStepSetRef.current && step !== 'workspace') {
+    } else if (user && initialStepSetRef.current) {
       // User is logged in but no workspace selected
       // Only update if initial step has been set to avoid unnecessary updates
       // And only if we're not already on workspace step

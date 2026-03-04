@@ -29,6 +29,7 @@ export async function createConversationCN(input: CreateConversationInput): Prom
     is_private: input.isPrivate ?? (input.type === 'direct'),
     created_by: input.createdBy,
     created_at: now,
+    updated_at: now,
     last_message_at: now,
     region: 'cn',
   }
@@ -62,6 +63,7 @@ export async function createConversationCN(input: CreateConversationInput): Prom
     is_private: convDoc.is_private,
     created_by: input.createdBy,
     created_at: now,
+    updated_at: now,
     last_message_at: now,
     members: [], // filled by API when needed
     unread_count: 0,
@@ -166,6 +168,7 @@ export async function getUserConversationsCN(userId: string): Promise<Conversati
     is_private: c.is_private ?? (c.type === 'direct'),
     created_by: c.created_by,
     created_at: c.created_at,
+    updated_at: c.updated_at || c.created_at,
     last_message_at: (lastMessageByConv.get(c._id)?.created_at as string) || c.last_message_at || c.created_at,
     members: (membersByConv.get(c._id) || []).map((m: any) => ({
       id: m.user_id,

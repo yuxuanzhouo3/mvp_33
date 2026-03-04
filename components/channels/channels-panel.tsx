@@ -74,7 +74,7 @@ export function ChannelsPanel({
   const publicChannels = filteredChannels.filter(c => !c.is_private)
   const privateChannels = filteredChannels.filter(c => c.is_private)
 
-  const getChannelIcon = (isPrivate: boolean) => {
+  const getChannelIcon = (isPrivate?: boolean) => {
     return isPrivate ? <Lock className="h-4 w-4" /> : <Hash className="h-4 w-4" />
   }
 

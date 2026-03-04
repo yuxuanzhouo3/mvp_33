@@ -225,7 +225,7 @@ export class CloudBaseChatService implements IChatService {
       result.sort((a, b) => {
         const aTime = a.last_message_at || a.created_at
         const bTime = b.last_message_at || b.created_at
-        return new Date(bTime).getTime() - new Date(aTime).getTime()
+        return new Date(bTime || 0).getTime() - new Date(aTime || 0).getTime()
       })
 
       return result

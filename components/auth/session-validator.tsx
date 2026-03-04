@@ -7,7 +7,7 @@ import { IS_DOMESTIC_VERSION } from '@/config'
 
 export function SessionValidator() {
   const router = useRouter()
-  const checkIntervalRef = useRef<NodeJS.Timeout>()
+  const checkIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     // Skip for domestic version (CloudBase)

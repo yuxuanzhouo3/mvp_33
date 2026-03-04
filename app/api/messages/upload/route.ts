@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       }
     } else {
       supabase = dbClient.supabase || await createClient()
-      const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
+      const { data: { user: supabaseUser }, error: authError } = await supabase!.auth.getUser()
       if (authError) {
         console.error('[FILE UPLOAD] 用户认证失败:', authError)
       }

@@ -128,7 +128,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         manageNotificationPreferences: 'Manage your notification preferences',
         notificationSettingsComingSoon: 'Notification settings coming soon...',
         // Profile page
-        profileSettings: 'Profile Settings',
         editWorkInformation: 'Edit your work information and profile',
         profilePicture: 'Profile Picture',
         uploadProfilePicture: 'Upload a profile picture to personalize your account',
@@ -234,7 +233,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         workspaceSettings: '工作区设置',
         invitePeople: '邀请成员',
         signOut: '退出登录',
-        profileSettings: '个人设置',
         preferences: '偏好设置',
         notifications: '通知',
         language: '语言',

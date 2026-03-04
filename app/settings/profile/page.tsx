@@ -200,7 +200,7 @@ export default function ProfileSettingsPage() {
         // Update localStorage first (this is the source of truth)
         const currentUser = mockAuth.getCurrentUser()
         if (currentUser) {
-          const updatedUser = { ...currentUser, avatar_url: null }
+          const updatedUser = { ...currentUser, avatar_url: undefined }
           mockAuth.setCurrentUser(updatedUser)
         }
 
@@ -210,7 +210,7 @@ export default function ProfileSettingsPage() {
         loadingImageRef.current = null
         
         // Update profile state
-        setProfile(prev => ({ ...prev, avatar_url: null }))
+        setProfile(prev => ({ ...prev, avatar_url: undefined }))
         
         // Show success toast with auto-dismiss
         const toastId = toast({
