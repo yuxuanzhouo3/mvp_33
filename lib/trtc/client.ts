@@ -426,7 +426,7 @@ export class TrtcClient {
     }
   }
 
-  async setVideoEnabled(enabled: boolean): Promise<void> {
+  async setVideoEnabled(enabled: boolean, view?: HTMLElement | null): Promise<void> {
     if (!this.trtc) {
       this.localVideoTrack = null
       return
@@ -443,7 +443,7 @@ export class TrtcClient {
         return
       }
 
-      await this.startLocalVideo()
+      await this.startLocalVideo(view)
     } catch (error) {
       console.warn('Failed to set local video state:', error)
       if (!enabled) {

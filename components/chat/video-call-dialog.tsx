@@ -19,6 +19,12 @@ import {
   releaseCallUiLock,
   updateCallUiLock,
 } from '@/lib/call/call-ui-lock'
+import {
+  pauseIncomingRingtone,
+  resumeIncomingRingtone,
+  startIncomingRingtone,
+  stopIncomingRingtone,
+} from '@/lib/call/incoming-ringtone'
 
 // Generate a short channel name that fits call room requirements.
 function generateChannelName(userId1: string, userId2: string, conversationId?: string): string {
@@ -87,16 +93,20 @@ export function VideoCallDialog({
   const [callStatus, setCallStatus] = useState<'calling' | 'ringing' | 'connected' | 'ended'>(isIncoming ? 'ringing' : 'calling')
   const [remoteUserJoined, setRemoteUserJoined] = useState(false) // 跟踪远程用户是否已加入
   const [hasRemoteVideo, setHasRemoteVideo] = useState(false) // 跟踪远程视频是否已加载
+  const [hasLocalPreview, setHasLocalPreview] = useState(false)
   const callStartTimeRef = useRef<number | null>(null)
   
   const agoraClientRef = useRef<TrtcClient | null>(null)
   const localVideoRef = useRef<HTMLDivElement>(null)
+  const localPreviewVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLDivElement>(null)
+  const preCallPreviewStreamRef = useRef<MediaStream | null>(null)
   const callMessageIdRef = useRef<string | undefined>(callMessageId)
   const uniqueUidRef = useRef<string | null>(null) // Store unique UID for this call session
   const endingCallRef = useRef(false)
   const callStatusRef = useRef(callStatus)
   const lockTokenRef = useRef<string>(createCallLockToken('video'))
+  const ringtoneOwnerRef = useRef<string>(createCallLockToken('ringtone_video'))
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const outgoingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const incomingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -137,6 +147,65 @@ export function VideoCallDialog({
   useEffect(() => {
     callStatusRef.current = callStatus
   }, [callStatus])
+
+  const shouldPlayRingtone =
+    open &&
+    (
+      (isIncoming && callStatus === 'ringing') ||
+      (!isIncoming && callStatus === 'calling')
+    )
+
+  useEffect(() => {
+    const owner = ringtoneOwnerRef.current
+    if (shouldPlayRingtone) {
+      startIncomingRingtone(owner)
+    } else {
+      stopIncomingRingtone(owner)
+    }
+    return () => {
+      stopIncomingRingtone(owner)
+    }
+  }, [shouldPlayRingtone])
+
+  useEffect(() => {
+    if (!shouldPlayRingtone || typeof document === 'undefined') return
+    const owner = ringtoneOwnerRef.current
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        resumeIncomingRingtone(owner)
+      } else {
+        pauseIncomingRingtone(owner)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [shouldPlayRingtone])
+
+  // Outgoing dialing stage: show local camera preview before remote answers.
+  useEffect(() => {
+    if (!open || isIncoming) {
+      stopPreCallPreview()
+      return
+    }
+
+    if (callStatus === 'calling') {
+      void startPreCallPreview()
+      return
+    }
+
+    stopPreCallPreview()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isIncoming, callStatus])
+
+  useEffect(() => {
+    if (!open) return
+    if (!preCallPreviewStreamRef.current) return
+    if (callStatus !== 'calling') return
+    setHasLocalPreview(attachPreCallPreview())
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, callStatus])
 
   // Prevent stale "ended" dialog from blocking the next incoming invite.
   useEffect(() => {
@@ -208,6 +277,77 @@ export function VideoCallDialog({
     }
   }
 
+  const attachPreCallPreview = () => {
+    const stream = preCallPreviewStreamRef.current
+    const videoEl = localPreviewVideoRef.current
+    if (!stream || !videoEl) return false
+
+    try {
+      if (videoEl.srcObject !== stream) {
+        videoEl.srcObject = stream
+      }
+      const playPromise = videoEl.play()
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {})
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const stopPreCallPreview = () => {
+    const stream = preCallPreviewStreamRef.current
+    if (stream) {
+      stream.getTracks().forEach((track) => {
+        try {
+          track.stop()
+        } catch {}
+      })
+      preCallPreviewStreamRef.current = null
+    }
+
+    const videoEl = localPreviewVideoRef.current
+    if (videoEl) {
+      try {
+        videoEl.pause()
+      } catch {}
+      try {
+        videoEl.srcObject = null
+      } catch {}
+    }
+    setHasLocalPreview(false)
+  }
+
+  const startPreCallPreview = async () => {
+    if (typeof window === 'undefined') return
+    if (!navigator.mediaDevices?.getUserMedia) return
+
+    if (preCallPreviewStreamRef.current) {
+      setHasLocalPreview(attachPreCallPreview())
+      return
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      })
+
+      // 如果状态已变化（如通话已结束/已接听），立即释放预览流
+      if (callStatusRef.current !== 'calling') {
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
+
+      preCallPreviewStreamRef.current = stream
+      setHasLocalPreview(attachPreCallPreview())
+    } catch (error) {
+      console.warn('Failed to start pre-call preview:', error)
+      setHasLocalPreview(false)
+    }
+  }
+
   useEffect(() => {
     if (!open) return
 
@@ -276,6 +416,7 @@ export function VideoCallDialog({
         agoraClientRef.current.leave().catch(console.error)
         agoraClientRef.current = null
       }
+      stopPreCallPreview()
       outgoingInviteStartedRef.current = false
       callSessionIdRef.current = ''
       uniqueUidRef.current = null
@@ -837,6 +978,9 @@ export function VideoCallDialog({
 
   const initializeCall = async (channelName?: string) => {
     try {
+      // Release pre-call camera preview before joining TRTC to avoid camera lock conflicts.
+      stopPreCallPreview()
+
       // 检测 HTTPS 或 localhost（浏览器安全要求）
       const isSecure = window.location.protocol === 'https:' || 
                        window.location.hostname === 'localhost' || 
@@ -1745,7 +1889,7 @@ export function VideoCallDialog({
       // Small delay to ensure DOM is ready
       const timer = setTimeout(() => {
         // Try to play local video if ref is available
-        if (localVideoRef.current) {
+        if (isVideoOn && localVideoRef.current) {
           const localVideoTrack = agoraClientRef.current?.getLocalVideoTrack()
           if (localVideoTrack) {
             try {
@@ -1917,7 +2061,7 @@ export function VideoCallDialog({
 
       return () => clearTimeout(timer)
     }
-  }, [callStatus])
+  }, [callStatus, isVideoOn])
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -1928,6 +2072,7 @@ export function VideoCallDialog({
   const handleEndCall = async () => {
     if (endingCallRef.current) return
     endingCallRef.current = true
+    stopPreCallPreview()
 
     // 保存当前状态，因为后面会设置为 ended
     const currentStatus = callStatus
@@ -2039,11 +2184,51 @@ export function VideoCallDialog({
     }
   }
 
+  const playLocalPreview = () => {
+    const client = agoraClientRef.current
+    const view = localVideoRef.current
+    if (!client || !view) return false
+    const track = client.getLocalVideoTrack()
+    if (!track) return false
+    try {
+      if (view.firstChild) {
+        view.innerHTML = ''
+      }
+      track.play(view)
+      return true
+    } catch (error) {
+      console.warn('Failed to play local preview:', error)
+      return false
+    }
+  }
+
   const handleToggleVideo = async () => {
     if (agoraClientRef.current) {
       const newVideoOn = !isVideoOn
-      await agoraClientRef.current.setVideoEnabled(newVideoOn)
-      setIsVideoOn(newVideoOn)
+      try {
+        await agoraClientRef.current.setVideoEnabled(newVideoOn, newVideoOn ? localVideoRef.current : undefined)
+        setIsVideoOn(newVideoOn)
+
+        if (!newVideoOn) {
+          if (localVideoRef.current?.firstChild) {
+            localVideoRef.current.innerHTML = ''
+          }
+          return
+        }
+
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            if (!playLocalPreview()) {
+              console.warn('Local preview not ready yet after toggling camera on.')
+            }
+          }, 80)
+        })
+      } catch (error) {
+        console.error('Failed to toggle local video:', error)
+        if (newVideoOn) {
+          setIsVideoOn(false)
+        }
+      }
     }
   }
 
@@ -2089,6 +2274,17 @@ export function VideoCallDialog({
     return 'Call ended'
   }
 
+  const statusBadgeClass = cn(
+    'inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium backdrop-blur-md',
+    callStatus === 'connected' && 'border-emerald-300/40 bg-emerald-400/20 text-emerald-100',
+    callStatus === 'calling' && 'border-sky-300/35 bg-sky-400/20 text-sky-100',
+    callStatus === 'ringing' && 'border-amber-300/40 bg-amber-400/25 text-amber-50',
+    callStatus === 'ended' && 'border-slate-300/30 bg-slate-500/25 text-slate-100',
+  )
+  const showConnectedLocalVideo = callStatus === 'connected' && isVideoOn
+  const showPreCallLocalVideo = callStatus === 'calling' && hasLocalPreview
+  const showLocalPlaceholder = callStatus === 'connected' ? !isVideoOn : !showPreCallLocalVideo
+
   // 外部关闭动作统一视为“挂断/取消”
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen && callStatusRef.current !== 'ended') {
@@ -2100,8 +2296,8 @@ export function VideoCallDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent 
-        className="sm:max-w-5xl h-[640px] p-0 border-0 overflow-hidden shadow-2xl"
+      <DialogContent
+        className="h-[670px] overflow-hidden border-0 p-0 shadow-none sm:max-w-5xl"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
@@ -2110,141 +2306,195 @@ export function VideoCallDialog({
             {isGroup ? `Group video call with ${groupName || 'group'}` : `Video call with ${displayName}`}
           </DialogTitle>
         </DialogHeader>
-        <div className="relative h-full overflow-hidden rounded-2xl bg-[#0B1119]">
-          {/* Main video area – unified layout for all states (calling / ringing / connected) */}
-          <div className="h-full flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-              <div className="w-full h-full relative">
-                {/* Remote video feed */}
-                <div className="relative flex h-full w-full items-center justify-center bg-gradient-to-br from-[#0F2A4A] via-[#1D355A] to-[#2B1A4F]">
-                  <div 
-                    ref={remoteVideoRef} 
-                    className="w-full h-full flex items-center justify-center"
-                    style={{ minHeight: '100%' }}
-                  />
-                  {/* 如果没有远程视频，显示B的头像（覆盖在 video 容器上方，但不阻止底部按钮点击） */}
-                  {!hasRemoteVideo && (
-                    <div className="absolute inset-0 z-[1] flex items-center justify-center bg-gradient-to-br from-[#0F2A4A]/90 via-[#1D355A]/80 to-[#2B1A4F]/90 text-center text-white backdrop-blur-sm pointer-events-none">
-                      <div className="pointer-events-auto">
-                        <Avatar className="h-32 w-32 mx-auto mb-4">
-                          <AvatarImage src={actualRecipient.avatar_url || undefined} />
-                          <AvatarFallback
-                            className="text-3xl bg-gradient-to-br from-blue-500 to-purple-500"
-                            name={actualRecipient.full_name || actualRecipient.email || 'User'}
-                          >
-                            {(actualRecipient.full_name || actualRecipient.email || 'User')
-                              .split(' ')
-                              .map((n) => n[0])
-                              .join('')
-                              .toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <h3 className="text-xl font-semibold">{displayName}</h3>
-                        <p className="text-gray-300 text-sm mt-2">
-                          {remoteUserJoined 
-                            ? 'Video off' // B已加入但没有开启视频
-                            : callStatus === 'connected' 
-                              ? 'Waiting for other user...' 
-                              : callStatus === 'ringing' 
-                                ? 'Ringing...' 
-                                : 'Calling...'}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
+        <div className="relative h-full overflow-hidden rounded-[28px] border border-white/10 bg-[#050b16] text-white shadow-[0_28px_72px_rgba(2,8,23,0.78)]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_100%_0%,rgba(59,130,246,0.22),transparent_62%),radial-gradient(95%_75%_at_0%_100%,rgba(16,185,129,0.14),transparent_64%)]" />
+          <div className="pointer-events-none absolute inset-0 opacity-30 [background:linear-gradient(125deg,rgba(255,255,255,0.08)_0%,transparent_30%,transparent_70%,rgba(255,255,255,0.06)_100%)]" />
 
-                {/* Self view (local video) */}
-                <div className="absolute right-4 top-4 z-10 h-36 w-48 overflow-hidden rounded-xl border border-white/20 bg-slate-900/70 shadow-xl backdrop-blur">
-                  {callStatus === 'connected' && isVideoOn ? (
-                    <div 
-                      ref={localVideoRef} 
-                      className="w-full h-full flex items-center justify-center"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
-                      <span className="text-white text-sm">
-                        {!isVideoOn ? 'Video Off' : 'You'}
-                      </span>
-                    </div>
-                  )}
+          <div className="relative flex h-full flex-col">
+            <div className="absolute left-4 right-4 top-4 z-30 flex items-start justify-between gap-3">
+              <div className="rounded-2xl border border-white/20 bg-black/35 px-4 py-2 backdrop-blur-md">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-white/80">
+                    Video
+                  </span>
+                  <span className={statusBadgeClass}>
+                    {callStatus === 'connected'
+                      ? (remoteUserJoined ? 'In Call' : 'Connecting')
+                      : callStatus === 'ringing'
+                        ? 'Incoming'
+                        : callStatus === 'calling'
+                          ? 'Outgoing'
+                          : 'Ended'}
+                  </span>
                 </div>
-
-                {/* Call info overlay */}
-                <div className="absolute left-4 top-4 rounded-xl border border-white/15 bg-black/45 px-4 py-2 backdrop-blur-md">
-                  <div className="text-white font-semibold">{displayName}</div>
-                  <div className="text-sm text-gray-300">{getStatusText()}</div>
-                </div>
+                <div className="mt-2 text-sm font-semibold">{displayName}</div>
+                <div className="text-xs text-white/70">{getStatusText()}</div>
               </div>
-          </div>
 
-          {callStatus !== 'ended' && (
-            <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-6">
-              {callStatus === 'ringing' && isIncoming ? (
-                <div className="flex items-center justify-center gap-10">
-                  <Button
-                    size="icon"
-                    variant="destructive"
-                    className="h-16 w-16 rounded-full shadow-lg shadow-red-500/40"
-                    onClick={() => {
-                      void handleRejectCall()
-                    }}
-                  >
-                    <Phone className="h-6 w-6 rotate-90" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="default"
-                    className="h-16 w-16 rounded-full bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/40"
-                    onClick={handleAnswerCall}
-                  >
-                    <Phone className="h-6 w-6" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center gap-4">
-                  {callStatus === 'connected' && (
-                    <>
-                      <Button
-                        size="icon"
-                        variant={isMuted ? 'destructive' : 'secondary'}
-                        className="h-14 w-14 rounded-full border-white/15 bg-white/10 text-white hover:bg-white/20"
-                        onClick={handleToggleMute}
-                      >
-                        {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-                      </Button>
-
-                      <Button
-                        size="icon"
-                        variant={isVideoOn ? 'secondary' : 'destructive'}
-                        className="h-14 w-14 rounded-full border-white/15 bg-white/10 text-white hover:bg-white/20"
-                        onClick={handleToggleVideo}
-                      >
-                        {isVideoOn ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
-                      </Button>
-
-                      <Button
-                        size="icon"
-                        variant={isScreenSharing ? 'default' : 'secondary'}
-                        className="h-14 w-14 rounded-full border-white/15 bg-white/10 text-white hover:bg-white/20"
-                        onClick={() => setIsScreenSharing(!isScreenSharing)}
-                      >
-                        <Monitor className="h-6 w-6" />
-                      </Button>
-                    </>
-                  )}
-
-                  <Button
-                    size="icon"
-                    variant="destructive"
-                    className="h-16 w-16 rounded-full shadow-lg shadow-red-500/40"
-                    onClick={handleEndCall}
-                  >
-                    <Phone className="h-6 w-6 rotate-[135deg]" />
-                  </Button>
+              {isGroup && (
+                <div className="rounded-2xl border border-white/20 bg-black/35 px-3 py-2 text-xs text-white/80 backdrop-blur-md">
+                  {displayMembers.length} participants
                 </div>
               )}
             </div>
-          )}
+
+            {/* Main video area – unified layout for all states (calling / ringing / connected) */}
+            <div className="relative h-full w-full">
+              {/* Remote video feed */}
+              <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-gradient-to-br from-[#092346] via-[#12345c] to-[#1f1b4b]">
+                <div
+                  ref={remoteVideoRef}
+                  className="h-full w-full"
+                  style={{ minHeight: '100%' }}
+                />
+                {/* 如果没有远程视频，显示B的头像（覆盖在 video 容器上方，但不阻止底部按钮点击） */}
+                {!hasRemoteVideo && (
+                  <div className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center bg-gradient-to-br from-[#0F2A4A]/90 via-[#1D355A]/80 to-[#2B1A4F]/90 text-center text-white backdrop-blur-sm">
+                    <div className="pointer-events-auto">
+                      <Avatar className="mx-auto mb-4 h-32 w-32 border-4 border-white/20 shadow-2xl shadow-black/45">
+                        <AvatarImage src={actualRecipient.avatar_url || undefined} />
+                        <AvatarFallback
+                          className="bg-gradient-to-br from-sky-500 to-indigo-600 text-3xl"
+                          name={actualRecipient.full_name || actualRecipient.email || 'User'}
+                        >
+                          {(actualRecipient.full_name || actualRecipient.email || 'User')
+                            .split(' ')
+                            .map((n) => n[0])
+                            .join('')
+                            .toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <h3 className="text-xl font-semibold">{displayName}</h3>
+                      <p className="mt-2 text-sm text-gray-200">
+                        {remoteUserJoined
+                          ? 'Video off'
+                          : callStatus === 'connected'
+                            ? 'Waiting for other user...'
+                            : callStatus === 'ringing'
+                              ? 'Ringing...'
+                              : 'Calling...'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Self view (local video) */}
+              <div className="absolute right-4 top-4 z-20 h-40 w-56 overflow-hidden rounded-2xl border border-white/20 bg-slate-900/75 shadow-2xl shadow-black/50 backdrop-blur-xl">
+                <div className="absolute left-2 top-2 z-10 rounded-md bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
+                  Local video
+                </div>
+                <video
+                  ref={localPreviewVideoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className={cn(
+                    'absolute inset-0 h-full w-full object-cover transition-opacity duration-200',
+                    showPreCallLocalVideo ? 'opacity-100' : 'opacity-0',
+                  )}
+                />
+                <div
+                  ref={localVideoRef}
+                  className={cn(
+                    'absolute inset-0 h-full w-full bg-black/20 transition-opacity duration-200',
+                    showConnectedLocalVideo ? 'opacity-100' : 'opacity-0',
+                  )}
+                />
+                {showLocalPlaceholder && (
+                  <div className="absolute inset-0 flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-700 to-slate-900">
+                    <span className="text-sm text-white/90">
+                      {!isVideoOn ? 'Video Off' : (callStatus === 'calling' ? 'Opening camera...' : 'You')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {callStatus !== 'ended' && (
+              <div className="absolute bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-black/85 via-black/45 to-transparent p-5 sm:p-6">
+                {callStatus === 'ringing' && isIncoming ? (
+                  <div className="flex items-center justify-center gap-8">
+                    <div className="flex flex-col items-center gap-2">
+                      <Button
+                        size="icon"
+                        variant="destructive"
+                        className="h-16 w-16 rounded-full shadow-[0_14px_26px_rgba(239,68,68,0.45)]"
+                        onClick={() => {
+                          void handleRejectCall()
+                        }}
+                      >
+                        <Phone className="h-6 w-6 rotate-90" />
+                      </Button>
+                      <span className="text-xs text-white/70">Decline</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-2">
+                      <Button
+                        size="icon"
+                        variant="default"
+                        className="h-16 w-16 rounded-full border border-emerald-200/40 bg-emerald-500 hover:bg-emerald-600 shadow-[0_14px_26px_rgba(16,185,129,0.45)]"
+                        onClick={handleAnswerCall}
+                      >
+                        <Phone className="h-6 w-6" />
+                      </Button>
+                      <span className="text-xs text-white/80">Answer</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mx-auto flex max-w-[430px] items-center justify-center gap-4 rounded-2xl border border-white/15 bg-white/[0.1] px-5 py-4 backdrop-blur-xl">
+                    {callStatus === 'connected' && (
+                      <>
+                        <Button
+                          size="icon"
+                          variant={isMuted ? 'destructive' : 'secondary'}
+                          className={cn(
+                            'h-14 w-14 rounded-full border border-white/25 bg-white/10 text-white hover:bg-white/20',
+                            isMuted && 'shadow-[0_10px_20px_rgba(239,68,68,0.35)]',
+                          )}
+                          onClick={handleToggleMute}
+                        >
+                          {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                        </Button>
+
+                        <Button
+                          size="icon"
+                          variant={isVideoOn ? 'secondary' : 'destructive'}
+                          className={cn(
+                            'h-14 w-14 rounded-full border border-white/25 bg-white/10 text-white hover:bg-white/20',
+                            !isVideoOn && 'shadow-[0_10px_20px_rgba(239,68,68,0.35)]',
+                          )}
+                          onClick={handleToggleVideo}
+                        >
+                          {isVideoOn ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
+                        </Button>
+
+                        <Button
+                          size="icon"
+                          variant={isScreenSharing ? 'default' : 'secondary'}
+                          className={cn(
+                            'h-14 w-14 rounded-full border border-white/25 bg-white/10 text-white hover:bg-white/20',
+                            isScreenSharing && 'border-sky-300/40 bg-sky-500/30',
+                          )}
+                          onClick={() => setIsScreenSharing(!isScreenSharing)}
+                        >
+                          <Monitor className="h-6 w-6" />
+                        </Button>
+                      </>
+                    )}
+
+                    <Button
+                      size="icon"
+                      variant="destructive"
+                      className="h-16 w-16 rounded-full shadow-[0_14px_26px_rgba(239,68,68,0.45)]"
+                      onClick={handleEndCall}
+                    >
+                      <Phone className="h-6 w-6 rotate-[135deg]" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

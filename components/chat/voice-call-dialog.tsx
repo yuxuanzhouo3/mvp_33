@@ -19,6 +19,12 @@ import {
   releaseCallUiLock,
   updateCallUiLock,
 } from '@/lib/call/call-ui-lock'
+import {
+  pauseIncomingRingtone,
+  resumeIncomingRingtone,
+  startIncomingRingtone,
+  stopIncomingRingtone,
+} from '@/lib/call/incoming-ringtone'
 
 // Generate a short channel name that fits call room requirements.
 function generateChannelName(userId1: string, userId2: string, conversationId?: string): string {
@@ -93,6 +99,7 @@ export function VoiceCallDialog({
   const endingCallRef = useRef(false)
   const callStatusRef = useRef(callStatus)
   const lockTokenRef = useRef<string>(createCallLockToken('voice'))
+  const ringtoneOwnerRef = useRef<string>(createCallLockToken('ringtone_voice'))
   const outgoingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const incomingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const outgoingInviteStartedRef = useRef(false)
@@ -132,6 +139,41 @@ export function VoiceCallDialog({
   useEffect(() => {
     callStatusRef.current = callStatus
   }, [callStatus])
+
+  const shouldPlayRingtone =
+    open &&
+    (
+      (isIncoming && callStatus === 'ringing') ||
+      (!isIncoming && callStatus === 'calling')
+    )
+
+  useEffect(() => {
+    const owner = ringtoneOwnerRef.current
+    if (shouldPlayRingtone) {
+      startIncomingRingtone(owner)
+    } else {
+      stopIncomingRingtone(owner)
+    }
+    return () => {
+      stopIncomingRingtone(owner)
+    }
+  }, [shouldPlayRingtone])
+
+  useEffect(() => {
+    if (!shouldPlayRingtone || typeof document === 'undefined') return
+    const owner = ringtoneOwnerRef.current
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        resumeIncomingRingtone(owner)
+      } else {
+        pauseIncomingRingtone(owner)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [shouldPlayRingtone])
 
   // Prevent stale "ended" dialog from blocking the next incoming invite.
   useEffect(() => {
@@ -979,6 +1021,14 @@ export function VoiceCallDialog({
     return 'Call ended'
   }
 
+  const statusBadgeClass = cn(
+    'inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium backdrop-blur-md',
+    callStatus === 'connected' && 'border-emerald-300/40 bg-emerald-400/20 text-emerald-100',
+    callStatus === 'calling' && 'border-sky-300/35 bg-sky-400/20 text-sky-100',
+    callStatus === 'ringing' && 'border-amber-300/40 bg-amber-400/25 text-amber-50',
+    callStatus === 'ended' && 'border-slate-300/30 bg-slate-500/25 text-slate-100',
+  )
+
   // 外部关闭动作统一视为“挂断/取消”
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen && callStatusRef.current !== 'ended') {
@@ -990,8 +1040,8 @@ export function VoiceCallDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent 
-        className="sm:max-w-sm p-0 border-0 bg-transparent shadow-none"
+      <DialogContent
+        className="sm:max-w-md border-0 bg-transparent p-0 shadow-none"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
@@ -1001,86 +1051,121 @@ export function VoiceCallDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white">
-          <div className="pointer-events-none absolute -left-10 -top-10 h-36 w-36 rounded-full bg-emerald-400/20 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-12 -right-10 h-40 w-40 rounded-full bg-blue-500/20 blur-3xl" />
+        <div className="relative overflow-hidden rounded-[30px] border border-white/10 bg-[#050b16] text-white shadow-[0_28px_70px_rgba(2,8,23,0.75)]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_100%_0%,rgba(56,189,248,0.23),transparent_62%),radial-gradient(90%_80%_at_0%_100%,rgba(16,185,129,0.18),transparent_64%)]" />
+          <div className="pointer-events-none absolute inset-0 opacity-30 [background:linear-gradient(120deg,rgba(255,255,255,0.08)_0%,transparent_26%,transparent_74%,rgba(255,255,255,0.06)_100%)]" />
 
-          <div className="relative flex min-h-[520px] flex-col items-center px-6 pb-7 pt-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-white/60">Voice Call</p>
+          <div className="relative flex min-h-[560px] flex-col px-6 pb-6 pt-5">
+            <div className="flex items-center justify-between">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-white/85">
+                Voice
+              </div>
+              <div className={statusBadgeClass}>
+                {callStatus === 'connected'
+                  ? (remoteUserJoined ? 'In Call' : 'Connecting')
+                  : callStatus === 'ringing'
+                    ? 'Incoming'
+                    : callStatus === 'calling'
+                      ? 'Outgoing'
+                      : 'Ended'}
+              </div>
+            </div>
 
-            {isGroup ? (
-              <div className="mt-8 flex justify-center -space-x-4">
-                {displayMembers.slice(0, 3).map((member) => (
-                  <Avatar key={member.id} className="h-24 w-24 border-4 border-white/20 shadow-lg">
-                    <AvatarImage src={member.avatar_url || undefined} />
-                    <AvatarFallback
-                      className="bg-slate-700 text-lg"
-                      name={member.full_name || member.email || 'User'}
+            <div className="mt-9 flex flex-col items-center">
+              {isGroup ? (
+                <div className="relative flex justify-center -space-x-5">
+                  {displayMembers.slice(0, 3).map((member, index) => (
+                    <Avatar
+                      key={member.id}
+                      className={cn(
+                        'h-24 w-24 border-4 border-white/20 shadow-xl shadow-black/40',
+                        index === 1 && 'translate-y-1',
+                      )}
                     >
-                      {(member.full_name || member.email || 'User')
+                      <AvatarImage src={member.avatar_url || undefined} />
+                      <AvatarFallback
+                        className="bg-slate-700 text-lg"
+                        name={member.full_name || member.email || 'User'}
+                      >
+                        {(member.full_name || member.email || 'User')
+                          .split(' ')
+                          .map((n) => n[0])
+                          .join('')
+                          .toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                  ))}
+                </div>
+              ) : (
+                <div className="relative">
+                  {callStatus !== 'ended' && (
+                    <div className="absolute -inset-3 rounded-full border border-emerald-300/35 opacity-70 animate-ping" />
+                  )}
+                  <Avatar className="relative h-32 w-32 border-4 border-white/20 shadow-2xl shadow-black/40">
+                    <AvatarImage src={recipient.avatar_url || undefined} />
+                    <AvatarFallback
+                      className="bg-slate-700 text-3xl"
+                      name={recipient.full_name || recipient.email || 'User'}
+                    >
+                      {(recipient.full_name || recipient.email || 'User')
                         .split(' ')
                         .map((n) => n[0])
                         .join('')
                         .toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                ))}
-              </div>
-            ) : (
-              <Avatar className={cn('mt-8 h-32 w-32 border-4 border-white/20 shadow-xl', callStatus !== 'ended' && 'animate-pulse')}>
-                <AvatarImage src={recipient.avatar_url || undefined} />
-                <AvatarFallback
-                  className="bg-slate-700 text-3xl"
-                  name={recipient.full_name || recipient.email || 'User'}
-                >
-                  {(recipient.full_name || recipient.email || 'User')
-                    .split(' ')
-                    .map((n) => n[0])
-                    .join('')
-                    .toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-            )}
+                </div>
+              )}
 
-            <div className="mt-6 text-center">
-              <h3 className="text-2xl font-semibold">{displayName}</h3>
-              {isGroup && (
-                <p className="mt-1 text-sm text-white/70">{displayMembers.length} participants</p>
-              )}
-              {!isGroup && recipient.title && (
-                <p className="mt-1 text-sm text-white/70">{recipient.title}</p>
-              )}
-              <p className="mt-3 text-base font-medium text-white/80">{getStatusText()}</p>
+              <div className="mt-7 text-center">
+                <h3 className="text-[30px] font-semibold leading-none tracking-tight">{displayName}</h3>
+                {isGroup && (
+                  <p className="mt-2 text-sm text-white/70">{displayMembers.length} participants</p>
+                )}
+                {!isGroup && recipient.title && (
+                  <p className="mt-2 text-sm text-white/70">{recipient.title}</p>
+                )}
+                <p className="mt-4 text-sm font-medium tracking-wide text-white/80">{getStatusText()}</p>
+              </div>
             </div>
 
-            <div className="mt-auto w-full">
+            <div className="mt-auto rounded-2xl border border-white/15 bg-white/[0.08] px-4 py-5 backdrop-blur-xl">
               {callStatus === 'ringing' && isIncoming ? (
                 <div className="flex items-center justify-center gap-8">
-                  <Button
-                    size="icon"
-                    variant="destructive"
-                    className="h-16 w-16 rounded-full shadow-lg shadow-red-500/40"
-                    onClick={() => {
-                      void handleRejectCall()
-                    }}
-                  >
-                    <Phone className="h-6 w-6 rotate-90" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="default"
-                    className="h-16 w-16 rounded-full bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/40"
-                    onClick={handleAnswerCall}
-                  >
-                    <Phone className="h-6 w-6" />
-                  </Button>
+                  <div className="flex flex-col items-center gap-2">
+                    <Button
+                      size="icon"
+                      variant="destructive"
+                      className="h-16 w-16 rounded-full shadow-[0_14px_26px_rgba(239,68,68,0.45)]"
+                      onClick={() => {
+                        void handleRejectCall()
+                      }}
+                    >
+                      <Phone className="h-6 w-6 rotate-90" />
+                    </Button>
+                    <span className="text-xs text-white/70">Decline</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-2">
+                    <Button
+                      size="icon"
+                      variant="default"
+                      className="h-16 w-16 rounded-full border border-emerald-200/40 bg-emerald-500 hover:bg-emerald-600 shadow-[0_14px_26px_rgba(16,185,129,0.45)]"
+                      onClick={handleAnswerCall}
+                    >
+                      <Phone className="h-6 w-6" />
+                    </Button>
+                    <span className="text-xs text-white/80">Answer</span>
+                  </div>
                 </div>
               ) : (
                 <div className="flex items-center justify-center gap-4">
                   <Button
                     size="icon"
-                    variant={isSpeakerOn ? 'secondary' : 'outline'}
-                    className="h-12 w-12 rounded-full border-white/20 bg-white/10 text-white hover:bg-white/20"
+                    variant="secondary"
+                    className={cn(
+                      'h-12 w-12 rounded-full border border-white/25 bg-white/12 text-white hover:bg-white/20',
+                      !isSpeakerOn && 'bg-white/5 text-white/70',
+                    )}
                     onClick={() => setIsSpeakerOn(!isSpeakerOn)}
                     disabled={callStatus !== 'connected'}
                   >
@@ -1090,7 +1175,10 @@ export function VoiceCallDialog({
                   <Button
                     size="icon"
                     variant={isMuted ? 'destructive' : 'secondary'}
-                    className="h-12 w-12 rounded-full border-white/20 bg-white/10 text-white hover:bg-white/20"
+                    className={cn(
+                      'h-12 w-12 rounded-full border border-white/25 bg-white/12 text-white hover:bg-white/20',
+                      isMuted && 'shadow-[0_10px_20px_rgba(239,68,68,0.35)]',
+                    )}
                     onClick={handleToggleMute}
                     disabled={callStatus !== 'connected'}
                   >
@@ -1100,7 +1188,7 @@ export function VoiceCallDialog({
                   <Button
                     size="icon"
                     variant="destructive"
-                    className="h-16 w-16 rounded-full shadow-lg shadow-red-500/40"
+                    className="h-16 w-16 rounded-full shadow-[0_14px_26px_rgba(239,68,68,0.45)]"
                     onClick={handleEndCall}
                   >
                     <Phone className="h-6 w-6 rotate-[135deg]" />

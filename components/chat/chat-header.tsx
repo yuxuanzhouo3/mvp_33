@@ -20,6 +20,7 @@ import { useIsMobile } from '@/hooks/use-mobile'
 import { cn } from '@/lib/utils'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getCallUiLock } from '@/lib/call/call-ui-lock'
+import { unlockRingtoneAudio } from '@/lib/call/incoming-ringtone'
 
 interface ChatHeaderProps {
   conversation: ConversationWithDetails
@@ -247,6 +248,7 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
       alert('A call is already in progress. Please end the current call first.')
       return
     }
+    unlockRingtoneAudio()
     setShowVoiceCall(true)
   }, [])
 
@@ -256,6 +258,7 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
       alert('A call is already in progress. Please end the current call first.')
       return
     }
+    unlockRingtoneAudio()
     setShowVideoCall(true)
   }, [])
 
