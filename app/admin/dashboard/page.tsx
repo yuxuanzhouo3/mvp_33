@@ -13,7 +13,6 @@ import { getPaymentStats, getPaymentTrends } from "@/actions/admin-payments";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatAmountWithCurrency } from "@/lib/utils/currency";
 import { isValidPaymentStats } from "@/lib/utils/validation";
 import { RegionConfig, isChinaRegion } from "@/lib/config/region";
 import {
@@ -141,7 +140,7 @@ export default function DashboardPage() {
   function formatAmount(amount: number) {
     return new Intl.NumberFormat("zh-CN", {
       style: "currency",
-      currency: "CNY",
+      currency: RegionConfig.payment.currency,
     }).format(amount);
   }
 

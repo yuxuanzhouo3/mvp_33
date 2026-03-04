@@ -917,7 +917,12 @@ export type PaymentMethod = "wechat" | "alipay" | "stripe" | "paypal";
 /**
  * 支付状态
  */
-export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
+export type PaymentStatus =
+  | "pending"
+  | "paid"
+  | "completed"
+  | "failed"
+  | "refunded";
 
 /**
  * 支付类型

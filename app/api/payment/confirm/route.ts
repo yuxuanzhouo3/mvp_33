@@ -12,6 +12,8 @@ export async function POST(request: NextRequest) {
       payment_status,
       payment_data,
     } = body
+    const isPaymentSuccess = payment_status === 'paid' || payment_status === 'completed'
+    const normalizedPaymentStatus = isPaymentSuccess ? 'completed' : 'failed'
 
     if (!order_no || !payment_status) {
       return NextResponse.json(
@@ -90,7 +92,8 @@ export async function POST(request: NextRequest) {
           await db.collection('orders')
             .doc(order.id || order._id)
             .update({
-              status: payment_status === 'paid' ? 'completed' : 'failed',
+              status: normalizedPaymentStatus,
+              payment_status: normalizedPaymentStatus,
               payment_provider_order_id: payment_provider_order_id || null,
               payment_data: payment_data || null,
               updated_at: new Date()
@@ -103,7 +106,8 @@ export async function POST(request: NextRequest) {
         const { error: updateError } = await dbClient.supabase
           .from('orders')
           .update({
-            status: payment_status === 'paid' ? 'completed' : 'failed',
+            status: normalizedPaymentStatus,
+            payment_status: normalizedPaymentStatus,
             payment_provider_order_id,
             payment_data,
             updated_at: new Date().toISOString(),
@@ -120,7 +124,7 @@ export async function POST(request: NextRequest) {
     }
 
     // If payment is successful, update user subscription
-    if (payment_status === 'paid' && order) {
+    if (isPaymentSuccess && order) {
       try {
         // Extract plan description from order
         const planDescription = order.description || 
@@ -154,7 +158,7 @@ export async function POST(request: NextRequest) {
       message: 'Payment confirmed successfully',
       data: {
         order_no: order_no,
-        payment_status: payment_status || 'paid',
+        payment_status: normalizedPaymentStatus,
         payment_provider_order_id: payment_provider_order_id
       }
     })

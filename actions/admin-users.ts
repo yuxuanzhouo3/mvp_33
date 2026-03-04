@@ -11,6 +11,15 @@ import { requireAdminSession } from "@/lib/admin/session";
 import { getDatabaseAdapter } from "@/lib/admin/database";
 import type { ApiResponse } from "@/lib/admin/types";
 
+function normalizeRegion(region: string | null | undefined): string {
+  return String(region ?? "").trim().toLowerCase();
+}
+
+function isDomesticRegion(region: string | null | undefined): boolean {
+  const normalized = normalizeRegion(region);
+  return normalized === "" || normalized === "cn" || normalized === "china";
+}
+
 /**
  * 获取用户统计信息
  */
@@ -107,21 +116,19 @@ export async function getUserStats(): Promise<ApiResponse<{
       : 0;
 
     // 按地区统计（国内 vs 国际）
-    const domestic = allUsers.filter(u =>
-      !u.region || u.region === 'CN' || u.region === 'china'
-    ).length;
+    const domestic = allUsers.filter((u) => isDomesticRegion(u.region)).length;
 
     const international = allUsers.length - domestic;
 
     // 按地区统计付费用户
     const paidUsersByRegion = {
-      domestic: allUsers.filter(u =>
-        (!u.region || u.region === 'CN' || u.region === 'china') &&
-        (u.subscription_plan === 'yearly' || u.subscription_plan === 'monthly' || u.subscription_plan === 'enterprise')
+      domestic: allUsers.filter((u) =>
+        isDomesticRegion(u.region) &&
+        (u.subscription_plan === "yearly" || u.subscription_plan === "monthly" || u.subscription_plan === "enterprise")
       ).length,
-      international: allUsers.filter(u =>
-        u.region && u.region !== 'CN' && u.region !== 'china' &&
-        (u.subscription_plan === 'yearly' || u.subscription_plan === 'monthly' || u.subscription_plan === 'enterprise')
+      international: allUsers.filter((u) =>
+        !isDomesticRegion(u.region) &&
+        (u.subscription_plan === "yearly" || u.subscription_plan === "monthly" || u.subscription_plan === "enterprise")
       ).length,
     };
 
@@ -221,7 +228,7 @@ export async function getUserTrends(
           data.activeUsers++;
 
           // 判断是否为国内用户
-          const isDomestic = !user.region || user.region === 'CN' || user.region === 'china';
+          const isDomestic = isDomesticRegion(user.region);
           if (isDomestic) {
             data.activeUsersDomestic++;
           } else {
@@ -238,9 +245,7 @@ export async function getUserTrends(
     }));
 
     // 按地区统计
-    const domestic = allUsers.filter(u =>
-      !u.region || u.region === 'CN' || u.region === 'china'
-    ).length;
+    const domestic = allUsers.filter((u) => isDomesticRegion(u.region)).length;
 
     const international = allUsers.length - domestic;
 

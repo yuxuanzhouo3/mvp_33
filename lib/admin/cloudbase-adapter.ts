@@ -658,7 +658,7 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
    * 根据用户名获取普通用户
    */
   async getUserByUsername(username: string): Promise<User | null> {
-    const results = await this.executeQuery("web_users", async (collection) => {
+    const results = await this.executeQuery("users", async (collection) => {
       return collection.where({ username }).get();
     });
 
@@ -673,15 +673,32 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
    * 根据 ID 获取普通用户
    */
   async getUserById(id: string): Promise<User | null> {
+    await this.ensureInitialized();
+
     try {
-      const result = await this.db.collection("web_users").doc(id).get();
+      // 先按文档 _id 查询（管理后台通常返回此 ID）
+      const result = await this.db.collection("users").doc(id).get();
       if (!result.data || result.data.length === 0) {
-        return null;
+        // 回退按业务 ID 字段查询（users.id）
+        const fallback = await this.db.collection("users").where({ id }).limit(1).get();
+        if (!fallback.data || fallback.data.length === 0) {
+          return null;
+        }
+        return this.dbToUser(fallback.data[0]);
       }
       return this.dbToUser(result.data[0]);
     } catch (error: any) {
       if (error.code === "DOC_NOT_FOUND") {
-        return null;
+        // 回退按业务 ID 字段查询（users.id）
+        try {
+          const fallback = await this.db.collection("users").where({ id }).limit(1).get();
+          if (!fallback.data || fallback.data.length === 0) {
+            return null;
+          }
+          return this.dbToUser(fallback.data[0]);
+        } catch (fallbackError: any) {
+          throw handleDatabaseError(fallbackError);
+        }
       }
       throw handleDatabaseError(error);
     }
@@ -718,7 +735,7 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
       }
     }
 
-    let query = this.db.collection("web_users");
+    let query = this.db.collection("users");
 
     if (Object.keys(where).length > 0) {
       query = query.where(where);
@@ -770,7 +787,7 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
     }
 
     try {
-      const result = await this.db.collection("web_users").where(where).count();
+      const result = await this.db.collection("users").where(where).count();
       return result.total;
     } catch (error: any) {
       throw handleDatabaseError(error);
@@ -791,7 +808,7 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
     if (updates.status !== undefined) data.status = updates.status;
 
     try {
-      await this.db.collection("web_users").doc(id).update(data);
+      await this.db.collection("users").doc(id).update(data);
       const updated = await this.getUserById(id);
       if (!updated) {
         throw new Error("更新后找不到用户");
@@ -807,7 +824,7 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
    */
   async deleteUser(id: string): Promise<void> {
     try {
-      await this.db.collection("web_users").doc(id).remove();
+      await this.db.collection("users").doc(id).remove();
     } catch (error: any) {
       throw handleDatabaseError(error);
     }
@@ -818,14 +835,14 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
     return {
       id: doc._id || doc.id,
       email: doc.email,
-      name: doc.name,
-      avatar: doc.avatar,
+      name: doc.name || doc.full_name || doc.username || doc.email || "",
+      avatar: doc.avatar || doc.avatar_url,
       role: doc.role || "free",
       subscription_plan: doc.subscription_plan || "free",
-      region: doc.region || "CN",
+      region: doc.region ?? "",
       status: doc.status || "active",
       created_at: doc.created_at,
-      last_login_at: doc.last_login_at,
+      last_login_at: doc.last_login_at || doc.last_seen_at,
       pro_expires_at: doc.pro_expires_at,
     };
   }
@@ -1086,16 +1103,6 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
    * 辅助方法：从数据库格式转换为 Payment
    */
   private dbToPayment(doc: any): Payment {
-    // Map CloudBase payment fields to admin Payment interface
-    // CloudBase uses: method, status (with "completed"), billing_cycle
-    // Admin expects: method, status (with "paid"), type
-
-    let status = doc.status || "pending";
-    // Convert CloudBase "completed" status to admin "paid" status
-    if (status === "completed") {
-      status = "paid";
-    }
-
     return {
       id: doc._id || doc.id,
       order_id: doc.order_id,
@@ -1104,7 +1111,7 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
       amount: doc.amount || 0,
       currency: doc.currency || "CNY",
       method: doc.method || doc.payment_method || "wechat",
-      status: status,
+      status: doc.status || "pending",
       type: doc.product_type || doc.billing_cycle || "subscription",
       product_id: doc.product_id,
       created_at: doc.created_at,

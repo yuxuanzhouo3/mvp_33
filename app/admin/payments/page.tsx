@@ -84,15 +84,21 @@ export default function PaymentsManagementPage() {
 
   // 筛选状态
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("paid");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterMethod, setFilterMethod] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
 
   // ==================== 筛选后的支付列表 ====================
   const filteredPayments = useMemo(() => {
     return payments.filter((payment) => {
-      if (filterStatus !== "all" && payment.status !== filterStatus) {
-        return false;
+      if (filterStatus !== "all") {
+        if (filterStatus === "paid" || filterStatus === "completed") {
+          if (payment.status !== "paid" && payment.status !== "completed") {
+            return false;
+          }
+        } else if (payment.status !== filterStatus) {
+          return false;
+        }
       }
       if (filterMethod !== "all" && payment.method !== filterMethod) {
         return false;
@@ -418,6 +424,7 @@ export default function PaymentsManagementPage() {
               <SelectContent>
                 <SelectItem value="all">全部状态</SelectItem>
                 <SelectItem value="completed">已完成</SelectItem>
+                <SelectItem value="paid">已支付（兼容旧数据）</SelectItem>
                 <SelectItem value="pending">待处理</SelectItem>
                 <SelectItem value="failed">失败</SelectItem>
                 <SelectItem value="refunded">已退款</SelectItem>

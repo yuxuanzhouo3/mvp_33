@@ -15,9 +15,12 @@ import type {
   ApiResponse,
   PaginatedResult,
 } from "@/lib/admin/types";
-import { revalidatePath } from "next/cache";
 import { unstable_noStore } from "next/cache";
 import { RegionConfig } from "@/lib/config/region";
+
+function isSuccessfulPaymentStatus(status: string | null | undefined): boolean {
+  return status === "paid" || status === "completed";
+}
 
 /**
  * 获取支付记录列表
@@ -110,8 +113,10 @@ export async function getPaymentStats(): Promise<ApiResponse<{
     // 获取所有支付记录
     const allPayments = await db.listPayments({ limit: 10000 });
 
-    // 只统计已成功支付的订单（paid 状态）
-    const paidPayments = allPayments.filter((p) => p.status === "paid");
+    // 只统计已成功支付的订单（兼容 paid + completed）
+    const paidPayments = allPayments.filter((p) =>
+      isSuccessfulPaymentStatus(p.status)
+    );
 
     // 统计各时间段的支付数量
     const total = paidPayments.length;
@@ -202,7 +207,7 @@ export async function getPaymentTrends(
 
     // 统计每日收入和订单数
     allPayments.forEach(payment => {
-      if (payment.status === "paid" && payment.created_at) {
+      if (isSuccessfulPaymentStatus(payment.status) && payment.created_at) {
         // 使用本地日期而不是UTC日期
         const createdDateLocal = new Date(payment.created_at);
         const createdDate = `${createdDateLocal.getFullYear()}-${String(createdDateLocal.getMonth() + 1).padStart(2, '0')}-${String(createdDateLocal.getDate()).padStart(2, '0')}`;

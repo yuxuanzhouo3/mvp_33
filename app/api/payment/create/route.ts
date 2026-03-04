@@ -101,6 +101,7 @@ export async function POST(request: NextRequest) {
           region: dbClient.region,
           description,
           status: 'pending',
+          payment_status: 'pending',
           created_at: new Date()
         })
         order = { id: result.id, ...result.data, order_no }
@@ -110,21 +111,36 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // Use Supabase for Global region
-      const { data, error } = await dbClient.supabase
+      const orderPayload = {
+        order_no,
+        user_id: user.id,
+        amount,
+        currency,
+        payment_method,
+        region: dbClient.region,
+        description,
+        status: 'pending',
+        payment_status: 'pending',
+        created_at: new Date().toISOString(),
+      }
+
+      let { data, error } = await dbClient.supabase
         .from('orders')
-        .insert({
-          order_no,
-          user_id: user.id,
-          amount,
-          currency,
-          payment_method,
-          region: dbClient.region,
-          description,
-          status: 'pending',
-          created_at: new Date().toISOString(),
-        })
+        .insert(orderPayload)
         .select()
         .single()
+
+      // 兼容尚未添加 payment_status 列的旧表结构
+      if (error && String(error.message || '').toLowerCase().includes('payment_status')) {
+        const { payment_status, ...legacyPayload } = orderPayload
+        const retry = await dbClient.supabase
+          .from('orders')
+          .insert(legacyPayload)
+          .select()
+          .single()
+        data = retry.data
+        error = retry.error
+      }
       
       order = data
       orderError = error

@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
     
     // Determine payment status
     const payment_status = (trade_status === 'TRADE_SUCCESS' || trade_status === 'TRADE_FINISHED') ? 'paid' : 'failed'
+    const normalizedPaymentStatus = payment_status === 'paid' ? 'completed' : 'failed'
     const payment_provider_order_id = trade_no || ''
 
     if (!order_no) {
@@ -91,7 +92,8 @@ export async function POST(request: NextRequest) {
           await db.collection('orders')
             .doc(order.id || order._id)
             .update({
-              status: payment_status === 'paid' ? 'completed' : 'failed',
+              status: normalizedPaymentStatus,
+              payment_status: normalizedPaymentStatus,
               payment_provider_order_id: payment_provider_order_id || null,
               payment_data: callbackData || null,
               updated_at: new Date()
@@ -104,7 +106,8 @@ export async function POST(request: NextRequest) {
         const { error: updateError } = await dbClient.supabase
           .from('orders')
           .update({
-            status: payment_status === 'paid' ? 'completed' : 'failed',
+            status: normalizedPaymentStatus,
+            payment_status: normalizedPaymentStatus,
             payment_provider_order_id,
             payment_data: callbackData,
             updated_at: new Date().toISOString(),
