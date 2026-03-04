@@ -1,0 +1,14 @@
+{
+  "caller": {
+    "email": "voice.caller.1772636202945@example.com",
+    "password": "TestE2e!234",
+    "id": "dd72dace-352d-44b9-a795-d32847b0b9ae",
+    "name": "Voice Caller"
+  },
+  "callee": {
+    "email": "voice.callee.1772636202945@example.com",
+    "password": "TestE2e!234",
+    "id": "6d199707-eb4f-4e3a-a32e-79c77ed8196d",
+    "name": "Voice Callee"
+  }
+}

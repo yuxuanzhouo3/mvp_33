@@ -7690,6 +7690,7 @@ function ChatPageContent() {
             oldCallStatus !== newCallStatus
 
           if (isCallStatusChanged && typeof window !== 'undefined') {
+            const rejectReason = newMetadata.reject_reason || oldMetadata.reject_reason || ''
             const signalDetail = {
               messageId: String(updatedMessage.id || ''),
               conversationId: String(updatedMessage.conversation_id || ''),
@@ -7700,6 +7701,8 @@ function ChatPageContent() {
               callerId: newMetadata.caller_id || oldMetadata.caller_id,
               callerName: newMetadata.caller_name || oldMetadata.caller_name,
               callSessionId: newMetadata.call_session_id || oldMetadata.call_session_id,
+              rejectReason,
+              reject_reason: rejectReason,
             }
 
             window.dispatchEvent(new CustomEvent('callSignal', { detail: signalDetail }))

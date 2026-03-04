@@ -104,18 +104,13 @@ export function VoiceCallDialog({
   const incomingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const outgoingAnsweredTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const outgoingInviteStartedRef = useRef(false)
+  const answeringInFlightRef = useRef(false)
+  const initializePromiseRef = useRef<Promise<void> | null>(null)
   const initializeContextRef = useRef<'answer' | 'outgoing' | 'signal' | null>(null)
   const callSessionIdRef = useRef<string>(normalizeCallSessionId(callSessionId) || fallbackCallSessionId(callMessageId))
 
-  const resolveIncomingSessionId = (candidate: unknown, messageId?: string): string => {
-    return normalizeCallSessionId(candidate) || fallbackCallSessionId(messageId)
-  }
-
   const ensureCallSessionId = (candidate?: unknown, messageId?: string): string => {
-    const incomingSessionId = resolveIncomingSessionId(
-      candidate,
-      messageId || callMessageIdRef.current || callMessageId,
-    )
+    const incomingSessionId = normalizeCallSessionId(candidate)
     if (incomingSessionId) {
       callSessionIdRef.current = incomingSessionId
       return incomingSessionId
@@ -123,19 +118,42 @@ export function VoiceCallDialog({
     if (callSessionIdRef.current) {
       return callSessionIdRef.current
     }
+    const fallbackSessionId = fallbackCallSessionId(
+      messageId || callMessageIdRef.current || callMessageId,
+    )
+    if (fallbackSessionId) {
+      callSessionIdRef.current = fallbackSessionId
+      return fallbackSessionId
+    }
     const generated = createCallLockToken('call_session')
     callSessionIdRef.current = generated
     return generated
   }
 
   const isMatchingCallSession = (candidate?: unknown, messageId?: string): boolean => {
-    const incomingSessionId = resolveIncomingSessionId(
-      candidate,
-      messageId || callMessageIdRef.current || callMessageId,
-    )
+    const incomingSessionId = normalizeCallSessionId(candidate)
     if (!incomingSessionId) return true
     const activeSessionId = ensureCallSessionId(undefined, messageId)
     return !activeSessionId || activeSessionId === incomingSessionId
+  }
+
+  const buildFlowContext = (extra: Record<string, unknown> = {}) => ({
+    ...extra,
+    open,
+    isIncoming,
+    callStatus: callStatusRef.current,
+    messageId: callMessageIdRef.current || callMessageId,
+    callSessionId: callSessionIdRef.current,
+    conversationId,
+  })
+
+  const shouldCloseForCancelledStatus = (status: string, metadata?: Record<string, any>): boolean => {
+    if (status !== 'missed' && status !== 'cancelled') return false
+    const rejectReason = String(metadata?.reject_reason || '')
+    if (status === 'cancelled' && (rejectReason === 'connect_failed' || rejectReason === 'connect_timeout')) {
+      return true
+    }
+    return callStatusRef.current !== 'connected' || !remoteUserJoined
   }
 
   const getAgoraNumericUid = (userId: string) => {
@@ -182,14 +200,38 @@ export function VoiceCallDialog({
     }
   }
 
+  const buildFailureContext = (
+    source: 'answer' | 'outgoing' | 'signal' | 'timeout' | 'unknown',
+    error?: unknown,
+  ) => {
+    const asAny = error as any
+    const errorCode = String(asAny?.code || asAny?.name || '')
+    const rawMessage = asAny?.message
+    const errorMessage = typeof rawMessage === 'string' ? rawMessage : String(error || '')
+    return {
+      source,
+      errorCode: errorCode || undefined,
+      errorMessage: errorMessage || undefined,
+    }
+  }
+
   const writeCallConnectionFailure = async (
     reason: 'connect_failed' | 'connect_timeout',
     messageIdInput?: string,
+    failureContext?: {
+      source?: 'answer' | 'outgoing' | 'signal' | 'timeout' | 'unknown'
+      errorCode?: string
+      errorMessage?: string
+    },
   ) => {
     const messageId = messageIdInput || callMessageIdRef.current || callMessageId
     if (!messageId) return
 
     try {
+      console.warn('[VoiceCallDialog] writeCallConnectionFailure start', buildFlowContext({
+        reason,
+        messageId,
+      }))
       const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}`)
       const msgData = await msgResponse.json()
       if (!msgData?.success) return
@@ -211,6 +253,9 @@ export function VoiceCallDialog({
         reject_reason: reason,
         connect_failed_by: currentUser.id,
         connect_failed_at: nowIso,
+        connect_failed_source: failureContext?.source || undefined,
+        connect_failed_error_code: failureContext?.errorCode || undefined,
+        connect_failed_error_message: failureContext?.errorMessage || undefined,
         call_session_id: sessionId,
       }
 
@@ -230,7 +275,17 @@ export function VoiceCallDialog({
           status: updateResponse.status,
           errorText,
         })
+        return
       }
+
+      console.warn('[VoiceCallDialog] writeCallConnectionFailure success', buildFlowContext({
+        reason,
+        messageId,
+        source: failureContext?.source || 'unknown',
+        errorCode: failureContext?.errorCode || '',
+        callStatus: updatedMetadata.call_status,
+        rejectReason: updatedMetadata.reject_reason,
+      }))
     } catch (error) {
       console.error('[VoiceCallDialog] Failed to write connection failure status:', {
         messageId,
@@ -362,16 +417,25 @@ export function VoiceCallDialog({
               // 从消息中获取频道名称，确保使用最新的值
               const channelNameToUse = callMessage?.metadata?.channel_name || channelName
               console.log('[Polling] Joining channel:', channelNameToUse)
-              await initializeCall(channelNameToUse, 'outgoing')
+              await initializeCallWithRetry(channelNameToUse, 'outgoing')
             } catch (error) {
               console.error('[Polling] ❌ Failed to initialize call after answer:', error)
-              await writeCallConnectionFailure('connect_failed', messageId)
+              await writeCallConnectionFailure(
+                'connect_failed',
+                messageId,
+                buildFailureContext('outgoing', error),
+              )
               // Keep dialog open so user can still hang up manually after answer failure.
               setCallStatus('ended')
             }
-          } else if ((callStatus === 'missed' || callStatus === 'cancelled') && callStatusRef.current !== 'connected') {
+          } else if (shouldCloseForCancelledStatus(String(callStatus || ''), metadata)) {
             // 对方拒绝或取消，停止轮询
-            console.log('[Polling] ❌ Call rejected/cancelled:', callStatus)
+            console.log('[Polling] ❌ Call rejected/cancelled:', {
+              callStatus,
+              rejectReason: metadata?.reject_reason,
+              remoteUserJoined,
+              localStatus: callStatusRef.current,
+            })
             if (pollingIntervalRef.current) {
               clearInterval(pollingIntervalRef.current)
               pollingIntervalRef.current = null
@@ -407,6 +471,8 @@ export function VoiceCallDialog({
 
     endingCallRef.current = false
     outgoingInviteStartedRef.current = false
+    answeringInFlightRef.current = false
+    initializePromiseRef.current = null
     const initialMessageId = callMessageIdRef.current || callMessageId
     if (isIncoming) {
       ensureCallSessionId(callSessionId, initialMessageId)
@@ -464,6 +530,8 @@ export function VoiceCallDialog({
         agoraClientRef.current = null
       }
       outgoingInviteStartedRef.current = false
+      answeringInFlightRef.current = false
+      initializePromiseRef.current = null
       callSessionIdRef.current = ''
       uniqueUidRef.current = null
       clearOutgoingAnsweredTimeout()
@@ -500,6 +568,8 @@ export function VoiceCallDialog({
         callStatus?: string
         channelName?: string
         callSessionId?: string
+        rejectReason?: string
+        reject_reason?: string
       }>
       const detail = custom.detail || {}
       const currentMessageId = callMessageIdRef.current || callMessageId
@@ -510,6 +580,11 @@ export function VoiceCallDialog({
 
       const status = String(detail.callStatus || '')
       if (!status) return
+      console.log('[VoiceCallDialog] callSignal received', buildFlowContext({
+        messageId: currentMessageId,
+        signalStatus: status,
+        source: detail,
+      }))
 
       if (status === 'answered' && !isIncoming && callStatusRef.current === 'calling') {
         if (pollingIntervalRef.current) {
@@ -523,9 +598,13 @@ export function VoiceCallDialog({
         setCallStatus('connected')
         updateCallUiLock(lockTokenRef.current, { phase: 'active' })
         if (!agoraClientRef.current) {
-          void initializeCall(detail.channelName, 'signal').catch(async (error) => {
+          void initializeCallWithRetry(detail.channelName, 'signal').catch(async (error) => {
             console.error('[VoiceCallDialog] Failed to initialize call from signal:', error)
-            await writeCallConnectionFailure('connect_failed', currentMessageId)
+            await writeCallConnectionFailure(
+              'connect_failed',
+              currentMessageId,
+              buildFailureContext('signal', error),
+            )
             // Keep dialog open so user can still hang up manually after answer failure.
             setCallStatus('ended')
           })
@@ -543,7 +622,17 @@ export function VoiceCallDialog({
         return
       }
 
-      if ((status === 'missed' || status === 'cancelled') && callStatusRef.current !== 'connected') {
+      const normalizedSignalDetail: Record<string, any> = {
+        ...(detail as Record<string, any>),
+        reject_reason: (detail as any)?.reject_reason || (detail as any)?.rejectReason,
+      }
+
+      if (shouldCloseForCancelledStatus(status, normalizedSignalDetail)) {
+        console.log('[VoiceCallDialog] callSignal closing for cancelled/missed', buildFlowContext({
+          signalStatus: status,
+          rejectReason: normalizedSignalDetail.reject_reason,
+          remoteUserJoined,
+        }))
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current)
           pollingIntervalRef.current = null
@@ -562,12 +651,12 @@ export function VoiceCallDialog({
   // Fallback status sync to close stale dialogs when realtime events are delayed/lost.
   useEffect(() => {
     if (!open) return
-    const messageId = callMessageIdRef.current || callMessageId
-    if (!messageId) return
 
     let disposed = false
     const syncStatus = async () => {
       if (disposed) return
+      const messageId = callMessageIdRef.current || callMessageId
+      if (!messageId) return
       try {
         const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}&_t=${Date.now()}`)
         const msgData = await msgResponse.json()
@@ -579,7 +668,11 @@ export function VoiceCallDialog({
         }
         const status = String(callMessage?.metadata?.call_status || '')
         if (!status) return
-        if (status === 'ended' || ((status === 'cancelled' || status === 'missed') && callStatusRef.current !== 'connected')) {
+        if (status === 'ended' || shouldCloseForCancelledStatus(status, metadata)) {
+          console.log('[VoiceCallDialog] syncStatus closing dialog', buildFlowContext({
+            backendStatus: status,
+            backendMetadata: metadata,
+          }))
           setCallStatus('ended')
           onOpenChange(false)
         }
@@ -647,7 +740,11 @@ export function VoiceCallDialog({
         messageId: callMessageIdRef.current || callMessageId,
         callSessionId: callSessionIdRef.current,
       })
-      void writeCallConnectionFailure('connect_timeout')
+      void writeCallConnectionFailure(
+        'connect_timeout',
+        undefined,
+        buildFailureContext('timeout', new Error('Remote user did not join media channel within timeout')),
+      )
       setCallStatus('ended')
       onOpenChange(false)
     }, 15_000)
@@ -723,68 +820,118 @@ export function VoiceCallDialog({
   const handleAnswerCall = async () => {
     const messageId = callMessageIdRef.current || callMessageId
     if (!messageId) return
-    
+
+    if (answeringInFlightRef.current) {
+      console.warn('[VoiceCallDialog] handleAnswerCall ignored: already in progress', buildFlowContext({
+        source: autoAnswer ? 'autoAnswer' : 'manual',
+      }))
+      return
+    }
+
+    answeringInFlightRef.current = true
+    console.log('[VoiceCallDialog] handleAnswerCall start', buildFlowContext({
+      source: autoAnswer ? 'autoAnswer' : 'manual',
+      messageId,
+    }))
+
     try {
       // 先获取消息以获取 channelName 和现有 metadata
       const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}`)
       const msgData = await msgResponse.json()
-      if (msgData.success) {
-        const callMessage = msgData.messages.find((m: any) => m.id === messageId)
-        if (!callMessage) {
-          console.error('Call message not found when answering:', messageId)
-          setCallStatus('ended')
-          return
-        }
+      if (!msgData.success) {
+        throw new Error('Failed to fetch call message before answering')
+      }
 
-        const sessionId = ensureCallSessionId(callMessage.metadata?.call_session_id, messageId)
-        const updatedMetadata = {
-          ...(callMessage.metadata || {}),
-          call_status: 'answered',
-          answered_at: new Date().toISOString(),
-          answered_by: currentUser.id,
-          call_session_id: sessionId,
-        }
+      const callMessage = msgData.messages.find((m: any) => m.id === messageId)
+      if (!callMessage) {
+        console.error('Call message not found when answering:', messageId)
+        setCallStatus('ended')
+        return
+      }
 
-        const updateResponse = await fetch(`/api/messages/${messageId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            metadata: updatedMetadata,
-          }),
-        })
+      if (!callMessageIdRef.current) {
+        callMessageIdRef.current = messageId
+      }
 
-        if (!updateResponse.ok) {
-          const errorText = await updateResponse.text()
-          console.error('Failed to update call status:', updateResponse.status, errorText)
-          console.warn('Continuing call despite status update failure')
-        }
+      console.log('[VoiceCallDialog] handleAnswerCall message loaded', buildFlowContext({
+        messageId,
+        backendCallStatus: callMessage.metadata?.call_status,
+        channelName: callMessage.metadata?.channel_name,
+      }))
 
-        if (incomingTimeoutRef.current) {
-          clearTimeout(incomingTimeoutRef.current)
-          incomingTimeoutRef.current = null
-        }
-        clearOutgoingAnsweredTimeout()
-        if (!callStartTimeRef.current) {
-          callStartTimeRef.current = Date.now()
-        }
-        setCallStatus('connected')
-        updateCallUiLock(lockTokenRef.current, {
+      const sessionId = ensureCallSessionId(callMessage.metadata?.call_session_id, messageId)
+      const updatedMetadata = {
+        ...(callMessage.metadata || {}),
+        call_status: 'answered',
+        answered_at: new Date().toISOString(),
+        answered_by: currentUser.id,
+        call_session_id: sessionId,
+      }
+
+      const updateResponse = await fetch(`/api/messages/${messageId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          metadata: updatedMetadata,
+        }),
+      })
+
+      if (!updateResponse.ok) {
+        const errorText = await updateResponse.text()
+        console.error('Failed to update call status:', updateResponse.status, errorText)
+        console.warn('Continuing call despite status update failure')
+      } else {
+        console.log('[VoiceCallDialog] handleAnswerCall status updated to answered', buildFlowContext({
           messageId,
-          phase: 'active',
-        })
+          callSessionId: sessionId,
+        }))
+      }
 
-        try {
-          await initializeCall(callMessage.metadata?.channel_name, 'answer')
-        } catch (initError) {
-          console.error('[VoiceCallDialog] Failed to initialize answered call:', initError)
-          await writeCallConnectionFailure('connect_failed', messageId)
-          setCallStatus('ended')
-        }
+      if (incomingTimeoutRef.current) {
+        clearTimeout(incomingTimeoutRef.current)
+        incomingTimeoutRef.current = null
+      }
+      clearOutgoingAnsweredTimeout()
+      if (!callStartTimeRef.current) {
+        callStartTimeRef.current = Date.now()
+      }
+      setCallStatus('connected')
+      updateCallUiLock(lockTokenRef.current, {
+        messageId,
+        phase: 'active',
+      })
+
+      try {
+        const channelName = callMessage.metadata?.channel_name
+        console.log('[VoiceCallDialog] handleAnswerCall initializeCall begin', buildFlowContext({
+          messageId,
+          channelName,
+          source: 'answer',
+        }))
+        await initializeCallWithRetry(channelName, 'answer')
+        console.log('[VoiceCallDialog] handleAnswerCall initializeCall success', buildFlowContext({
+          messageId,
+          channelName,
+          source: 'answer',
+        }))
+      } catch (initError) {
+        console.error('[VoiceCallDialog] Failed to initialize answered call:', initError)
+        await writeCallConnectionFailure(
+          'connect_failed',
+          messageId,
+          buildFailureContext('answer', initError),
+        )
+        setCallStatus('ended')
       }
     } catch (error) {
       console.error('Failed to answer call:', error)
       // Keep dialog open so user can still hang up manually after answer failure.
       setCallStatus('ended')
+    } finally {
+      answeringInFlightRef.current = false
+      console.log('[VoiceCallDialog] handleAnswerCall end', buildFlowContext({
+        messageId,
+      }))
     }
   }
 
@@ -840,150 +987,227 @@ export function VoiceCallDialog({
     channelName?: string,
     source: 'answer' | 'outgoing' | 'signal' = 'outgoing',
   ) => {
-    initializeContextRef.current = source
+    if (initializePromiseRef.current) {
+      console.warn('[VoiceCallDialog] initializeCall dedupe: await in-flight initialize', buildFlowContext({
+        source,
+        requestedChannel: channelName,
+      }))
+      await initializePromiseRef.current
+      return
+    }
 
-    try {
-      const isSecure = window.location.protocol === 'https:' ||
-                       window.location.hostname === 'localhost' ||
-                       window.location.hostname === '127.0.0.1'
-      if (!isSecure) {
-        throw new Error('WEB_SECURITY_RESTRICT: Voice calls require HTTPS or localhost')
-      }
-
+    const initializeTask = (async () => {
+      initializeContextRef.current = source
       const messageId = callMessageIdRef.current || callMessageId
-      if (!channelName && messageId) {
-        const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}`)
-        const msgData = await msgResponse.json()
-        if (msgData.success) {
-          const callMessage = msgData.messages.find((m: any) => m.id === messageId)
-          if (callMessage?.metadata?.channel_name) {
-            channelName = callMessage.metadata.channel_name
-          }
+      const protocol = window.location.protocol
+      const hostname = window.location.hostname
+      let resolvedChannelName = channelName
+
+      try {
+        const isSecure = protocol === 'https:' || hostname === 'localhost' || hostname === '127.0.0.1'
+        if (!isSecure) {
+          throw new Error(`WEB_SECURITY_RESTRICT: Voice calls require HTTPS or localhost (protocol=${protocol}, host=${hostname})`)
         }
-      }
 
-      if (!channelName) {
-        channelName = isGroup
-          ? `group_voice_${(groupName || 'group').substring(0, 15).replace(/[^a-zA-Z0-9]/g, '')}_${Date.now().toString().slice(-10)}`
-          : generateChannelName(currentUser.id, recipient.id, conversationId)
-      }
+        console.log('[VoiceCallDialog] initializeCall preflight', buildFlowContext({
+          source,
+          messageId,
+          requestedChannel: resolvedChannelName,
+          protocol,
+          hostname,
+          answeringInFlight: answeringInFlightRef.current,
+        }))
 
-      if (channelName.length > 64) {
-        console.warn('[VoiceCallDialog] Channel name too long, truncating', {
-          originalLength: channelName.length,
-          channelName,
-        })
-        channelName = channelName.substring(0, 64)
-      }
-
-      if (agoraClientRef.current) {
-        const oldClient = agoraClientRef.current
-        agoraClientRef.current = null
-        oldClient.leave().catch(() => {})
-        await new Promise((resolve) => setTimeout(resolve, 100))
-      }
-
-      let appId = process.env.NEXT_PUBLIC_TRTC_SDK_APP_ID || ''
-      const numericUid = getAgoraNumericUid(currentUser.id)
-      uniqueUidRef.current = `${currentUser.id}_${numericUid}`
-      const credentials = await fetchTrtcCredentials(numericUid, appId)
-      appId = credentials.appId
-
-      console.log('[VoiceCallDialog] initializeCall start', {
-        source,
-        callSessionId: callSessionIdRef.current,
-        uid: numericUid,
-        channel: channelName,
-        messageId,
-      })
-
-      const client = new TrtcClient({
-        appId,
-        token: credentials.userSig,
-        channel: channelName,
-        uid: numericUid,
-      })
-
-      client.setOnRemoteUserPublished((user) => {
-        console.log('Remote user published:', user.uid, 'Audio track:', !!user.audioTrack)
-        if (user.audioTrack) {
-          user.audioTrack.play()
-        }
-        clearOutgoingAnsweredTimeout()
-        setRemoteUserJoined(true)
-        setCallStatus((prev) => {
-          if (prev !== 'connected') {
-            if (!callStartTimeRef.current) {
-              callStartTimeRef.current = Date.now()
+        if (!resolvedChannelName && messageId) {
+          const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}`)
+          const msgData = await msgResponse.json()
+          if (msgData.success) {
+            const callMessage = msgData.messages.find((m: any) => m.id === messageId)
+            if (callMessage?.metadata?.channel_name) {
+              resolvedChannelName = callMessage.metadata.channel_name
             }
-            return 'connected'
           }
-          return prev
+        }
+
+        if (!resolvedChannelName) {
+          resolvedChannelName = isGroup
+            ? `group_voice_${(groupName || 'group').substring(0, 15).replace(/[^a-zA-Z0-9]/g, '')}_${Date.now().toString().slice(-10)}`
+            : generateChannelName(currentUser.id, recipient.id, conversationId)
+        }
+
+        if (resolvedChannelName.length > 64) {
+          console.warn('[VoiceCallDialog] Channel name too long, truncating', {
+            originalLength: resolvedChannelName.length,
+            channelName: resolvedChannelName,
+          })
+          resolvedChannelName = resolvedChannelName.substring(0, 64)
+        }
+
+        if (agoraClientRef.current) {
+          console.warn('[VoiceCallDialog] initializeCall replacing existing client before join', buildFlowContext({
+            source,
+            channel: resolvedChannelName,
+          }))
+          const oldClient = agoraClientRef.current
+          agoraClientRef.current = null
+          oldClient.leave().catch(() => {})
+          await new Promise((resolve) => setTimeout(resolve, 100))
+        }
+
+        let appId = process.env.NEXT_PUBLIC_TRTC_SDK_APP_ID || ''
+        const numericUid = getAgoraNumericUid(currentUser.id)
+        uniqueUidRef.current = `${currentUser.id}_${numericUid}`
+        const credentials = await fetchTrtcCredentials(numericUid, appId)
+        appId = credentials.appId
+
+        console.log('[VoiceCallDialog] initializeCall start', {
+          source,
+          callSessionId: callSessionIdRef.current,
+          uid: numericUid,
+          channel: resolvedChannelName,
+          messageId,
+          protocol,
+          hostname,
         })
-      })
 
-      client.setOnRemoteUserUnpublished((uid) => {
-        console.log('Remote user unpublished:', uid)
-      })
+        const client = new TrtcClient({
+          appId,
+          token: credentials.userSig,
+          channel: resolvedChannelName,
+          uid: numericUid,
+        })
 
-      agoraClientRef.current = client
-      await client.join({ audioOnly: true })
-      clearOutgoingAnsweredTimeout()
-      console.log('[VoiceCallDialog] Joined voice channel successfully', {
-        source,
-        callSessionId: callSessionIdRef.current,
-        uid: numericUid,
-        channel: channelName,
-      })
+        client.setOnRemoteUserPublished((user) => {
+          console.log('Remote user published:', user.uid, 'Audio track:', !!user.audioTrack)
+          if (user.audioTrack) {
+            user.audioTrack.play()
+          }
+          clearOutgoingAnsweredTimeout()
+          setRemoteUserJoined(true)
+          setCallStatus((prev) => {
+            if (prev !== 'connected') {
+              if (!callStartTimeRef.current) {
+                callStartTimeRef.current = Date.now()
+              }
+              return 'connected'
+            }
+            return prev
+          })
+        })
 
-      setCallStatus('connected')
-      updateCallUiLock(lockTokenRef.current, { phase: 'active' })
-    } catch (error: any) {
-      const errorMessage = String(error?.message || 'Failed to connect to call')
-      const errorCode = String(error?.code || '')
-      const isSecurityError =
-        errorMessage.includes('WEB_SECURITY_RESTRICT') ||
-        errorMessage.includes('NOT_SUPPORTED') ||
-        errorMessage.includes('getUserMedia')
-      const isAbortLikeError =
-        errorMessage.includes('WS_ABORT') ||
-        errorMessage.includes('OPERATION_ABORTED') ||
-        errorMessage.includes('LEAVE') ||
-        errorCode === 'WS_ABORT' ||
-        errorCode === 'OPERATION_ABORTED'
-      const isUserInitiatedAbort =
-        endingCallRef.current || callStatusRef.current === 'ended' || !open
+        client.setOnRemoteUserUnpublished((uid) => {
+          console.log('Remote user unpublished:', uid)
+        })
 
-      const structuredLog = {
-        source: initializeContextRef.current,
-        callSessionId: callSessionIdRef.current,
-        uid: uniqueUidRef.current,
-        channel: channelName,
-        errorCode,
-        errorMessage,
-        isIncoming,
-        currentStatus: callStatusRef.current,
-        isUserInitiatedAbort,
-      }
+        agoraClientRef.current = client
+        console.log('[VoiceCallDialog] initializeCall join begin', buildFlowContext({
+          source,
+          uid: numericUid,
+          channel: resolvedChannelName,
+        }))
+        await client.join({ audioOnly: true })
+        clearOutgoingAnsweredTimeout()
+        console.log('[VoiceCallDialog] Joined voice channel successfully', {
+          source,
+          callSessionId: callSessionIdRef.current,
+          uid: numericUid,
+          channel: resolvedChannelName,
+        })
 
-      if (isSecurityError) {
-        console.error('[VoiceCallDialog] initializeCall blocked by browser security', structuredLog)
-        alert('Voice calls require HTTPS or localhost. Please use HTTPS or access from localhost (http://localhost:3001).')
+        setCallStatus('connected')
+        updateCallUiLock(lockTokenRef.current, { phase: 'active' })
+      } catch (error: any) {
+        const errorMessage = String(error?.message || 'Failed to connect to call')
+        const errorCode = String(error?.code || '')
+        const isSecurityError =
+          errorMessage.includes('WEB_SECURITY_RESTRICT') ||
+          errorMessage.includes('NOT_SUPPORTED') ||
+          errorMessage.includes('getUserMedia')
+        const isAbortLikeError =
+          errorMessage.includes('WS_ABORT') ||
+          errorMessage.includes('OPERATION_ABORTED') ||
+          errorMessage.includes('LEAVE') ||
+          errorCode === 'WS_ABORT' ||
+          errorCode === 'OPERATION_ABORTED'
+        const isUserInitiatedAbort =
+          endingCallRef.current || callStatusRef.current === 'ended' || !open
+
+        const structuredLog = {
+          source: initializeContextRef.current,
+          callSessionId: callSessionIdRef.current,
+          uid: uniqueUidRef.current,
+          channel: resolvedChannelName,
+          errorCode,
+          errorMessage,
+          isIncoming,
+          currentStatus: callStatusRef.current,
+          isUserInitiatedAbort,
+          protocol,
+          hostname,
+          answeringInFlight: answeringInFlightRef.current,
+        }
+
+        if (isSecurityError) {
+          console.error('[VoiceCallDialog] initializeCall blocked by browser security', structuredLog)
+          alert('Voice calls require HTTPS or localhost. Please use HTTPS or access from localhost (http://localhost:3001).')
+          agoraClientRef.current = null
+          throw error
+        }
+
+        if (isAbortLikeError && isUserInitiatedAbort) {
+          console.warn('[VoiceCallDialog] initializeCall aborted by local teardown', structuredLog)
+          agoraClientRef.current = null
+          return
+        }
+
+        console.error('[VoiceCallDialog] initializeCall failed', structuredLog)
         agoraClientRef.current = null
         throw error
+      } finally {
+        initializeContextRef.current = null
       }
+    })()
 
-      if (isAbortLikeError && isUserInitiatedAbort) {
-        console.warn('[VoiceCallDialog] initializeCall aborted by local teardown', structuredLog)
-        agoraClientRef.current = null
-        return
-      }
-
-      console.error('[VoiceCallDialog] initializeCall failed', structuredLog)
-      agoraClientRef.current = null
-      throw error
+    initializePromiseRef.current = initializeTask
+    try {
+      await initializeTask
     } finally {
-      initializeContextRef.current = null
+      if (initializePromiseRef.current === initializeTask) {
+        initializePromiseRef.current = null
+      }
+    }
+  }
+
+  const isRetryableInitializeError = (error: unknown): boolean => {
+    const asAny = error as any
+    const errorCode = String(asAny?.code || asAny?.name || '')
+    const errorMessage = String(asAny?.message || error || '').toUpperCase()
+    return (
+      errorCode === 'WS_ABORT' ||
+      errorCode === 'OPERATION_ABORTED' ||
+      errorMessage.includes('WS_ABORT') ||
+      errorMessage.includes('OPERATION_ABORTED') ||
+      errorMessage.includes('LEAVE')
+    )
+  }
+
+  const initializeCallWithRetry = async (
+    channelName: string | undefined,
+    source: 'answer' | 'outgoing' | 'signal',
+  ) => {
+    try {
+      await initializeCall(channelName, source)
+    } catch (error) {
+      if (!isRetryableInitializeError(error)) {
+        throw error
+      }
+      console.warn('[VoiceCallDialog] initializeCall retrying once after transient failure', buildFlowContext({
+        source,
+        channelName,
+        retryReason: String((error as any)?.message || error || ''),
+      }))
+      await new Promise((resolve) => setTimeout(resolve, 350))
+      await initializeCall(channelName, source)
     }
   }
 

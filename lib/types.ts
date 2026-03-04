@@ -128,6 +128,9 @@ export interface MessageMetadata {
   reject_reason?: 'declined' | 'busy' | 'timeout' | 'connect_failed' | 'connect_timeout'
   connect_failed_by?: string
   connect_failed_at?: string
+  connect_failed_source?: 'answer' | 'outgoing' | 'signal' | 'timeout' | 'unknown'
+  connect_failed_error_code?: string
+  connect_failed_error_message?: string
   call_session_id?: string
 }
 

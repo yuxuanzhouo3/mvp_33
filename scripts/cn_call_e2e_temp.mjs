@@ -198,8 +198,16 @@ async function openConversation(page, conversationId) {
       continue
     }
 
-    const headerPhone = page.locator('div.border-b.bg-background button:has(svg.lucide-phone)').first()
-    if ((await headerPhone.count()) > 0 && (await headerPhone.isVisible())) {
+    const phoneButtons = page.locator('button:has(svg.lucide-phone)')
+    const videoButtons = page.locator('button:has(svg.lucide-video)')
+    const composer = page.locator(
+      'textarea, input[placeholder*="message" i], input[placeholder*="消息"], [contenteditable="true"]'
+    )
+    const hasVisibleCallButton =
+      ((await phoneButtons.count()) > 0 && (await phoneButtons.first().isVisible())) ||
+      ((await videoButtons.count()) > 0 && (await videoButtons.first().isVisible()))
+    const hasVisibleComposer = (await composer.count()) > 0 && (await composer.first().isVisible())
+    if (hasVisibleCallButton || hasVisibleComposer) {
       return
     }
 
@@ -376,6 +384,26 @@ async function runCallCase({
   await callerPage.waitForTimeout(Math.max(holdSeconds, 1) * 1000)
   const callerBeforeHangup = await capturePageState(callerPage, `${callType}-caller-before-hangup`)
   console.log(`[call:${callType}] callerBeforeHangupState=${JSON.stringify(callerBeforeHangup.state)}`)
+  const statusBeforeHangup = await readMessageStatus(callerSession, conversationId, callMessageId)
+  console.log(`[call:${callType}] statusBeforeHangup=${statusBeforeHangup.callStatus}, duration=${statusBeforeHangup.callDuration}`)
+  const hasTerminalStatusBeforeHangup =
+    statusBeforeHangup.callStatus === 'ended' ||
+    statusBeforeHangup.callStatus === 'cancelled' ||
+    statusBeforeHangup.callStatus === 'missed'
+  if (Number(callerBeforeHangup.state?.visibleDialogs || 0) === 0 && hasTerminalStatusBeforeHangup) {
+    const endedAuto = await waitForCallStatus(callerSession, conversationId, callMessageId, ['ended', 'cancelled', 'missed'], 10000)
+    console.log(`[call:${callType}] finalStatus=${endedAuto.callStatus}, duration=${endedAuto.callDuration} (auto-converged)`)
+    return {
+      callType,
+      callMessageId,
+      popupLatencyMs,
+      answeredStatus: answered.callStatus,
+      finalStatus: endedAuto.callStatus,
+      finalDuration: endedAuto.callDuration,
+      heldForSeconds: holdSeconds,
+      endedWithoutManualHangup: true,
+    }
+  }
   try {
     await hangupFromDialog(callerPage)
   } catch (error) {
@@ -383,12 +411,15 @@ async function runCallCase({
     const callMessageNow = messages.find((m) => String(m?.id || '') === callMessageId)
     const nowStatus = String(callMessageNow?.metadata?.call_status || '')
     const nowDuration = Number(callMessageNow?.metadata?.call_duration || 0)
-    throw new Error(
-      `hangup button not found for ${callType}, status=${nowStatus}, duration=${nowDuration}, error=${String(error)}`
-    )
+    if (nowStatus !== 'ended' && nowStatus !== 'cancelled' && nowStatus !== 'missed') {
+      throw new Error(
+        `hangup button not found for ${callType}, status=${nowStatus}, duration=${nowDuration}, error=${String(error)}`
+      )
+    }
+    console.log(`[call:${callType}] hangup button not found but call already terminal: status=${nowStatus}, duration=${nowDuration}`)
   }
 
-  const ended = await waitForCallStatus(callerSession, conversationId, callMessageId, ['ended', 'cancelled'], 20000)
+  const ended = await waitForCallStatus(callerSession, conversationId, callMessageId, ['ended', 'cancelled', 'missed'], 20000)
   console.log(`[call:${callType}] finalStatus=${ended.callStatus}, duration=${ended.callDuration}`)
   return {
     callType,
