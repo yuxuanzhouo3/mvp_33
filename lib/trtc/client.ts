@@ -2,6 +2,11 @@
 
 let TRTCSDK: any = null
 let trtcScriptPromise: Promise<any> | null = null
+const TRTC_SDK_SCRIPT_URLS = [
+  'https://web.sdk.qcloud.com/trtc/webrtc/v5/dist/trtc.js',
+  'https://web.sdk.qcloud.com/trtc/webrtc/v5/trtc.js',
+]
+const TRTC_ASSETS_PATH = 'https://web.sdk.qcloud.com/trtc/webrtc/v5/dist/assets/'
 
 declare global {
   interface Window {
@@ -21,36 +26,57 @@ async function loadTRTC() {
 
   if (!TRTCSDK) {
     if (!trtcScriptPromise) {
-      trtcScriptPromise = new Promise((resolve, reject) => {
+      trtcScriptPromise = (async () => {
+        // Remove stale failed loader script so retries can use updated URL candidates.
         const existing = document.querySelector('script[data-trtc-sdk="v5"]') as HTMLScriptElement | null
-        if (existing) {
-          if (window.TRTC) {
-            resolve(window.TRTC)
-            return
-          }
-          existing.addEventListener('load', () => resolve(window.TRTC), { once: true })
-          existing.addEventListener('error', () => reject(new Error('Failed to load TRTC SDK')), { once: true })
-          return
+        if (existing && !window.TRTC) {
+          existing.remove()
         }
 
-        const script = document.createElement('script')
-        script.src = 'https://web.sdk.qcloud.com/trtc/webrtc/v5/trtc.js'
-        script.async = true
-        script.defer = true
-        script.dataset.trtcSdk = 'v5'
-        script.onload = () => {
-          if (window.TRTC) {
-            resolve(window.TRTC)
-          } else {
-            reject(new Error('TRTC SDK loaded but global object is missing'))
+        let lastError: unknown = null
+        for (const url of TRTC_SDK_SCRIPT_URLS) {
+          try {
+            await new Promise<void>((resolve, reject) => {
+              const script = document.createElement('script')
+              script.src = url
+              script.async = true
+              script.defer = true
+              script.dataset.trtcSdk = 'v5'
+              script.dataset.trtcSdkUrl = url
+              script.onload = () => {
+                if (window.TRTC) {
+                  resolve()
+                } else {
+                  reject(new Error(`TRTC SDK loaded but global object is missing (url=${url})`))
+                }
+              }
+              script.onerror = () => {
+                script.remove()
+                reject(new Error(`Failed to load TRTC SDK (url=${url})`))
+              }
+              document.head.appendChild(script)
+            })
+
+            if (window.TRTC) {
+              return window.TRTC
+            }
+          } catch (error) {
+            lastError = error
+            console.warn('[TRTC] SDK script load failed, trying next source:', error)
           }
         }
-        script.onerror = () => reject(new Error('Failed to load TRTC SDK'))
-        document.head.appendChild(script)
-      })
+
+        const detail = lastError instanceof Error ? lastError.message : String(lastError || '')
+        throw new Error(`Failed to load TRTC SDK from all sources: ${detail}`)
+      })()
     }
 
-    TRTCSDK = await trtcScriptPromise
+    try {
+      TRTCSDK = await trtcScriptPromise
+    } catch (error) {
+      trtcScriptPromise = null
+      throw error
+    }
   }
 
   return TRTCSDK
@@ -322,7 +348,7 @@ export class TrtcClient {
     this.localAudioMuted = false
 
     this.trtc = trtcSDK.create({
-      assetsPath: 'https://web.sdk.qcloud.com/trtc/webrtc/v5/assets/',
+      assetsPath: TRTC_ASSETS_PATH,
     })
 
     this.bindCoreEvents()
