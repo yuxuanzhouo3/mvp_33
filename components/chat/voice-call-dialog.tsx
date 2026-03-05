@@ -1121,9 +1121,6 @@ export function VoiceCallDialog({
 
         client.setOnRemoteUserPublished((user) => {
           console.log('Remote user published:', user.uid, 'Audio track:', !!user.audioTrack)
-          if (user.audioTrack) {
-            user.audioTrack.play()
-          }
           clearOutgoingAnsweredTimeout()
           setRemoteUserJoined(true)
           setCallStatus((prev) => {
@@ -1148,6 +1145,7 @@ export function VoiceCallDialog({
           channel: resolvedChannelName,
         }))
         await client.join({ audioOnly: true })
+        await client.setRemoteAudioEnabled(isSpeakerOn)
         clearOutgoingAnsweredTimeout()
         console.log('[VoiceCallDialog] Joined voice channel successfully', {
           source,
@@ -1393,6 +1391,18 @@ export function VoiceCallDialog({
     }
   }
 
+  const handleToggleSpeaker = async () => {
+    const newSpeakerOn = !isSpeakerOn
+    setIsSpeakerOn(newSpeakerOn)
+
+    if (!agoraClientRef.current) return
+    try {
+      await agoraClientRef.current.setRemoteAudioEnabled(newSpeakerOn)
+    } catch (error) {
+      console.error('Failed to toggle remote audio:', error)
+    }
+  }
+
   const displayName = isGroup
     ? groupName || 'Group call'
     : recipient.full_name || recipient.username || recipient.email || 'User'
@@ -1550,7 +1560,7 @@ export function VoiceCallDialog({
                       'h-12 w-12 rounded-full border border-white/25 bg-white/12 text-white hover:bg-white/20',
                       !isSpeakerOn && 'bg-white/5 text-white/70',
                     )}
-                    onClick={() => setIsSpeakerOn(!isSpeakerOn)}
+                    onClick={handleToggleSpeaker}
                     disabled={callStatus !== 'connected'}
                   >
                     {isSpeakerOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}

@@ -102,6 +102,8 @@ export class TrtcClient {
   private trtcSDK: any = null
   private localVideoTrack: any = null
   private remoteUsers: Map<string, TrtcRemoteUser> = new Map()
+  private remoteAudioStartedKeys: Set<string> = new Set()
+  private remoteAudioEnabled = true
   private onRemoteUserPublished?: (user: any) => void
   private onRemoteUserUnpublished?: (uid: string) => void
   private localAudioMuted = false
@@ -125,6 +127,11 @@ export class TrtcClient {
 
   private getMainStreamType() {
     return this.trtcSDK?.TYPE?.STREAM_TYPE_MAIN
+  }
+
+  private getRemoteAudioKey(uid: string, streamType: any): string {
+    const resolvedStreamType = streamType ?? this.getMainStreamType() ?? 'main'
+    return `${uid}::${String(resolvedStreamType)}`
   }
 
   private getRoomId(channel: string): number {
@@ -169,6 +176,7 @@ export class TrtcClient {
     if (!user) return
 
     if (mediaType === 'audio') {
+      void this.stopRemoteAudio(uid, user._audioStreamType)
       delete user.audioTrack
       delete user._audioStreamType
     } else {
@@ -188,12 +196,44 @@ export class TrtcClient {
   }
 
   private async startRemoteAudio(uid: string, streamType: any) {
+    if (!this.remoteAudioEnabled) return
     if (!this.trtc || typeof this.trtc.startRemoteAudio !== 'function') return
+    const resolvedStreamType = streamType ?? this.getMainStreamType()
+    const key = this.getRemoteAudioKey(uid, resolvedStreamType)
+    if (this.remoteAudioStartedKeys.has(key)) {
+      console.debug('[TRTC] skip duplicate remote audio start', { uid, streamType: resolvedStreamType })
+      return
+    }
     try {
-      await Promise.resolve(this.trtc.startRemoteAudio({ userId: uid, streamType }))
+      await Promise.resolve(this.trtc.startRemoteAudio({ userId: uid, streamType: resolvedStreamType }))
+      this.remoteAudioStartedKeys.add(key)
+      console.debug('[TRTC] remote audio started', { uid, streamType: resolvedStreamType })
     } catch (error) {
       console.warn('Failed to start remote audio:', error)
     }
+  }
+
+  private async stopRemoteAudio(uid: string, streamType: any) {
+    const resolvedStreamType = streamType ?? this.getMainStreamType()
+    const key = this.getRemoteAudioKey(uid, resolvedStreamType)
+    this.remoteAudioStartedKeys.delete(key)
+    if (!this.trtc || typeof this.trtc.stopRemoteAudio !== 'function') return
+    try {
+      await Promise.resolve(this.trtc.stopRemoteAudio({ userId: uid, streamType: resolvedStreamType }))
+      console.debug('[TRTC] remote audio stopped', { uid, streamType: resolvedStreamType })
+    } catch (error) {
+      console.warn('Failed to stop remote audio:', error)
+    }
+  }
+
+  private async stopAllRemoteAudio() {
+    const users = Array.from(this.remoteUsers.values())
+    await Promise.all(
+      users.map((user) =>
+        this.stopRemoteAudio(user.uid, user._audioStreamType ?? this.getMainStreamType()),
+      ),
+    )
+    this.remoteAudioStartedKeys.clear()
   }
 
   private async startRemoteVideo(uid: string, streamType: any, view?: HTMLElement | null) {
@@ -319,6 +359,10 @@ export class TrtcClient {
       this.bind(eventName, (event: any) => {
         const uid = String(event?.userId ?? event?.uid ?? '')
         if (!uid) return
+        const user = this.remoteUsers.get(uid)
+        if (user?._audioStreamType !== undefined) {
+          void this.stopRemoteAudio(uid, user._audioStreamType)
+        }
         this.remoteUsers.delete(uid)
         this.emitRemoteUnpublished(uid)
       })
@@ -344,6 +388,8 @@ export class TrtcClient {
     }
 
     this.remoteUsers.clear()
+    this.remoteAudioStartedKeys.clear()
+    this.remoteAudioEnabled = true
     this.localVideoTrack = null
     this.localAudioMuted = false
 
@@ -402,6 +448,12 @@ export class TrtcClient {
     }
 
     try {
+      await this.stopAllRemoteAudio()
+    } catch (error) {
+      console.warn('Failed to stop remote audio:', error)
+    }
+
+    try {
       if (typeof this.trtc.exitRoom === 'function') {
         await Promise.resolve(this.trtc.exitRoom())
       }
@@ -420,6 +472,8 @@ export class TrtcClient {
     this.trtc = null
     this.localVideoTrack = null
     this.remoteUsers.clear()
+    this.remoteAudioStartedKeys.clear()
+    this.remoteAudioEnabled = true
   }
 
   async setMuted(muted: boolean): Promise<void> {
@@ -475,6 +529,24 @@ export class TrtcClient {
       if (!enabled) {
         this.localVideoTrack = null
       }
+    }
+  }
+
+  async setRemoteAudioEnabled(enabled: boolean): Promise<void> {
+    this.remoteAudioEnabled = enabled
+
+    if (!this.trtc) return
+
+    if (!enabled) {
+      await this.stopAllRemoteAudio()
+      return
+    }
+
+    const users = Array.from(this.remoteUsers.values())
+    for (const user of users) {
+      if (!user.audioTrack) continue
+      const streamType = user._audioStreamType ?? this.getMainStreamType()
+      await this.startRemoteAudio(user.uid, streamType)
     }
   }
 
