@@ -78,33 +78,44 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
   
   // 监听来自消息列表的接听/拒绝通话事件
   useEffect(() => {
+    const openIncomingCallDialog = (messageId: string, callType: 'voice' | 'video') => {
+      setIncomingCallMessageId(messageId)
+      setIncomingCallType(callType)
+      if (callType === 'video') {
+        setAutoAnswerVideo(true) // 从消息列表接听：自动接听视频
+        setShowVideoCall(true)
+      } else {
+        setAutoAnswerVoice(true) // 从消息列表接听：自动接听语音
+        setShowVoiceCall(true)
+      }
+    }
+
     const handleAnswerCall = async (event: CustomEvent) => {
-      const { messageId, conversationId } = event.detail
+      const { messageId, conversationId, callType } = event.detail
       
       // 验证 conversationId 是否匹配
       if (conversationId !== conversation.id) {
         return
       }
+
+      const normalizedCallType =
+        callType === 'voice' ? 'voice' : callType === 'video' ? 'video' : null
+      if (normalizedCallType) {
+        openIncomingCallDialog(messageId, normalizedCallType)
+        return
+      }
       
       // 获取消息详情以确定通话类型
       try {
-        const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}`)
+        const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}&_t=${Date.now()}`)
         const msgData = await msgResponse.json()
         if (msgData.success) {
           const callMessage = msgData.messages.find((m: any) => m.id === messageId)
-          if (callMessage?.metadata?.call_type) {
-            const callType = callMessage.metadata.call_type
-            setIncomingCallMessageId(messageId)
-            
-            if (callType === 'video') {
-              setIncomingCallType('video')
-              setAutoAnswerVideo(true) // 从消息列表接听：自动接听视频
-              setShowVideoCall(true)
-            } else {
-              setIncomingCallType('voice')
-              setAutoAnswerVoice(true) // 从消息列表接听：自动接听语音
-              setShowVoiceCall(true)
-            }
+          const backendType = callMessage?.metadata?.call_type
+          const normalizedBackendType =
+            backendType === 'voice' ? 'voice' : backendType === 'video' ? 'video' : null
+          if (normalizedBackendType) {
+            openIncomingCallDialog(messageId, normalizedBackendType)
           }
         }
       } catch (error) {

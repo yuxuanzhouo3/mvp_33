@@ -177,6 +177,24 @@ export function VoiceCallDialog({
     return callStatusRef.current !== 'connected' || !remoteUserJoined
   }
 
+  const parseAnsweredAtMs = (value: unknown): number | null => {
+    if (typeof value !== 'string' || value.trim().length === 0) return null
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  const ensureCallStartTime = (answeredAt?: unknown): number => {
+    const answeredAtMs = parseAnsweredAtMs(answeredAt)
+    if (answeredAtMs !== null) {
+      callStartTimeRef.current = answeredAtMs
+      return answeredAtMs
+    }
+    if (!callStartTimeRef.current) {
+      callStartTimeRef.current = Date.now()
+    }
+    return callStartTimeRef.current
+  }
+
   const fallbackTrtcUserId = (value: string) => {
     const input = typeof value === 'string' ? value : String(value)
     let hash1 = 2166136261
@@ -451,9 +469,7 @@ export function VoiceCallDialog({
               clearInterval(pollingIntervalRef.current)
               pollingIntervalRef.current = null
             }
-            if (!callStartTimeRef.current) {
-              callStartTimeRef.current = Date.now()
-            }
+            ensureCallStartTime(fullMetadata?.answered_at)
             setCallStatus('connected')
             try {
               // 从消息中获取频道名称，确保使用最新的值
@@ -610,6 +626,8 @@ export function VoiceCallDialog({
         callStatus?: string
         channelName?: string
         callSessionId?: string
+        answeredAt?: string
+        answered_at?: string
         rejectReason?: string
         reject_reason?: string
       }>
@@ -634,9 +652,7 @@ export function VoiceCallDialog({
           pollingIntervalRef.current = null
         }
         ensureCallSessionId(detail.callSessionId, currentMessageId)
-        if (!callStartTimeRef.current) {
-          callStartTimeRef.current = Date.now()
-        }
+        ensureCallStartTime(detail.answeredAt || detail.answered_at)
         setCallStatus('connected')
         updateCallUiLock(lockTokenRef.current, { phase: 'active' })
         if (!agoraClientRef.current) {
@@ -900,10 +916,11 @@ export function VoiceCallDialog({
       }))
 
       const sessionId = ensureCallSessionId(callMessage.metadata?.call_session_id, messageId)
+      const answeredAt = new Date().toISOString()
       const updatedMetadata = {
         ...(callMessage.metadata || {}),
         call_status: 'answered',
-        answered_at: new Date().toISOString(),
+        answered_at: answeredAt,
         answered_by: currentUser.id,
         call_session_id: sessionId,
       }
@@ -932,9 +949,7 @@ export function VoiceCallDialog({
         incomingTimeoutRef.current = null
       }
       clearOutgoingAnsweredTimeout()
-      if (!callStartTimeRef.current) {
-        callStartTimeRef.current = Date.now()
-      }
+      ensureCallStartTime(answeredAt)
       setCallStatus('connected')
       updateCallUiLock(lockTokenRef.current, {
         messageId,
@@ -1125,9 +1140,6 @@ export function VoiceCallDialog({
           setRemoteUserJoined(true)
           setCallStatus((prev) => {
             if (prev !== 'connected') {
-              if (!callStartTimeRef.current) {
-                callStartTimeRef.current = Date.now()
-              }
               return 'connected'
             }
             return prev
@@ -1252,8 +1264,8 @@ export function VoiceCallDialog({
   }
 
   useEffect(() => {
-    if (callStatus === 'connected' && callStartTimeRef.current && remoteUserJoined) {
-      // Update duration immediately when remote user joins
+    if (callStatus === 'connected' && callStartTimeRef.current) {
+      // Update duration from a shared answered_at/start timestamp.
       const updateDuration = () => {
         if (callStartTimeRef.current) {
           const elapsed = Math.floor((Date.now() - callStartTimeRef.current) / 1000)
@@ -1267,11 +1279,11 @@ export function VoiceCallDialog({
       // Then update every second
       const interval = setInterval(updateDuration, 1000)
       return () => clearInterval(interval)
-    } else if (callStatus !== 'connected' || !remoteUserJoined) {
-      // Reset duration when not connected or remote user hasn't joined
+    } else if (callStatus !== 'connected') {
+      // Reset duration when not connected
       setCallDuration(0)
     }
-  }, [callStatus, remoteUserJoined])
+  }, [callStatus])
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60)

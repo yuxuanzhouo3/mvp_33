@@ -7324,19 +7324,38 @@ function ChatPageContent() {
 
           // Speed path: trigger incoming-call popup immediately from realtime payload.
           // Do this before any membership/loading checks so receiver gets a near-instant dialog.
+          const inviteMetadata = (() => {
+            if (!newMessage?.metadata) return {}
+            if (typeof newMessage.metadata === 'object') return newMessage.metadata
+            if (typeof newMessage.metadata === 'string') {
+              try {
+                const parsed = JSON.parse(newMessage.metadata)
+                return typeof parsed === 'object' && parsed ? parsed : {}
+              } catch {
+                return {}
+              }
+            }
+            return {}
+          })()
+          const incomingCallType =
+            inviteMetadata.call_type === 'voice'
+              ? 'voice'
+              : inviteMetadata.call_type === 'video'
+                ? 'video'
+                : null
           const isIncomingCallInvite =
             newMessage.type === 'system' &&
-            !!newMessage.metadata?.call_type &&
-            newMessage.metadata?.call_status === 'calling' &&
+            !!incomingCallType &&
+            inviteMetadata.call_status === 'calling' &&
             newMessage.sender_id !== currentUser.id
           if (isIncomingCallInvite) {
             dispatchIncomingCallPrompt({
               messageId: String(newMessage.id || ''),
               conversationId,
-              callType: newMessage.metadata?.call_type,
-              callerId: newMessage.metadata?.caller_id,
-              callerName: newMessage.metadata?.caller_name,
-              callSessionId: newMessage.metadata?.call_session_id,
+              callType: incomingCallType,
+              callerId: inviteMetadata.caller_id,
+              callerName: inviteMetadata.caller_name,
+              callSessionId: inviteMetadata.call_session_id,
             })
           }
 
@@ -7712,6 +7731,8 @@ function ChatPageContent() {
               callerId: newMetadata.caller_id || oldMetadata.caller_id,
               callerName: newMetadata.caller_name || oldMetadata.caller_name,
               callSessionId: newMetadata.call_session_id || oldMetadata.call_session_id,
+              answeredAt: newMetadata.answered_at || oldMetadata.answered_at,
+              answered_at: newMetadata.answered_at || oldMetadata.answered_at,
               rejectReason,
               reject_reason: rejectReason,
             }
@@ -7723,6 +7744,8 @@ function ChatPageContent() {
                   messageId: signalDetail.messageId,
                   conversationId: signalDetail.conversationId,
                   callSessionId: signalDetail.callSessionId,
+                  answeredAt: signalDetail.answeredAt,
+                  answered_at: signalDetail.answered_at,
                 },
               }))
             }

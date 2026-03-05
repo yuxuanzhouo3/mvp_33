@@ -113,35 +113,53 @@ export function VideoCallDialog({
   const outgoingInviteStartedRef = useRef(false)
   const callSessionIdRef = useRef<string>(normalizeCallSessionId(callSessionId) || fallbackCallSessionId(callMessageId))
 
-  const resolveIncomingSessionId = (candidate: unknown, messageId?: string): string => {
-    return normalizeCallSessionId(candidate) || fallbackCallSessionId(messageId)
-  }
-
   const ensureCallSessionId = (candidate?: unknown, messageId?: string): string => {
-    const incomingSessionId = resolveIncomingSessionId(
-      candidate,
-      messageId || callMessageIdRef.current || callMessageId,
-    )
+    const incomingSessionId = normalizeCallSessionId(candidate)
     if (incomingSessionId) {
       callSessionIdRef.current = incomingSessionId
       return incomingSessionId
     }
+
     if (callSessionIdRef.current) {
       return callSessionIdRef.current
     }
+
+    const fallbackSessionId = fallbackCallSessionId(
+      messageId || callMessageIdRef.current || callMessageId,
+    )
+    if (fallbackSessionId) {
+      callSessionIdRef.current = fallbackSessionId
+      return fallbackSessionId
+    }
+
     const generated = createCallLockToken('call_session')
     callSessionIdRef.current = generated
     return generated
   }
 
   const isMatchingCallSession = (candidate?: unknown, messageId?: string): boolean => {
-    const incomingSessionId = resolveIncomingSessionId(
-      candidate,
-      messageId || callMessageIdRef.current || callMessageId,
-    )
+    const incomingSessionId = normalizeCallSessionId(candidate)
     if (!incomingSessionId) return true
     const activeSessionId = ensureCallSessionId(undefined, messageId)
     return !activeSessionId || activeSessionId === incomingSessionId
+  }
+
+  const parseAnsweredAtMs = (value: unknown): number | null => {
+    if (typeof value !== 'string' || value.trim().length === 0) return null
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  const ensureCallStartTime = (answeredAt?: unknown): number => {
+    const answeredAtMs = parseAnsweredAtMs(answeredAt)
+    if (answeredAtMs !== null) {
+      callStartTimeRef.current = answeredAtMs
+      return answeredAtMs
+    }
+    if (!callStartTimeRef.current) {
+      callStartTimeRef.current = Date.now()
+    }
+    return callStartTimeRef.current
   }
 
   useEffect(() => {
@@ -462,13 +480,22 @@ export function VideoCallDialog({
         callStatus?: string
         channelName?: string
         callSessionId?: string
+        answeredAt?: string
+        answered_at?: string
       }>
       const detail = custom.detail || {}
       const currentMessageId = callMessageIdRef.current || callMessageId
       if (!currentMessageId) return
       if (String(detail.messageId || '') !== String(currentMessageId)) return
       if (String(detail.conversationId || '') !== String(conversationId)) return
-      if (!isMatchingCallSession(detail.callSessionId, currentMessageId)) return
+      const isSessionMatched = isMatchingCallSession(detail.callSessionId, currentMessageId)
+      if (!isSessionMatched) {
+        console.warn('[VideoCallDialog] callSignal session mismatch ignored', {
+          detailCallSessionId: detail.callSessionId,
+          activeCallSessionId: callSessionIdRef.current,
+          messageId: currentMessageId,
+        })
+      }
 
       const status = String(detail.callStatus || '')
       if (!status) return
@@ -479,9 +506,7 @@ export function VideoCallDialog({
           pollingIntervalRef.current = null
         }
         ensureCallSessionId(detail.callSessionId, currentMessageId)
-        if (!callStartTimeRef.current) {
-          callStartTimeRef.current = Date.now()
-        }
+        ensureCallStartTime(detail.answeredAt || detail.answered_at)
         setCallStatus('connected')
         updateCallUiLock(lockTokenRef.current, { phase: 'active' })
         if (!agoraClientRef.current) {
@@ -535,11 +560,31 @@ export function VideoCallDialog({
         if (!msgData?.success || !Array.isArray(msgData?.messages)) return
         const callMessage = msgData.messages.find((m: any) => String(m?.id || '') === String(messageId))
         const metadata = callMessage?.metadata || {}
-        if (!isMatchingCallSession(metadata.call_session_id, messageId)) {
-          return
+        const isSessionMatched = isMatchingCallSession(metadata.call_session_id, messageId)
+        if (!isSessionMatched) {
+          console.warn('[VideoCallDialog] syncStatus session mismatch ignored', {
+            backendCallSessionId: metadata.call_session_id,
+            activeCallSessionId: callSessionIdRef.current,
+            messageId,
+          })
         }
         const status = String(callMessage?.metadata?.call_status || '')
         if (!status) return
+        if (status === 'answered' && !isIncoming && callStatusRef.current === 'calling') {
+          ensureCallStartTime(metadata?.answered_at)
+          setCallStatus('connected')
+          updateCallUiLock(lockTokenRef.current, { phase: 'active' })
+          if (!agoraClientRef.current) {
+            const channelNameToUse =
+              (typeof metadata?.channel_name === 'string' && metadata.channel_name) ||
+              generateChannelName(currentUser.id, recipient.id, conversationId)
+            void initializeCall(channelNameToUse).catch((error) => {
+              console.error('[VideoCallDialog] syncStatus initialize after answered failed:', error)
+              setCallStatus('ended')
+            })
+          }
+          return
+        }
         if (status === 'ended' || ((status === 'cancelled' || status === 'missed') && callStatusRef.current !== 'connected')) {
           setCallStatus('ended')
           onOpenChange(false)
@@ -619,8 +664,13 @@ export function VideoCallDialog({
           }
 
           const metadata = callMessage?.metadata || {}
-          if (!isMatchingCallSession(metadata.call_session_id, messageId)) {
-            return
+          const isSessionMatched = isMatchingCallSession(metadata.call_session_id, messageId)
+          if (!isSessionMatched) {
+            console.warn('[VideoCallDialog] polling session mismatch ignored', {
+              backendCallSessionId: metadata.call_session_id,
+              activeCallSessionId: callSessionIdRef.current,
+              messageId,
+            })
           }
           const callStatus = metadata.call_status
           const fullMetadata = callMessage?.metadata || {}
@@ -630,18 +680,13 @@ export function VideoCallDialog({
               clearInterval(pollingIntervalRef.current)
               pollingIntervalRef.current = null
             }
+            ensureCallStartTime(fullMetadata?.answered_at)
             // 如果已经在通话中（摄像头已开启），只需要更新状态
             // 如果还没有加入频道，则需要初始化通话
             if (agoraClientRef.current) {
-              if (!callStartTimeRef.current) {
-                callStartTimeRef.current = Date.now()
-              }
               setCallStatus('connected')
               updateCallUiLock(lockTokenRef.current, { phase: 'active' })
             } else {
-              if (!callStartTimeRef.current) {
-                callStartTimeRef.current = Date.now()
-              }
               setCallStatus('connected')
               updateCallUiLock(lockTokenRef.current, { phase: 'active' })
               try {
@@ -692,13 +737,20 @@ export function VideoCallDialog({
         messageId: answeredMessageId,
         conversationId: answeredConversationId,
         callSessionId: answeredCallSessionId,
+        answeredAt,
+        answered_at: answeredAtRaw,
       } = event.detail
       const currentMessageId = callMessageIdRef.current
       
       // 检查是否是当前通话的消息
       if (answeredMessageId === currentMessageId && answeredConversationId === conversationId) {
-        if (!isMatchingCallSession(answeredCallSessionId, answeredMessageId)) {
-          return
+        const isSessionMatched = isMatchingCallSession(answeredCallSessionId, answeredMessageId)
+        if (!isSessionMatched) {
+          console.warn('[VideoCallDialog] callAnswered session mismatch ignored', {
+            detailCallSessionId: answeredCallSessionId,
+            activeCallSessionId: callSessionIdRef.current,
+            messageId: answeredMessageId,
+          })
         }
         // 停止轮询
         if (pollingIntervalRef.current) {
@@ -713,6 +765,7 @@ export function VideoCallDialog({
           if (msgData.success) {
             const callMessage = msgData.messages.find((m: any) => m.id === answeredMessageId)
             ensureCallSessionId(callMessage?.metadata?.call_session_id, answeredMessageId)
+            ensureCallStartTime(answeredAt || answeredAtRaw || callMessage?.metadata?.answered_at)
             const channelName = callMessage?.metadata?.channel_name || generateChannelName(currentUser.id, recipient.id, conversationId)
             setCallStatus('connected')
             updateCallUiLock(lockTokenRef.current, { phase: 'active' })
@@ -806,6 +859,7 @@ export function VideoCallDialog({
         const callMessage = msgData.messages.find((m: any) => m.id === messageId)
         if (callMessage) {
           const sessionId = ensureCallSessionId(callMessage.metadata?.call_session_id, messageId)
+          const answeredAt = new Date().toISOString()
           // 确保 callMessageIdRef 已设置
           if (!callMessageIdRef.current) {
             callMessageIdRef.current = messageId
@@ -815,7 +869,7 @@ export function VideoCallDialog({
           const updatedMetadata = {
             ...(callMessage.metadata || {}),
             call_status: 'answered',
-            answered_at: new Date().toISOString(),
+            answered_at: answeredAt,
             answered_by: currentUser.id,
             call_session_id: sessionId,
           }
@@ -872,14 +926,14 @@ export function VideoCallDialog({
                 messageId,
                 conversationId,
                 callSessionId: sessionId,
+                answeredAt,
+                answered_at: answeredAt,
               },
             }))
           }
 
           // 接收方：点击接听后立即进入“连接中”状态，避免被当作仍在响铃。
-          if (!callStartTimeRef.current) {
-            callStartTimeRef.current = Date.now()
-          }
+          ensureCallStartTime(answeredAt)
           setCallStatus('connected')
           if (incomingTimeoutRef.current) {
             clearTimeout(incomingTimeoutRef.current)
@@ -1328,9 +1382,6 @@ export function VideoCallDialog({
         setRemoteUserJoined(true)
         setCallStatus(prev => {
           if (prev !== 'connected') {
-            if (!callStartTimeRef.current) {
-              callStartTimeRef.current = Date.now()
-            }
             console.log('[Remote User] Status updated to connected')
             return 'connected'
           }
@@ -1713,9 +1764,6 @@ export function VideoCallDialog({
               setRemoteUserJoined(true)
               setCallStatus(prev => {
                 if (prev !== 'connected') {
-                  if (!callStartTimeRef.current) {
-                    callStartTimeRef.current = Date.now()
-                  }
                   console.log('[Remote User (retry)] Status updated to connected')
                   return 'connected'
                 }
@@ -1862,8 +1910,8 @@ export function VideoCallDialog({
   }
 
   useEffect(() => {
-    if (callStatus === 'connected' && callStartTimeRef.current && remoteUserJoined) {
-      // Update duration immediately when remote user joins
+    if (callStatus === 'connected' && callStartTimeRef.current) {
+      // Update duration from a shared answered_at/start timestamp.
       const updateDuration = () => {
         if (callStartTimeRef.current) {
           const elapsed = Math.floor((Date.now() - callStartTimeRef.current) / 1000)
@@ -1877,11 +1925,11 @@ export function VideoCallDialog({
       // Then update every second
       const interval = setInterval(updateDuration, 1000)
       return () => clearInterval(interval)
-    } else if (callStatus !== 'connected' || !remoteUserJoined) {
-      // Reset duration when not connected or remote user hasn't joined
+    } else if (callStatus !== 'connected') {
+      // Reset duration when not connected
       setCallDuration(0)
     }
-  }, [callStatus, remoteUserJoined])
+  }, [callStatus])
 
   // Ensure video tracks are played when status changes to connected
   useEffect(() => {

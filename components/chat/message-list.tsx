@@ -1341,7 +1341,11 @@ export function MessageList({
                                   onClick={() => {
                                     // 触发接听通话
                                     window.dispatchEvent(new CustomEvent('answerCall', {
-                                      detail: { messageId: message.id, conversationId: message.conversation_id }
+                                      detail: {
+                                        messageId: message.id,
+                                        conversationId: message.conversation_id,
+                                        callType: callMetadata.call_type,
+                                      }
                                     }))
                                   }}
                                 >
