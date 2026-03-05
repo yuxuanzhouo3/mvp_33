@@ -94,6 +94,7 @@ export function VideoCallDialog({
   const [remoteUserJoined, setRemoteUserJoined] = useState(false) // 跟踪远程用户是否已加入
   const [hasRemoteVideo, setHasRemoteVideo] = useState(false) // 跟踪远程视频是否已加载
   const [hasLocalPreview, setHasLocalPreview] = useState(false)
+  const [hasConnectedLocalVideo, setHasConnectedLocalVideo] = useState(false)
   const callStartTimeRef = useRef<number | null>(null)
   
   const agoraClientRef = useRef<TrtcClient | null>(null)
@@ -478,6 +479,7 @@ export function VideoCallDialog({
       // 重置所有状态，确保下次打开时是干净的状态
       setHasRemoteVideo(false)
       setRemoteUserJoined(false)
+      setHasConnectedLocalVideo(false)
     }
   }, [open, isIncoming, callMessageId])
 
@@ -1933,6 +1935,7 @@ export function VideoCallDialog({
       if (!localVideoTrack) {
         console.warn('Camera not available - call will continue as audio-only')
         setIsVideoOn(false)
+        setHasConnectedLocalVideo(false)
         // 不显示 alert，只在控制台记录
         // 摄像头不可用可能是权限被拒绝、设备问题、或被占用，用户可以从浏览器权限设置中检查
       }
@@ -1952,8 +1955,10 @@ export function VideoCallDialog({
             localVideoRef.current.style.objectFit = 'cover'
             track.play(localVideoRef.current)
             console.log('Local video track playing')
+            setHasConnectedLocalVideo(true)
           } catch (error) {
             console.error('Failed to play local video:', error)
+            setHasConnectedLocalVideo(false)
             // Retry after a short delay
             setTimeout(() => {
               try {
@@ -1962,12 +1967,16 @@ export function VideoCallDialog({
                     localVideoRef.current.innerHTML = ''
                   }
                   track.play(localVideoRef.current)
+                  setHasConnectedLocalVideo(true)
                 }
               } catch (retryError) {
                 console.error('Retry failed to play local video:', retryError)
+                setHasConnectedLocalVideo(false)
               }
             }, 500)
           }
+        } else {
+          setHasConnectedLocalVideo(false)
         }
       }
       
@@ -2069,9 +2078,13 @@ export function VideoCallDialog({
                 localVideoRef.current.innerHTML = ''
               }
               localVideoTrack.play(localVideoRef.current)
+              setHasConnectedLocalVideo(true)
             } catch (error) {
               console.warn('Failed to play local video in useEffect:', error)
+              setHasConnectedLocalVideo(false)
             }
+          } else {
+            setHasConnectedLocalVideo(false)
           }
         }
 
@@ -2341,6 +2354,7 @@ export function VideoCallDialog({
     setIsScreenSharing(false)
     setRemoteUserJoined(false)
     setHasRemoteVideo(false)
+    setHasConnectedLocalVideo(false)
     callStartTimeRef.current = null
     setTimeout(() => {
       onOpenChange(false)
@@ -2367,9 +2381,11 @@ export function VideoCallDialog({
         view.innerHTML = ''
       }
       track.play(view)
+      setHasConnectedLocalVideo(true)
       return true
     } catch (error) {
       console.warn('Failed to play local preview:', error)
+      setHasConnectedLocalVideo(false)
       return false
     }
   }
@@ -2385,6 +2401,7 @@ export function VideoCallDialog({
           if (localVideoRef.current?.firstChild) {
             localVideoRef.current.innerHTML = ''
           }
+          setHasConnectedLocalVideo(false)
           return
         }
 
@@ -2397,6 +2414,7 @@ export function VideoCallDialog({
         })
       } catch (error) {
         console.error('Failed to toggle local video:', error)
+        setHasConnectedLocalVideo(false)
         if (newVideoOn) {
           setIsVideoOn(false)
         }
@@ -2453,9 +2471,12 @@ export function VideoCallDialog({
     callStatus === 'ringing' && 'border-amber-300/40 bg-amber-400/25 text-amber-50',
     callStatus === 'ended' && 'border-slate-300/30 bg-slate-500/25 text-slate-100',
   )
-  const showConnectedLocalVideo = callStatus === 'connected' && isVideoOn
+  const showConnectedLocalVideo = callStatus === 'connected' && isVideoOn && hasConnectedLocalVideo
   const showPreCallLocalVideo = callStatus === 'calling' && hasLocalPreview
-  const showLocalPlaceholder = callStatus === 'connected' ? !isVideoOn : !showPreCallLocalVideo
+  const showLocalTile = callStatus === 'connected'
+    ? (showConnectedLocalVideo || !hasRemoteVideo)
+    : true
+  const showLocalPlaceholder = showLocalTile && (callStatus === 'connected' ? !showConnectedLocalVideo : !showPreCallLocalVideo)
 
   // 外部关闭动作统一视为“挂断/取消”
   const handleOpenChange = (newOpen: boolean) => {
@@ -2552,35 +2573,37 @@ export function VideoCallDialog({
               </div>
 
               {/* Self view (local video) */}
-              <div className="absolute right-4 top-4 z-20 h-40 w-56 overflow-hidden rounded-2xl border border-white/20 bg-slate-900/75 shadow-2xl shadow-black/50 backdrop-blur-xl">
-                <div className="absolute left-2 top-2 z-10 rounded-md bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
-                  Local video
-                </div>
-                <video
-                  ref={localPreviewVideoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className={cn(
-                    'absolute inset-0 h-full w-full object-cover transition-opacity duration-200',
-                    showPreCallLocalVideo ? 'opacity-100' : 'opacity-0',
-                  )}
-                />
-                <div
-                  ref={localVideoRef}
-                  className={cn(
-                    'absolute inset-0 h-full w-full bg-black/20 transition-opacity duration-200',
-                    showConnectedLocalVideo ? 'opacity-100' : 'opacity-0',
-                  )}
-                />
-                {showLocalPlaceholder && (
-                  <div className="absolute inset-0 flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-700 to-slate-900">
-                    <span className="text-sm text-white/90">
-                      {!isVideoOn ? 'Video Off' : (callStatus === 'calling' ? 'Opening camera...' : 'You')}
-                    </span>
+              {showLocalTile && (
+                <div className="absolute right-4 top-4 z-20 h-40 w-56 overflow-hidden rounded-2xl border border-white/20 bg-slate-900/75 shadow-2xl shadow-black/50 backdrop-blur-xl">
+                  <div className="absolute left-2 top-2 z-10 rounded-md bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
+                    Local video
                   </div>
-                )}
-              </div>
+                  <video
+                    ref={localPreviewVideoRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className={cn(
+                      'absolute inset-0 h-full w-full object-cover transition-opacity duration-200',
+                      showPreCallLocalVideo ? 'opacity-100' : 'opacity-0',
+                    )}
+                  />
+                  <div
+                    ref={localVideoRef}
+                    className={cn(
+                      'absolute inset-0 h-full w-full bg-black/20 transition-opacity duration-200',
+                      showConnectedLocalVideo ? 'opacity-100' : 'opacity-0',
+                    )}
+                  />
+                  {showLocalPlaceholder && (
+                    <div className="absolute inset-0 flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-700 to-slate-900">
+                      <span className="text-sm text-white/90">
+                        {!isVideoOn ? 'Video Off' : (callStatus === 'calling' ? 'Opening camera...' : 'Camera unavailable')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {callStatus !== 'ended' && (
