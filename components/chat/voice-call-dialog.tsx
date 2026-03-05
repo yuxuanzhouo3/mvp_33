@@ -123,6 +123,7 @@ export function VoiceCallDialog({
   const outgoingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const incomingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const outgoingAnsweredTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const outgoingAnsweredTimeoutWarnedRef = useRef(false)
   const outgoingInviteStartedRef = useRef(false)
   const answeringInFlightRef = useRef(false)
   const initializePromiseRef = useRef<Promise<void> | null>(null)
@@ -770,24 +771,22 @@ export function VoiceCallDialog({
   useEffect(() => {
     if (!open || isIncoming || callStatus !== 'connected' || remoteUserJoined) {
       clearOutgoingAnsweredTimeout()
+      outgoingAnsweredTimeoutWarnedRef.current = false
       return
     }
 
     clearOutgoingAnsweredTimeout()
     outgoingAnsweredTimeoutRef.current = setTimeout(() => {
       if (callStatusRef.current !== 'connected' || remoteUserJoined) return
+      if (outgoingAnsweredTimeoutWarnedRef.current) return
+      outgoingAnsweredTimeoutWarnedRef.current = true
       console.warn('[VoiceCallDialog] Outgoing connect timeout after answered', {
         conversationId,
         messageId: callMessageIdRef.current || callMessageId,
         callSessionId: callSessionIdRef.current,
       })
-      void writeCallConnectionFailure(
-        'connect_timeout',
-        undefined,
-        buildFailureContext('timeout', new Error('Remote user did not join media channel within timeout')),
-      )
-      setCallStatus('ended')
-      onOpenChange(false)
+      // Keep the call open and let user decide when to hang up.
+      // Auto-ending here causes false-positive drops on slow networks/devices.
     }, 15_000)
 
     return () => {
