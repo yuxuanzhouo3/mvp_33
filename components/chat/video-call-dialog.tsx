@@ -101,17 +101,25 @@ export function VideoCallDialog({
   const localPreviewVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLDivElement>(null)
   const preCallPreviewStreamRef = useRef<MediaStream | null>(null)
-  const callMessageIdRef = useRef<string | undefined>(callMessageId)
+  const callMessageIdRef = useRef<string | undefined>(callMessageId ? String(callMessageId) : undefined)
   const uniqueUidRef = useRef<string | null>(null) // Store unique UID for this call session
   const endingCallRef = useRef(false)
   const callStatusRef = useRef(callStatus)
+  const previousStatusRef = useRef(callStatus)
   const lockTokenRef = useRef<string>(createCallLockToken('video'))
   const ringtoneOwnerRef = useRef<string>(createCallLockToken('ringtone_video'))
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const pollingTickRef = useRef(0)
   const outgoingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const incomingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const outgoingInviteStartedRef = useRef(false)
   const callSessionIdRef = useRef<string>(normalizeCallSessionId(callSessionId) || fallbackCallSessionId(callMessageId))
+
+  const normalizeMessageId = (value: unknown): string | undefined => {
+    if (value === null || value === undefined) return undefined
+    const normalized = String(value).trim()
+    return normalized.length > 0 ? normalized : undefined
+  }
 
   const ensureCallSessionId = (candidate?: unknown, messageId?: string): string => {
     const incomingSessionId = normalizeCallSessionId(candidate)
@@ -165,6 +173,25 @@ export function VideoCallDialog({
   useEffect(() => {
     callStatusRef.current = callStatus
   }, [callStatus])
+
+  useEffect(() => {
+    if (!open) {
+      previousStatusRef.current = callStatus
+      return
+    }
+    if (previousStatusRef.current !== callStatus) {
+      console.log('[VideoCallDialog][state] transition', {
+        from: previousStatusRef.current,
+        to: callStatus,
+        messageId: callMessageIdRef.current || callMessageId,
+        conversationId,
+        isIncoming,
+        hasClient: !!agoraClientRef.current,
+        remoteUserJoined,
+      })
+      previousStatusRef.current = callStatus
+    }
+  }, [open, callStatus, callMessageId, conversationId, isIncoming, remoteUserJoined])
 
   const shouldPlayRingtone =
     open &&
@@ -238,9 +265,10 @@ export function VideoCallDialog({
   }, [open, callStatus, onOpenChange])
 
   useEffect(() => {
-    callMessageIdRef.current = callMessageId
-    if (callMessageId) {
-      ensureCallSessionId(callSessionId, callMessageId)
+    const normalizedMessageId = normalizeMessageId(callMessageId)
+    callMessageIdRef.current = normalizedMessageId
+    if (normalizedMessageId) {
+      ensureCallSessionId(callSessionId, normalizedMessageId)
     }
   }, [callMessageId])
 
@@ -499,6 +527,17 @@ export function VideoCallDialog({
 
       const status = String(detail.callStatus || '')
       if (!status) return
+      if (status !== 'calling') {
+        console.log('[VideoCallDialog][signal] received', {
+          status,
+          messageId: currentMessageId,
+          detailMessageId: detail.messageId,
+          conversationId,
+          detailConversationId: detail.conversationId,
+          callStatus: callStatusRef.current,
+          channelName: detail.channelName,
+        })
+      }
 
       if (status === 'answered' && !isIncoming && callStatusRef.current === 'calling') {
         if (pollingIntervalRef.current) {
@@ -548,17 +587,38 @@ export function VideoCallDialog({
   // Fallback status sync to close stale dialogs when realtime events are delayed/lost.
   useEffect(() => {
     if (!open) return
-    const messageId = callMessageIdRef.current || callMessageId
-    if (!messageId) return
 
     let disposed = false
+    let tick = 0
     const syncStatus = async () => {
       if (disposed) return
+      const messageId = normalizeMessageId(callMessageIdRef.current || callMessageId)
+      if (!messageId) {
+        if (!isIncoming && tick % 3 === 0) {
+          console.log('[VideoCallDialog][sync] waiting callMessageId before polling backend status', {
+            tick,
+            conversationId,
+          })
+        }
+        tick += 1
+        return
+      }
       try {
         const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}&_t=${Date.now()}`)
         const msgData = await msgResponse.json()
         if (!msgData?.success || !Array.isArray(msgData?.messages)) return
         const callMessage = msgData.messages.find((m: any) => String(m?.id || '') === String(messageId))
+        if (!callMessage) {
+          if (!isIncoming && tick % 4 === 0) {
+            console.log('[VideoCallDialog][sync] call message not found yet', {
+              tick,
+              messageId,
+              sampleIds: msgData.messages.slice(0, 5).map((m: any) => String(m?.id || '')),
+            })
+          }
+          tick += 1
+          return
+        }
         const metadata = callMessage?.metadata || {}
         const isSessionMatched = isMatchingCallSession(metadata.call_session_id, messageId)
         if (!isSessionMatched) {
@@ -570,6 +630,16 @@ export function VideoCallDialog({
         }
         const status = String(callMessage?.metadata?.call_status || '')
         if (!status) return
+        if (status !== 'calling') {
+          console.log('[VideoCallDialog][sync] backend status observed', {
+            tick,
+            status,
+            messageId,
+            localStatus: callStatusRef.current,
+            answeredAt: metadata?.answered_at,
+            channelName: metadata?.channel_name,
+          })
+        }
         if (status === 'answered' && !isIncoming && callStatusRef.current === 'calling') {
           ensureCallStartTime(metadata?.answered_at)
           setCallStatus('connected')
@@ -591,10 +661,12 @@ export function VideoCallDialog({
         }
       } catch {
         // Ignore sync errors and retry on next interval.
+      } finally {
+        tick += 1
       }
     }
 
-    const intervalId = setInterval(syncStatus, 2000)
+    const intervalId = setInterval(syncStatus, 1000)
     void syncStatus()
     return () => {
       disposed = true
@@ -640,15 +712,27 @@ export function VideoCallDialog({
 
   // 轮询检查对方是否接听（发起方使用）
   const startPollingForAnswer = (channelName: string) => {
+    pollingTickRef.current = 0
+    console.log('[VideoCallDialog][poll] start polling', {
+      conversationId,
+      channelName,
+      messageId: callMessageIdRef.current || callMessageId,
+      localStatus: callStatusRef.current,
+    })
     // 清除之前的轮询
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current)
     }
     
-    // 立即检查一次，然后每2秒检查一次（减少频率，避免过多请求）
+    // 立即检查一次，然后每1秒检查一次，尽快响应接听状态
     const checkAnswer = async () => {
-      const messageId = callMessageIdRef.current
+      pollingTickRef.current += 1
+      const tick = pollingTickRef.current
+      const messageId = normalizeMessageId(callMessageIdRef.current || callMessageId)
       if (!messageId) {
+        if (tick <= 2 || tick % 4 === 0) {
+          console.log('[VideoCallDialog][poll] no messageId yet', { tick, conversationId })
+        }
         return
       }
       
@@ -658,8 +742,17 @@ export function VideoCallDialog({
         const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}&_t=${timestamp}`)
         const msgData = await msgResponse.json()
         if (msgData.success) {
-          const callMessage = msgData.messages.find((m: any) => m.id === messageId)
+          const callMessage = msgData.messages.find((m: any) => String(m?.id || '') === String(messageId))
           if (!callMessage) {
+            if (tick <= 3 || tick % 5 === 0) {
+              console.warn('[VideoCallDialog][poll] call message not found', {
+                tick,
+                messageId,
+                sampleIds: Array.isArray(msgData?.messages)
+                  ? msgData.messages.slice(0, 5).map((m: any) => String(m?.id || ''))
+                  : [],
+              })
+            }
             return
           }
 
@@ -674,6 +767,16 @@ export function VideoCallDialog({
           }
           const callStatus = metadata.call_status
           const fullMetadata = callMessage?.metadata || {}
+          if (callStatus !== 'calling' || tick === 1 || tick % 5 === 0) {
+            console.log('[VideoCallDialog][poll] status observed', {
+              tick,
+              messageId,
+              backendStatus: callStatus,
+              localStatus: callStatusRef.current,
+              answeredAt: fullMetadata?.answered_at,
+              channelName: fullMetadata?.channel_name || channelName,
+            })
+          }
           
           if (callStatus === 'answered') {
             if (pollingIntervalRef.current) {
@@ -714,8 +817,8 @@ export function VideoCallDialog({
     // 立即检查一次
     checkAnswer()
     
-    // 然后每2秒检查一次（减少频率）
-    pollingIntervalRef.current = setInterval(checkAnswer, 2000)
+    // 然后每1秒检查一次，降低“已接听但仍显示 Calling”的窗口
+    pollingIntervalRef.current = setInterval(checkAnswer, 1000)
   }
 
   // 清理轮询
@@ -740,10 +843,22 @@ export function VideoCallDialog({
         answeredAt,
         answered_at: answeredAtRaw,
       } = event.detail
-      const currentMessageId = callMessageIdRef.current
+      const currentMessageId = normalizeMessageId(callMessageIdRef.current || callMessageId)
+      const normalizedAnsweredMessageId = normalizeMessageId(answeredMessageId)
       
       // 检查是否是当前通话的消息
-      if (answeredMessageId === currentMessageId && answeredConversationId === conversationId) {
+      if (
+        normalizedAnsweredMessageId &&
+        currentMessageId &&
+        normalizedAnsweredMessageId === currentMessageId &&
+        String(answeredConversationId || '') === String(conversationId)
+      ) {
+        console.log('[VideoCallDialog][callAnswered] event received', {
+          messageId: normalizedAnsweredMessageId,
+          currentMessageId,
+          conversationId,
+          answeredAt: answeredAt || answeredAtRaw,
+        })
         const isSessionMatched = isMatchingCallSession(answeredCallSessionId, answeredMessageId)
         if (!isSessionMatched) {
           console.warn('[VideoCallDialog] callAnswered session mismatch ignored', {
@@ -760,11 +875,13 @@ export function VideoCallDialog({
         
         // 从消息中获取频道名称
         try {
-          const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}`)
+          const msgResponse = await fetch(`/api/messages?conversationId=${conversationId}&_t=${Date.now()}`)
           const msgData = await msgResponse.json()
           if (msgData.success) {
-            const callMessage = msgData.messages.find((m: any) => m.id === answeredMessageId)
-            ensureCallSessionId(callMessage?.metadata?.call_session_id, answeredMessageId)
+            const callMessage = msgData.messages.find(
+              (m: any) => String(m?.id || '') === String(normalizedAnsweredMessageId),
+            )
+            ensureCallSessionId(callMessage?.metadata?.call_session_id, normalizedAnsweredMessageId)
             ensureCallStartTime(answeredAt || answeredAtRaw || callMessage?.metadata?.answered_at)
             const channelName = callMessage?.metadata?.channel_name || generateChannelName(currentUser.id, recipient.id, conversationId)
             setCallStatus('connected')
@@ -824,12 +941,19 @@ export function VideoCallDialog({
       })
 
       const data = await response.json()
-      if (data.success && data.message?.id) {
+      const createdMessageId = normalizeMessageId(data?.message?.id)
+      if (data.success && createdMessageId) {
         // 保存通话消息ID和频道名称
-        callMessageIdRef.current = data.message.id
+        callMessageIdRef.current = createdMessageId
         updateCallUiLock(lockTokenRef.current, {
-          messageId: data.message.id,
+          messageId: createdMessageId,
           phase: 'outgoing',
+        })
+        console.log('[VideoCallDialog][invite] invitation created', {
+          messageId: createdMessageId,
+          channelName,
+          sessionId,
+          conversationId,
         })
         // Align with voice flow: invite first, then initialize media after answer.
         startPollingForAnswer(channelName)
@@ -943,7 +1067,7 @@ export function VideoCallDialog({
             messageId,
             phase: 'active',
           })
-          console.log('[A端接听] 状态设置为 ringing，准备初始化通话')
+          console.log('[A端接听] 状态设置为 connected，准备初始化通话')
 
           // 开始连接（加入 Agora 频道）
           const channelNameToUse = callMessage.metadata?.channel_name || generateChannelName(currentUser.id, recipient.id, conversationId)
