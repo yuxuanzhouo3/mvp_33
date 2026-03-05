@@ -24,9 +24,16 @@ interface ContactRequest {
   recipient?: User
 }
 
+export interface ContactRequestAcceptPayload {
+  requestId: string
+  requesterId: string
+  conversationId?: string
+  acceptedContactUserId?: string
+}
+
 interface ContactRequestsPanelProps {
   currentUser: User
-  onAccept?: (requestId: string) => void
+  onAccept?: (payload: ContactRequestAcceptPayload) => void
   onReject?: (requestId: string) => void
   onMessage?: (userId: string) => void
   onPendingCountChange?: (count: number) => void
@@ -175,51 +182,32 @@ export function ContactRequestsPanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'accept', requester_id: requesterId }),
       })
+      let responseData: any = {}
+      try {
+        responseData = await response.json()
+      } catch {
+        responseData = {}
+      }
 
       if (!response.ok) {
-        const data = await response.json()
-        if (data.errorType !== 'already_processed') {
-          throw new Error(data.error || 'Failed to accept request')
+        if (responseData.errorType !== 'already_processed') {
+          throw new Error(responseData.error || 'Failed to accept request')
         }
       }
 
       if (onAccept) {
-        onAccept(requestId)
+        onAccept({
+          requestId,
+          requesterId,
+          conversationId: responseData?.conversation?.id,
+          acceptedContactUserId: responseData?.accepted_contact_user_id,
+        })
       }
 
       setTimeout(() => {
         loadRequests('pending', false)
         loadRequests('all', false)
       }, 1000)
-
-      // 自动创建会话并发送欢迎消息
-      try {
-        const convResponse = await fetch('/api/conversations', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'direct',
-            member_ids: [requesterId],
-            skip_contact_check: true,
-          }),
-        })
-
-        const convData = await convResponse.json()
-        if (convResponse.ok && convData.conversation?.id) {
-          await fetch('/api/messages', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              conversationId: convData.conversation.id,
-              content: t('weAreNowFriends'),
-              type: 'text',
-              metadata: { is_welcome_message: true },
-            }),
-          })
-        }
-      } catch (error) {
-        console.error('Error creating conversation:', error)
-      }
     } catch (error: any) {
       console.error('Accept request error:', error)
       alert(`Failed to accept request: ${error.message}`)

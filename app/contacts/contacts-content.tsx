@@ -131,8 +131,8 @@ function ContactsPageContent() {
       if (showLoading) {
         setIsLoading(true)
       }
-      // Clear contacts immediately to prevent showing stale data
-      if (forceRefresh) {
+      // Clear contacts only for explicit foreground refreshes to avoid UI flicker.
+      if (forceRefresh && showLoading) {
         setContacts([])
       }
       
@@ -375,6 +375,44 @@ function ContactsPageContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]) // Load when currentUser is set
+
+  useEffect(() => {
+    if (!currentUser) return
+
+    let interval: ReturnType<typeof setInterval> | null = null
+
+    const refreshContactsSilently = () => {
+      if (document.visibilityState !== 'visible') return
+      loadContacts(true, false).catch((error) => {
+        console.warn('Silent contacts refresh failed:', error)
+      })
+    }
+
+    const setupInterval = () => {
+      if (interval) {
+        clearInterval(interval)
+      }
+      const pollMs = document.visibilityState === 'visible' ? 2000 : 10000
+      interval = setInterval(() => {
+        refreshContactsSilently()
+      }, pollMs)
+    }
+
+    const handleVisibilityChange = () => {
+      setupInterval()
+      refreshContactsSilently()
+    }
+
+    setupInterval()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      if (interval) {
+        clearInterval(interval)
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [currentUser, loadContacts])
 
   // 确保"自己"一定在联系人列表里（处理第一次加载时 currentUser 还没注入的情况）
   useEffect(() => {
@@ -949,13 +987,13 @@ function ContactsPageContent() {
 
   return (
     <>
-      <div className="flex h-screen flex-col">
+      <div className="flex h-screen flex-col mobile-overscroll-contain">
         <WorkspaceHeader
           workspace={currentWorkspace}
           currentUser={currentUser}
           totalUnreadCount={totalUnreadCount}
         />
-        <div className="relative flex flex-1 min-w-0 overflow-hidden">
+        <div className="relative flex flex-1 min-w-0 overflow-hidden mobile-overscroll-contain">
           {/* 左侧导航栏（仅桌面端显示） */}
           {!isMobile && <AppNavigation totalUnreadCount={totalUnreadCount} />}
           <div className="min-w-0 flex-1 overflow-hidden">
@@ -970,7 +1008,7 @@ function ContactsPageContent() {
               onDeleteContact={handleDeleteContact}
               allUsers={[]}
               isLoading={isLoading}
-              onContactAccepted={() => {
+              onContactAccepted={(_payload) => {
                 // Clear cache when contact is accepted
                 if (typeof window !== 'undefined' && currentUser) {
                   const cacheKey = `contacts_${currentUser.id}`
@@ -978,9 +1016,10 @@ function ContactsPageContent() {
                   localStorage.removeItem(cacheKey)
                   localStorage.removeItem(cacheTsKey)
                 }
-                // Don't set hasLoadedContacts to false - this would trigger full reload
-                // Instead, do a background refresh without showing loading
-                loadContacts(false, false) // forceRefresh = false, showLoading = false (silent refresh)
+                loadContacts(true, false) // forceRefresh = true, showLoading = false (silent refresh)
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new Event('conversationsUpdated'))
+                }
               }}
               initialUserId={initialUserId}
             />

@@ -30,8 +30,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex h-screen min-w-0 flex-col">
-      <div className="flex-1 overflow-y-auto">
+    <div className="flex h-screen min-w-0 flex-col mobile-overscroll-contain">
+      <div className="flex-1 overflow-y-auto mobile-overscroll-contain">
         <div className="container mx-auto max-w-4xl px-4 py-8">
       <Button
         variant="ghost"

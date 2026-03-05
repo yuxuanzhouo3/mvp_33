@@ -9,6 +9,10 @@ import {
   findDirectConversation as findDirectConversationCN,
 } from '@/lib/database/cloudbase/conversations'
 import { IS_DOMESTIC_VERSION, getDeploymentRegion } from '@/config'
+import {
+  dedupeDirectConversations,
+  getDirectConversationIdentity,
+} from '@/lib/conversations/direct-dedupe'
 
 /**
  * Get user conversations
@@ -180,9 +184,10 @@ export async function GET(request: NextRequest) {
     if (dbClient.type === 'cloudbase' && userRegion === 'cn') {
       console.log('🔍 [API CN] Fetching conversations for CN user (CloudBase):', user.id)
       const conversationsCN = await getUserConversationsCN(user.id)
+      const deduplicatedCN = dedupeDirectConversations(conversationsCN || [], user.id)
       return NextResponse.json({
         success: true,
-        conversations: conversationsCN,
+        conversations: deduplicatedCN,
       })
     }
 
@@ -228,33 +233,21 @@ export async function GET(request: NextRequest) {
             return true
           }
 
-          // CRITICAL: Allow self-conversations (where members might be 1 or 2, but other user is same as current user)
-          // Check if this is a self-conversation first
-          const isSelfConversation = conv.members && conv.members.length >= 1 &&
-            conv.members.every((m: any) => (m.id || m) === user.id)
-
-          if (isSelfConversation) {
-            console.log('✅ [API] Keeping self-conversation:', conv.id)
-            return true // Keep self-conversations
-          }
-
-          // If conversation has no members or invalid members, filter it out
-          if (!conv.members || conv.members.length !== 2) {
-            console.log('🗑️ [API] Filtering out direct conversation with invalid members:', conv.id, 'members count:', conv.members?.length)
+          const identity = getDirectConversationIdentity(conv, user.id)
+          if (!identity) {
+            console.log('🗑️ [API] Filtering out invalid direct conversation:', conv.id)
             return false
           }
 
-          // Find the other user (not current user)
-          const otherUser = conv.members.find((m: any) => m.id !== user.id)
-          if (!otherUser || !otherUser.id) {
-            console.log('🗑️ [API] Filtering out direct conversation without other user:', conv.id)
-            return false
+          if (identity.kind === 'self' || identity.kind === 'single') {
+            console.log('✅ [API] Keeping self-conversation:', conv.id)
+            return true
           }
 
-          // CRITICAL: Allow self-conversations (where otherUser is the same as current user)
-          if (otherUser.id === user.id) {
-            console.log('✅ [API] Keeping self-conversation:', conv.id)
-            return true // Keep self-conversations
+          const otherUserId = identity.memberIds.find((memberId) => memberId !== user.id)
+          if (!otherUserId) {
+            console.log('🗑️ [API] Filtering out direct conversation without other member:', conv.id)
+            return false
           }
 
           // SLACK MODE: 在 Slack 模式下，工作区成员之间可以互相聊天
@@ -268,7 +261,7 @@ export async function GET(request: NextRequest) {
           //   return false
           // }
 
-          console.log('✅ [API] Keeping direct conversation:', conv.id, 'otherUser:', otherUser.id, 'isContact:', contactUserIds.has(otherUser.id))
+          console.log('✅ [API] Keeping direct conversation:', conv.id, 'otherUser:', otherUserId, 'isContact:', contactUserIds.has(otherUserId))
           return true
         })
         
@@ -282,67 +275,7 @@ export async function GET(request: NextRequest) {
       // Don't fail the request, just log the error
     }
 
-    // Additional deduplication at API level to ensure no duplicates
-    // Group direct conversations by member pair
-    const directConversationsByPair = new Map<string, typeof conversations>()
-    const otherConversations: typeof conversations = []
-    
-    conversations.forEach(conv => {
-      if (conv.type === 'direct') {
-        // CRITICAL: Handle self-conversations (where members might be 1 or 2, but all members are the same user)
-        const isSelfConversation = conv.members && conv.members.length >= 1 && 
-          conv.members.every((m: any) => (m.id || m) === user.id)
-        
-        if (isSelfConversation) {
-          // For self-conversations, use a special key
-          const selfKey = `self-${user.id}`
-          if (!directConversationsByPair.has(selfKey)) {
-            directConversationsByPair.set(selfKey, [])
-          }
-          directConversationsByPair.get(selfKey)!.push(conv)
-        } else if (conv.members && conv.members.length === 2) {
-          const memberIds = conv.members.map(m => m.id).sort()
-          const pairKey = `${memberIds[0]}-${memberIds[1]}`
-          
-          if (!directConversationsByPair.has(pairKey)) {
-            directConversationsByPair.set(pairKey, [])
-          }
-          directConversationsByPair.get(pairKey)!.push(conv)
-        } else {
-          // Invalid direct conversation, skip it
-          console.warn('⚠️ [API] Skipping invalid direct conversation:', conv.id)
-        }
-      } else {
-        otherConversations.push(conv)
-      }
-    })
-    
-    // For each pair, keep only one conversation (deterministic choice)
-    // IMPORTANT: Use same sorting logic as database layer to ensure consistency
-    const deduplicatedDirect: typeof conversations = []
-    directConversationsByPair.forEach((duplicates, pairKey) => {
-      if (duplicates.length > 1) {
-        console.warn(`⚠️ API: Found ${duplicates.length} duplicate direct conversations for pair ${pairKey}`)
-        // Sort by: 1) last_message_at (most recent first), 2) created_at (oldest first), 3) id (deterministic)
-        duplicates.sort((a, b) => {
-          const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0
-          const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
-          if (aTime !== bTime) return bTime - aTime
-          const aCreated = new Date(a.created_at || 0).getTime()
-          const bCreated = new Date(b.created_at || 0).getTime()
-          if (aCreated !== bCreated) return aCreated - bCreated
-          return a.id.localeCompare(b.id) // Deterministic by ID
-        })
-        // Keep only the first one (deterministic)
-        deduplicatedDirect.push(duplicates[0])
-        console.log(`✅ API: Keeping conversation ${duplicates[0].id} (deterministic), removing ${duplicates.length - 1} duplicates`)
-      } else {
-        deduplicatedDirect.push(duplicates[0])
-      }
-    })
-    
-    // Combine deduplicated direct conversations with other conversations
-    conversations = [...deduplicatedDirect, ...otherConversations]
+    conversations = dedupeDirectConversations(conversations, user.id)
     console.log('After API deduplication:', conversations.length, 'conversations')
 
     return NextResponse.json({

@@ -72,6 +72,7 @@ interface MessageListProps {
   currentUser: User
 
   isLoading?: boolean
+  participantsById?: Record<string, User>
 
   onEditMessage?: (messageId: string, content: string) => void
 
@@ -102,6 +103,7 @@ export function MessageList({
   currentUser,
 
   isLoading = false,
+  participantsById,
 
   onEditMessage,
 
@@ -852,22 +854,49 @@ export function MessageList({
 
             const isOwn = message.sender_id === currentUser.id
 
+            const participantFallback = message.sender_id
+              ? participantsById?.[message.sender_id]
+              : undefined
+
             // Fallback sender 信息：
-            // 对于 CloudBase（国内腾讯云），message.sender 目前通常只有 id，没有名字和头像
-            // 如果是自己发送的消息，就补全为 currentUser，保证右侧聊天框显示自己的名字和头像
+            // 1) message.sender 自身完整信息
+            // 2) 当前会话成员映射 participantsById
+            // 3) 自己发送的消息补成 currentUser
             const displaySender = (() => {
-              if (!message.sender || (!message.sender.full_name && !message.sender.avatar_url)) {
-                if (isOwn && currentUser) {
-                  return currentUser
-                }
+              if (message.sender?.full_name || message.sender?.avatar_url) {
+                return message.sender
               }
-              return message.sender || currentUser
+              if (participantFallback) {
+                return participantFallback
+              }
+              if (isOwn && currentUser) {
+                return currentUser
+              }
+              if (message.sender_id) {
+                return {
+                  id: message.sender_id,
+                  email: '',
+                  username: '',
+                  full_name: '',
+                  avatar_url: null,
+                } as User
+              }
+              return undefined
             })()
+
+            const isSystemWithoutSender = message.type === 'system' && !message.sender_id
 
             // 获取显示名称：优先显示群昵称，其次显示真实姓名
             const getDisplayName = (sender: User | undefined) => {
               if (!sender) return ''
-              return (sender as any).group_nickname || sender.full_name || ''
+              return (
+                (sender as any).group_nickname ||
+                sender.full_name ||
+                sender.username ||
+                (message.type === 'system'
+                  ? (language === 'zh' ? '系统消息' : 'System')
+                  : '')
+              )
             }
 
             const grouped = shouldGroupWithPrevious(index)
@@ -948,6 +977,12 @@ export function MessageList({
                       {isOwn ? '你撤回了一条消息' : `${getDisplayName(displaySender) || '对方'}撤回了一条消息`}
                     </span>
                   </div>
+                ) : isSystemWithoutSender ? (
+                  <div className="flex justify-center my-2">
+                    <div className="max-w-[90%] rounded-md border bg-muted/60 px-3 py-2 text-xs text-muted-foreground whitespace-pre-wrap break-words">
+                      {message.content}
+                    </div>
+                  </div>
                 ) : (
 
                 <div
@@ -958,8 +993,8 @@ export function MessageList({
                   )}
                 >
 
-                  {/* 头像：自己和对方都会显示；自己消息在右侧，对方在左侧 */}
-                  {!grouped && (
+                  {/* 头像：系统消息（无 sender）不渲染头像占位 */}
+                  {!grouped && displaySender && (
                     <button
                       type="button"
                       className="shrink-0 mt-0.5 rounded-full hover:opacity-80 transition-opacity"
@@ -981,7 +1016,7 @@ export function MessageList({
                     </button>
                   )}
 
-                  {grouped && <div className="w-8 shrink-0" />}
+                  {grouped && displaySender && <div className="w-8 shrink-0" />}
 
 
 
@@ -1028,10 +1063,11 @@ export function MessageList({
 
                             className={cn(
 
-                              'break-words relative group',
+                              'relative group break-words',
                               isMobile
-                                ? 'px-3 py-2 max-w-[85%]'
+                                ? 'max-w-[85%] px-3 py-2'
                                 : 'px-4 py-2.5 max-w-xl',
+                              isMobile && (message.type === 'text' || message.type === 'system') && 'w-fit min-w-[3.5rem]',
                               isOwn
 
                                 ? 'bg-[#E8F3FF] text-gray-900 rounded-lg'
@@ -1424,7 +1460,9 @@ export function MessageList({
                       {message.type === 'text' && (
                         <p
                           className={cn(
-                            isMobile ? 'text-[15px] leading-[1.5]' : 'text-[14px] leading-[1.6]',
+                            isMobile
+                              ? 'text-[15px] leading-[1.5] whitespace-pre-wrap break-words'
+                              : 'text-[14px] leading-[1.6] whitespace-pre-wrap break-words',
                             (message.is_deleted || message.is_recalled) && 'italic opacity-60',
                           )}
                         >

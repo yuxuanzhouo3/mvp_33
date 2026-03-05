@@ -15,6 +15,7 @@ import { getTranslation } from '@/lib/i18n'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { AddContactDialog } from './add-contact-dialog'
 import { ContactRequestsPanel } from './contact-requests-panel'
+import type { ContactRequestAcceptPayload } from './contact-requests-panel'
 import { ContactSkeleton } from './contact-skeleton'
 import { BlockUserDialog } from './block-user-dialog'
 import { ReportUserDialog } from './report-user-dialog'
@@ -49,7 +50,7 @@ interface ContactsPanelProps {
   onAddManualContact?: (contactData: ManualContactData) => void
   onDeleteContact?: (userId: string) => void
   allUsers?: User[] // All available users for adding contacts
-  onContactAccepted?: () => void
+  onContactAccepted?: (payload: ContactRequestAcceptPayload) => void
   isLoading?: boolean // Loading state
   initialUserId?: string | null // Initial user ID to select
 }
@@ -475,8 +476,8 @@ export function ContactsPanel({
               <TabsContent value="requests" className="m-0">
                 <ContactRequestsPanel
                   currentUser={currentUser}
-                  onAccept={() => {
-                    if (onContactAccepted) onContactAccepted()
+                  onAccept={(payload) => {
+                    if (onContactAccepted) onContactAccepted(payload)
                   }}
                   onMessage={onStartChat}
                   onPendingCountChange={(count) => {

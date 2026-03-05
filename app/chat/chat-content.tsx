@@ -57,6 +57,7 @@ import { getTranslation } from '@/lib/i18n'
 import { SessionValidator } from '@/components/auth/session-validator'
 import { IS_DOMESTIC_VERSION } from '@/config'
 import { getCallUiLock, isCallUiBusy } from '@/lib/call/call-ui-lock'
+import { dedupeDirectConversations } from '@/lib/conversations/direct-dedupe'
 
 type ConversationsApiResponse = {
 
@@ -1669,6 +1670,7 @@ function ChatPageContent() {
               
               // Immediately display cached conversations (like WeChat)
               if (cachedConversations && cachedConversations.length > 0) {
+                cachedConversations = dedupeDirectConversations(cachedConversations, userId)
                 const enrichedCached = applyPinnedOrdering(cachedConversations.map(enrichConversation))
                 setConversations(enrichedCached)
                 conversationsRef.current = enrichedCached
@@ -1976,7 +1978,10 @@ function ChatPageContent() {
 
           
 
-          const finalConversations = [...frontendDeduplicatedDirect, ...frontendOtherConversations]
+          const finalConversations = dedupeDirectConversations(
+            [...frontendDeduplicatedDirect, ...frontendOtherConversations],
+            userId,
+          )
 
           // Incremental update: merge new conversations with existing ones (like WeChat)
           const currentList = conversationsRef.current
@@ -2639,7 +2644,10 @@ function ChatPageContent() {
 
           // Combine deduplicated direct conversations with other conversations
 
-          const finalConversations = [...frontendDeduplicatedDirect, ...frontendOtherConversations]
+          const finalConversations = dedupeDirectConversations(
+            [...frontendDeduplicatedDirect, ...frontendOtherConversations],
+            userId,
+          )
 
           console.log('After frontend deduplication:', finalConversations.length, 'conversations')
 
@@ -4312,7 +4320,10 @@ function ChatPageContent() {
               })
 
               // Combine deduplicated direct conversations with other conversations
-              const finalConversations = [...frontendDeduplicatedDirect, ...frontendOtherConversations]
+              const finalConversations = dedupeDirectConversations(
+                [...frontendDeduplicatedDirect, ...frontendOtherConversations],
+                currentUser.id,
+              )
 
               // DEBUG: Log final conversations before ordering
               console.log('📋 [POLL] Final conversations before ordering:', {
@@ -8059,7 +8070,7 @@ function ChatPageContent() {
   return (
     <>
       <SessionValidator />
-      <div className="flex h-screen flex-col">
+      <div className="flex h-screen flex-col mobile-overscroll-contain">
 
       <WorkspaceHeader
         workspace={currentWorkspace}
@@ -8091,7 +8102,7 @@ function ChatPageContent() {
 
       )}
 
-      <div className="relative flex flex-1 min-w-0 overflow-hidden">
+      <div className="relative flex flex-1 min-w-0 overflow-hidden mobile-overscroll-contain">
         {/* 左侧导航栏（仅桌面端显示） */}
         {!isMobile && <AppNavigation totalUnreadCount={conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0)} />}
 
@@ -8348,6 +8359,11 @@ function ChatPageContent() {
                     currentUser={currentUser}
 
                     isLoading={isLoadingMessages}
+                    participantsById={Object.fromEntries(
+                      (displayConversation?.members || [])
+                        .map((member: any) => [member?.id || member?.user_id, member] as const)
+                        .filter(([id]) => !!id),
+                    )}
 
                     onEditMessage={handleEditMessage}
 

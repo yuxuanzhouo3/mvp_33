@@ -59,7 +59,7 @@ function mapMessageDocToDto(doc: any, fallbackNow?: string): MessageWithSender |
     sender_id: senderId,
     sender: { id: senderId } as any,
     content: doc.content || '',
-    type: doc.type || 'text',
+    type: doc.type || doc.message_type || 'text',
     reactions: Array.isArray(doc.reactions) ? doc.reactions : [],
     is_edited: !!doc.is_edited,
     is_deleted: !!doc.is_deleted,
@@ -85,10 +85,55 @@ export async function getMessages(conversationId: string): Promise<MessageWithSe
     .get()
 
   const docs = Array.isArray(res?.data) ? res.data : []
-
-  return docs
+  const messages = docs
     .map((doc: any) => mapMessageDocToDto(doc))
     .filter((msg: MessageWithSender | null): msg is MessageWithSender => !!msg)
+
+  const senderIds = Array.from(
+    new Set(
+      messages
+        .map((message: MessageWithSender) => String(message.sender_id || '').trim())
+        .filter(Boolean),
+    ),
+  )
+
+  if (senderIds.length === 0) {
+    return messages
+  }
+
+  const usersRes = await db
+    .collection('users')
+    .where({
+      id: db.command.in(senderIds),
+    })
+    .get()
+
+  const usersById = new Map<string, any>()
+  ;(usersRes?.data || []).forEach((userDoc: any) => {
+    const userId = String(userDoc.id || userDoc._id || '').trim()
+    if (!userId) return
+    usersById.set(userId, {
+      id: userId,
+      email: userDoc.email || '',
+      username: userDoc.username || userDoc.email?.split('@')[0] || '',
+      full_name: userDoc.full_name || userDoc.name || '',
+      avatar_url: userDoc.avatar_url || null,
+      title: userDoc.title || undefined,
+      status: userDoc.status || 'offline',
+      region: userDoc.region || 'cn',
+    })
+  })
+
+  return messages.map((message: MessageWithSender) => {
+    const senderId = String(message.sender_id || '').trim()
+    if (!senderId) return message
+    const senderProfile = usersById.get(senderId)
+    if (!senderProfile) return message
+    return {
+      ...message,
+      sender: senderProfile,
+    }
+  })
 }
 
 export async function createMessage(

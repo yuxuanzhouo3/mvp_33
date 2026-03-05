@@ -441,13 +441,13 @@ export default function ChannelsPage() {
   const selectedChannel = conversations.find(c => c.id === selectedChannelId)
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col mobile-overscroll-contain">
       <WorkspaceHeader 
         workspace={currentWorkspace} 
         currentUser={currentUser}
       />
 
-      <div className="relative flex flex-1 min-w-0 overflow-hidden">
+      <div className="relative flex flex-1 min-w-0 overflow-hidden mobile-overscroll-contain">
         {/* 左侧导航栏（仅桌面端显示） */}
         {!isMobile && <AppNavigation />}
 
@@ -510,6 +510,11 @@ export default function ChannelsPage() {
                 messages={messages} 
                 currentUser={currentUser}
                 isLoading={isLoadingMessages}
+                participantsById={Object.fromEntries(
+                  (selectedChannel?.members || [])
+                    .map((member: any) => [member?.id || member?.user_id, member] as const)
+                    .filter(([id]) => !!id),
+                ) as Record<string, User>}
                 onEditMessage={handleEditMessage}
                 onDeleteMessage={handleDeleteMessage}
                 onAddReaction={handleAddReaction}

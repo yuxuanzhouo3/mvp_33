@@ -50,17 +50,25 @@ export async function getMessages(conversationId: string): Promise<MessageWithSe
 
   const mappedMessages: MessageWithSender[] = []
   for (const msg of messages) {
-    if (msg.users) {
-      const groupNickname = nicknameMap.get(msg.sender_id)
-      mappedMessages.push({
-        ...msg,
-        sender: {
+    const groupNickname = nicknameMap.get(msg.sender_id)
+    const sender = msg.users
+      ? {
           ...msg.users,
-          group_nickname: groupNickname || undefined
-        },
-        reactions: Array.isArray(msg.reactions) ? msg.reactions : [],
-      } as MessageWithSender)
-    }
+          group_nickname: groupNickname || undefined,
+        }
+      : {
+          id: String(msg.sender_id || ''),
+          email: '',
+          username: '',
+          full_name: '',
+          avatar_url: null,
+        }
+
+    mappedMessages.push({
+      ...msg,
+      sender,
+      reactions: Array.isArray(msg.reactions) ? msg.reactions : [],
+    } as MessageWithSender)
   }
 
   console.log('getMessages: Returning', mappedMessages.length, 'valid messages')
