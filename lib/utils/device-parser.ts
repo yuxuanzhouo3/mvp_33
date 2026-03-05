@@ -157,25 +157,179 @@ export function buildDeviceFingerprint(params: {
 export function getClientIP(request: Request): string {
   const forwarded = request.headers.get('x-forwarded-for')
   const realIp = request.headers.get('x-real-ip')
+  const candidate = forwarded ? forwarded.split(',')[0].trim() : (realIp || '').trim()
+  if (!candidate) return 'unknown'
+  return normalizeIp(candidate)
+}
 
-  if (forwarded) {
-    return forwarded.split(',')[0].trim()
+const LOCATION_CACHE_TTL_MS = 10 * 60 * 1000
+const locationCache = new Map<string, { value: string; expiresAt: number }>()
+
+function normalizeIp(value: string): string {
+  const trimmed = (value || '').trim()
+  if (!trimmed) return ''
+
+  // IPv6 mapped IPv4, e.g. ::ffff:171.106.100.199
+  if (trimmed.startsWith('::ffff:')) {
+    return trimmed.slice(7)
   }
 
-  return realIp || 'unknown'
+  // [IPv6]:port
+  if (trimmed.startsWith('[')) {
+    const end = trimmed.indexOf(']')
+    if (end > 0) return trimmed.slice(1, end)
+  }
+
+  // IPv4:port
+  const ipv4PortMatch = trimmed.match(/^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/)
+  if (ipv4PortMatch) return ipv4PortMatch[1]
+
+  return trimmed
+}
+
+function isPrivateIPv4(ip: string): boolean {
+  const parts = ip.split('.').map(Number)
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return false
+  return (
+    parts[0] === 10 ||
+    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+    (parts[0] === 192 && parts[1] === 168)
+  )
+}
+
+function isLocalOrPrivateIP(ip: string): boolean {
+  const normalized = normalizeIp(ip)
+  if (!normalized) return true
+  if (normalized === '127.0.0.1' || normalized === '::1' || normalized === 'localhost') return true
+  if (normalized.startsWith('fe80:') || normalized.startsWith('fc') || normalized.startsWith('fd')) return true
+  return isPrivateIPv4(normalized)
+}
+
+function countryCodeToName(countryCode?: string): string {
+  const code = (countryCode || '').trim().toUpperCase()
+  if (!code) return ''
+  try {
+    const displayNames = new Intl.DisplayNames(['en'], { type: 'region' })
+    return displayNames.of(code) || code
+  } catch {
+    return code
+  }
+}
+
+function normalizeLocationPart(value?: string): string {
+  const text = (value || '').trim()
+  if (!text) return ''
+
+  const normalized = text.toLowerCase()
+  if (
+    normalized === 'unknown' ||
+    normalized === 'n/a' ||
+    normalized === 'na' ||
+    normalized === 'undefined' ||
+    normalized === 'null' ||
+    normalized === '-' ||
+    normalized === '--'
+  ) {
+    return ''
+  }
+
+  return text
+}
+
+function formatLocation(input: { city?: string; region?: string; country?: string }): string {
+  const city = normalizeLocationPart(input.city)
+  const region = normalizeLocationPart(input.region)
+  const country = normalizeLocationPart(input.country)
+
+  if (city && country) return `${city}, ${country}`
+  if (region && country) return `${region}, ${country}`
+  if (country) return country
+  if (city) return city
+  return 'Unknown'
+}
+
+async function fetchJsonWithTimeout(url: string, timeoutMs: number = 4000): Promise<any> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'orbitchat-device-location/1.0',
+      },
+      cache: 'no-store',
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+    return await response.json()
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export async function getLocationFromIP(ip: string): Promise<string> {
-  if (ip === 'unknown' || ip === '127.0.0.1' || ip === '::1') {
+  const normalizedIp = normalizeIp(ip)
+  if (!normalizedIp || normalizedIp === 'unknown') {
+    return 'Unknown'
+  }
+
+  if (isLocalOrPrivateIP(normalizedIp)) {
     return 'Local'
   }
 
+  const now = Date.now()
+  const cached = locationCache.get(normalizedIp)
+  if (cached && cached.expiresAt > now) {
+    return cached.value
+  }
+
+  const providers: Array<() => Promise<string>> = [
+    async () => {
+      const data = await fetchJsonWithTimeout(`https://ipapi.co/${normalizedIp}/json/`)
+      return formatLocation({
+        city: data?.city,
+        region: data?.region,
+        country: data?.country_name || countryCodeToName(data?.country_code),
+      })
+    },
+    async () => {
+      const data = await fetchJsonWithTimeout(`https://ipinfo.io/${normalizedIp}/json`)
+      return formatLocation({
+        city: data?.city,
+        region: data?.region,
+        country: countryCodeToName(data?.country),
+      })
+    },
+    async () => {
+      const data = await fetchJsonWithTimeout(`http://ip-api.com/json/${normalizedIp}?fields=status,message,country,regionName,city`)
+      if (data?.status === 'fail') {
+        throw new Error(data?.message || 'ip-api failed')
+      }
+      return formatLocation({
+        city: data?.city,
+        region: data?.regionName,
+        country: data?.country,
+      })
+    },
+  ]
+
+  for (const provider of providers) {
+    try {
+      const location = await provider()
+      if (location && location !== 'Unknown') {
+        locationCache.set(normalizedIp, { value: location, expiresAt: now + LOCATION_CACHE_TTL_MS })
+        return location
+      }
+    } catch {
+      // Try next provider.
+    }
+  }
+
   try {
-    const response = await fetch(`https://ipapi.co/${ip}/json/`, {
-      next: { revalidate: 3600 }
-    })
-    const data = await response.json()
-    return `${data.city || 'Unknown'}, ${data.country_name || 'Unknown'}`
+    // Last fallback: store stable Unknown to avoid repeated external calls.
+    locationCache.set(normalizedIp, { value: 'Unknown', expiresAt: now + LOCATION_CACHE_TTL_MS })
+    return 'Unknown'
   } catch {
     return 'Unknown'
   }

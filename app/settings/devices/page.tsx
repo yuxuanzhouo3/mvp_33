@@ -87,6 +87,14 @@ const formatDeviceTitle = (device: Device) => {
   return device.device_name || 'Unknown Device';
 };
 
+const formatLocationLabel = (location?: string) => {
+  const text = (location || '').trim();
+  if (!text) return 'Unknown';
+  const normalized = text.toLowerCase();
+  if (normalized === 'unknown' || normalized === 'unknown, unknown') return 'Unknown';
+  return text;
+};
+
 export default function DevicesPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [currentSessionToken, setCurrentSessionToken] = useState<string>('');
@@ -188,7 +196,7 @@ export default function DevicesPage() {
             </p>
             <div className="mt-2 space-y-1 text-sm text-gray-500">
               <p>IP 地址: {device.ip_address || 'Unknown'}</p>
-              <p>位置: {device.location || 'Unknown'}</p>
+              <p>位置: {formatLocationLabel(device.location)}</p>
             </div>
           </div>
         </div>

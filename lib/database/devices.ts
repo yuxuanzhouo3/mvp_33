@@ -34,6 +34,18 @@ const FALLBACK_DEVICE_TYPE: DeviceType = 'web'
 const FALLBACK_DEVICE_CATEGORY: DeviceCategory = 'desktop'
 const FALLBACK_CLIENT_TYPE: ClientType = 'web'
 
+function normalizeLocationValue(value?: string | null): string | undefined {
+  const text = (value || '').trim()
+  if (!text) return undefined
+
+  const normalized = text.toLowerCase()
+  if (normalized === 'unknown' || normalized === 'unknown, unknown') {
+    return undefined
+  }
+
+  return text
+}
+
 function normalizeDeviceFingerprint(value?: string | null): string {
   return (value || '').trim()
 }
@@ -90,7 +102,7 @@ function normalizeDevice(raw: any): Device {
     browser: raw.browser || undefined,
     os: raw.os || undefined,
     ip_address: raw.ip_address || undefined,
-    location: raw.location || undefined,
+    location: normalizeLocationValue(raw.location),
     session_token: raw.session_token || '',
     last_active_at: raw.last_active_at || raw.updated_at || raw.created_at || new Date(0).toISOString(),
     created_at: raw.created_at || raw.last_active_at || new Date(0).toISOString(),
