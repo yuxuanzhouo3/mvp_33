@@ -3,7 +3,11 @@ import { createClient } from '@/lib/supabase/server'
 import { getUserConversations } from '@/lib/database/supabase/conversations'
 import { ConversationWithDetails } from '@/lib/types'
 import { getDatabaseClientForUser } from '@/lib/database-router'
-import { getUserConversations as getUserConversationsCN, createConversation as createConversationCN } from '@/lib/database/cloudbase/conversations'
+import {
+  getUserConversations as getUserConversationsCN,
+  createConversation as createConversationCN,
+  findDirectConversation as findDirectConversationCN,
+} from '@/lib/database/cloudbase/conversations'
 import { IS_DOMESTIC_VERSION, getDeploymentRegion } from '@/config'
 
 /**
@@ -486,6 +490,20 @@ export async function POST(request: NextRequest) {
           commonWorkspaces,
           isFriend,
         })
+
+        // CRITICAL: Reuse existing direct conversation to avoid duplicates in CN.
+        const existingDirect = await findDirectConversationCN(currentUser.id, otherUserId)
+        if (existingDirect) {
+          console.log('[CN] Reusing existing direct conversation:', {
+            conversationId: existingDirect.id,
+            currentUserId: currentUser.id,
+            otherUserId,
+          })
+          return NextResponse.json({
+            success: true,
+            conversation: existingDirect,
+          })
+        }
       }
 
       const allMemberIds = Array.from(new Set([currentUser.id, ...member_ids]))

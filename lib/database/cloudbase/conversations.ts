@@ -37,6 +37,73 @@ function normalizeConversationKey(value: unknown): string {
   return ''
 }
 
+function toTimestamp(value: unknown): number {
+  if (!value) return 0
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  const parsed = Date.parse(String(value))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function compareForDirectDedup(a: ConversationWithDetails, b: ConversationWithDetails): number {
+  const aLast = toTimestamp(a.last_message_at)
+  const bLast = toTimestamp(b.last_message_at)
+  if (aLast !== bLast) return bLast - aLast
+
+  const aCreated = toTimestamp(a.created_at)
+  const bCreated = toTimestamp(b.created_at)
+  if (aCreated !== bCreated) return aCreated - bCreated
+
+  return String(a.id || '').localeCompare(String(b.id || ''))
+}
+
+function getDirectPairKey(conversation: ConversationWithDetails): string | null {
+  if (conversation.type !== 'direct') return null
+  const memberIds = Array.from(
+    new Set((conversation.members || []).map((member) => member?.id).filter(Boolean))
+  ) as string[]
+
+  if (memberIds.length === 1) {
+    return `self:${memberIds[0]}`
+  }
+
+  if (memberIds.length !== 2) {
+    return null
+  }
+
+  memberIds.sort()
+  return `${memberIds[0]}:${memberIds[1]}`
+}
+
+function deduplicateDirectConversations(
+  conversations: ConversationWithDetails[]
+): ConversationWithDetails[] {
+  const directByPair = new Map<string, ConversationWithDetails[]>()
+  const nonDirect: ConversationWithDetails[] = []
+
+  conversations.forEach((conversation) => {
+    const pairKey = getDirectPairKey(conversation)
+    if (!pairKey) {
+      nonDirect.push(conversation)
+      return
+    }
+    if (!directByPair.has(pairKey)) {
+      directByPair.set(pairKey, [])
+    }
+    directByPair.get(pairKey)!.push(conversation)
+  })
+
+  const deduplicatedDirect: ConversationWithDetails[] = []
+  directByPair.forEach((duplicates, pairKey) => {
+    if (duplicates.length > 1) {
+      console.warn(`⚠️ CloudBase API: Found ${duplicates.length} duplicate direct conversations for pair ${pairKey}`)
+    }
+    duplicates.sort(compareForDirectDedup)
+    deduplicatedDirect.push(duplicates[0])
+  })
+
+  return [...deduplicatedDirect, ...nonDirect]
+}
+
 export async function createConversation(input: CreateConversationInput): Promise<ConversationWithDetails> {
   const db = getCloudBaseDb()
   if (!db) {
@@ -323,7 +390,15 @@ export async function getUserConversations(userId: string): Promise<Conversation
       lookupKeys
         .map((key) => membersByConv.get(key) || [])
         .find((entries) => entries.length > 0) || []
-    const members: User[] = memberEntries.map((m: any) => {
+    const uniqueMemberEntries = Array.from(
+      new Map(
+        memberEntries
+          .map((entry: any) => [entry?.user_id, entry] as const)
+          .filter(([uid]) => Boolean(uid))
+      ).values()
+    )
+
+    const members: User[] = uniqueMemberEntries.map((m: any) => {
       const uid = m.user_id
       const user = uid ? usersById.get(uid) : undefined
       // 即使没查到完整用户对象，也至少保留 id，方便前端后续补充
@@ -348,7 +423,7 @@ export async function getUserConversations(userId: string): Promise<Conversation
 
     // If this is a direct conversation and the other user is not in contacts, skip it
     if (c.type === 'direct') {
-      const other = memberEntries.find((m: any) => m.user_id !== userId)
+      const other = uniqueMemberEntries.find((m: any) => m.user_id !== userId)
       const otherUserId = other?.user_id
       const isSystemAssistantConversation = otherUserId && SYSTEM_ASSISTANT_IDS.has(otherUserId)
       if (!isSystemAssistantConversation && otherUserId && !contactUserIds.has(otherUserId)) {
@@ -404,7 +479,35 @@ export async function getUserConversations(userId: string): Promise<Conversation
     } as ConversationWithDetails
   }).filter(Boolean) as ConversationWithDetails[]
 
-  return result
+  return deduplicateDirectConversations(result)
+}
+
+export async function findDirectConversation(
+  userId: string,
+  otherUserId: string
+): Promise<ConversationWithDetails | null> {
+  const conversations = await getUserConversations(userId)
+  const expectedMembers = userId === otherUserId
+    ? [userId]
+    : [userId, otherUserId].sort()
+
+  const candidates = conversations.filter((conversation) => {
+    if (conversation.type !== 'direct') return false
+    const memberIds = Array.from(
+      new Set((conversation.members || []).map((member) => member?.id).filter(Boolean))
+    ) as string[]
+    memberIds.sort()
+
+    if (memberIds.length !== expectedMembers.length) return false
+    return expectedMembers.every((id, index) => memberIds[index] === id)
+  })
+
+  if (candidates.length === 0) {
+    return null
+  }
+
+  candidates.sort(compareForDirectDedup)
+  return candidates[0]
 }
 
 export async function pinConversation(conversationId: string, userId: string): Promise<boolean> {
