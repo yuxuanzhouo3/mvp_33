@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDevices } from '@/lib/database/devices'
 import { createClient } from '@/lib/supabase/server'
-import { verifyCloudBaseSession } from '@/lib/cloudbase/auth'
+import { getCloudBaseSessionToken, verifyCloudBaseSession } from '@/lib/cloudbase/auth'
 import { IS_DOMESTIC_VERSION } from '@/config'
 
 export async function GET(request: NextRequest) {
   try {
     let userId: string | null = null
+    let currentSessionToken: string | null = null
 
     if (IS_DOMESTIC_VERSION) {
       const user = await verifyCloudBaseSession(request)
@@ -14,6 +15,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
       userId = user.id
+      currentSessionToken = getCloudBaseSessionToken(request)
     } else {
       const supabase = await createClient()
       const { data: { user } } = await supabase.auth.getUser()
@@ -21,9 +23,11 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
       userId = user.id
+      const { data: { session } } = await supabase.auth.getSession()
+      currentSessionToken = session?.access_token || null
     }
 
-    const devices = await getDevices(userId)
+    const devices = await getDevices(userId, currentSessionToken)
     return NextResponse.json({ devices })
   } catch (error: any) {
     console.error('Get devices error:', error)

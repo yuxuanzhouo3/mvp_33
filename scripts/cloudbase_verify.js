@@ -46,7 +46,9 @@ const collections = [
   'hidden_messages',
   'workspace_announcements',
   'workspace_join_requests',
-  'group_files'
+  'group_files',
+  'user_devices',
+  'revoked_sessions'
 ];
 
 async function verifyCollections() {
@@ -111,6 +113,12 @@ async function verifyCollections() {
   } else {
     console.log('\n⚠️  请先在控制台创建缺失的集合，然后重新运行此脚本验证。');
   }
+
+  console.log('\n建议核对以下索引（需在 CloudBase 控制台创建）:');
+  console.log('  - user_devices: user_id + device_fingerprint (复合唯一)');
+  console.log('  - user_devices: user_id + last_active_at');
+  console.log('  - revoked_sessions: token_hash (唯一)');
+  console.log('  - revoked_sessions: expires_at');
 }
 
 verifyCollections()

@@ -374,6 +374,42 @@ async function initDatabase() {
   };
   await createCollection('group_files', groupFilesSample);
 
+  // 15. user_devices 集合
+  // 飞书式设备管理：按 user_id + device_fingerprint 去重展示
+  const userDevicesSample = {
+    _id: generateUUID(),
+    user_id: generateUUID(),
+    device_name: 'Chrome on Windows',
+    device_type: 'desktop', // 'ios' | 'android' | 'web' | 'desktop'
+    device_category: 'desktop', // 'desktop' | 'mobile' | 'tablet'
+    client_type: 'web', // 'web' | 'android_app' | 'ios_app' | 'desktop_app'
+    device_model: null,
+    device_brand: null,
+    device_fingerprint: 'fp_setup_sample',
+    browser: 'Chrome',
+    os: 'Windows',
+    ip_address: '127.0.0.1',
+    location: 'Local',
+    session_token: 'setup-test-token',
+    last_active_at: now,
+    created_at: now
+  };
+  await createCollection('user_devices', userDevicesSample);
+
+  // 16. revoked_sessions 集合
+  // CloudBase token 失效名单（按 token_hash 校验）
+  const revokedSessionsSample = {
+    _id: generateUUID(),
+    token_hash: 'setup_test_token_hash',
+    user_id: generateUUID(),
+    reason: 'device_kick',
+    revoked_at: now,
+    expires_at: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+    created_at: now,
+    updated_at: now
+  };
+  await createCollection('revoked_sessions', revokedSessionsSample);
+
   // 检查是否有失败的集合
   const failedCollections = [];
   // 这里可以添加逻辑来跟踪失败的集合
@@ -408,6 +444,8 @@ async function initDatabase() {
   console.log('   - workspace_announcements: workspace_id+created_at');
   console.log('   - workspace_join_requests: workspace_id+status, user_id+workspace_id');
   console.log('   - group_files: conversation_id+created_at, uploaded_by');
+  console.log('   - user_devices: user_id+device_fingerprint (复合唯一), user_id+last_active_at');
+  console.log('   - revoked_sessions: token_hash (唯一), expires_at');
 }
 
 // 运行初始化

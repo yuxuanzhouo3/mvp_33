@@ -10,6 +10,7 @@ import { mockAuth } from '@/lib/mock-auth'
 import { Loader2, Mail, CheckCircle } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
 import { IS_DOMESTIC_VERSION } from '@/config'
+import { collectClientDeviceInfo } from '@/lib/utils/device-client'
 
 interface LoginFormProps {
   onSuccess: () => void
@@ -109,6 +110,7 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
     setIsLoading(true)
 
     try {
+      const deviceInfo = await collectClientDeviceInfo()
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -117,6 +119,7 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
         body: JSON.stringify({ 
           email, 
           password,
+          ...deviceInfo,
         }),
       })
 
@@ -193,6 +196,7 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
     setIsLoading(true)
 
     try {
+      const deviceInfo = await collectClientDeviceInfo()
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -201,6 +205,7 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
         body: JSON.stringify({
           email: 'alice@company.com',
           password: 'password',
+          ...deviceInfo,
         }),
       })
 

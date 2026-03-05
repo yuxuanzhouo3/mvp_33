@@ -1,10 +1,12 @@
 import crypto from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserById } from './database'
+import { getCloudBaseDB } from './db'
 import { User } from '../types'
 
 const SESSION_COOKIE_NAME = 'cb_session'
 const DEFAULT_SESSION_TTL = 7 * 24 * 60 * 60 // 7 days
+const REVOKED_SESSIONS_COLLECTION = 'revoked_sessions'
 
 const base64UrlEncode = (input: Buffer | string) =>
   Buffer.from(input).toString('base64url')
@@ -90,6 +92,102 @@ function verifyToken(token: string): CloudBaseSessionPayload | null {
   }
 }
 
+function decodeTokenPayloadUnsafe(token: string): CloudBaseSessionPayload | null {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    const payload = JSON.parse(base64UrlDecode(parts[1])) as CloudBaseSessionPayload
+    return payload
+  } catch {
+    return null
+  }
+}
+
+export function hashCloudBaseSessionToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex')
+}
+
+export async function revokeCloudBaseSessionToken(
+  token: string,
+  userId: string,
+  reason: string = 'device_kick'
+): Promise<void> {
+  if (!token) return
+  const db = getCloudBaseDB()
+  if (!db) return
+
+  const tokenHash = hashCloudBaseSessionToken(token)
+  const payload = decodeTokenPayloadUnsafe(token)
+  const expiresAt = payload?.exp
+    ? new Date(payload.exp * 1000).toISOString()
+    : new Date(Date.now() + DEFAULT_SESSION_TTL * 1000).toISOString()
+  const now = new Date().toISOString()
+
+  try {
+    const existing = await db.collection(REVOKED_SESSIONS_COLLECTION)
+      .where({ token_hash: tokenHash })
+      .limit(1)
+      .get()
+
+    if (existing.data && existing.data.length > 0) {
+      await db.collection(REVOKED_SESSIONS_COLLECTION)
+        .doc(existing.data[0]._id)
+        .update({
+          user_id: userId,
+          reason,
+          revoked_at: now,
+          expires_at: expiresAt,
+          updated_at: now,
+        })
+      return
+    }
+
+    await db.collection(REVOKED_SESSIONS_COLLECTION).add({
+      token_hash: tokenHash,
+      user_id: userId,
+      reason,
+      revoked_at: now,
+      expires_at: expiresAt,
+      created_at: now,
+      updated_at: now,
+    })
+  } catch (error: any) {
+    if (error?.code === 'DATABASE_COLLECTION_NOT_EXIST') {
+      console.warn('[CloudBase Session] revoked_sessions collection not found, skip revoke persist')
+      return
+    }
+    throw error
+  }
+}
+
+async function isCloudBaseSessionRevoked(token: string): Promise<boolean> {
+  if (!token) return false
+  const db = getCloudBaseDB()
+  if (!db) return false
+
+  const tokenHash = hashCloudBaseSessionToken(token)
+  try {
+    const result = await db.collection(REVOKED_SESSIONS_COLLECTION)
+      .where({ token_hash: tokenHash })
+      .limit(1)
+      .get()
+
+    if (!result.data || result.data.length === 0) return false
+    const record = result.data[0]
+    const expiresAtTs = Date.parse(String(record.expires_at || ''))
+    if (Number.isFinite(expiresAtTs) && expiresAtTs <= Date.now()) {
+      return false
+    }
+    return true
+  } catch (error: any) {
+    if (error?.code === 'DATABASE_COLLECTION_NOT_EXIST') {
+      return false
+    }
+    console.error('[CloudBase Session] Failed to check revoked session:', error)
+    return false
+  }
+}
+
 export function createCloudBaseSession(user: User, overrides?: Partial<CloudBaseSessionPayload>) {
   const now = Math.floor(Date.now() / 1000)
   const payload: CloudBaseSessionPayload = {
@@ -119,6 +217,11 @@ export async function getCloudBaseAuthFromRequest(
 
     const payload = verifyToken(token)
     if (!payload) {
+      return null
+    }
+
+    const revoked = await isCloudBaseSessionRevoked(token)
+    if (revoked) {
       return null
     }
 

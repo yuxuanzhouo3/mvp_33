@@ -19,7 +19,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'No session found' }, { status: 401 })
     }
 
-    return NextResponse.json({ sessionToken })
+    return NextResponse.json({
+      sessionToken,
+      sessionId: sessionToken, // backward-compatible alias for old frontend code
+    })
   } catch (error: any) {
     console.error('Get current device error:', error)
     return NextResponse.json(

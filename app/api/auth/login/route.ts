@@ -7,7 +7,25 @@ import { User } from '@/lib/types'
 import { IS_DOMESTIC_VERSION } from '@/config'
 import { verifyPassword } from '@/lib/utils/password'
 import { recordDevice } from '@/lib/database/devices'
-import { parseDeviceInfo, getClientIP, getLocationFromIP } from '@/lib/utils/device-parser'
+import { buildDeviceFingerprint, parseDeviceInfo, getClientIP, getLocationFromIP } from '@/lib/utils/device-parser'
+
+interface DeviceRequestPayload {
+  deviceModel?: string
+  deviceBrand?: string
+  deviceFingerprint?: string
+  clientType?: string
+  deviceCategory?: string
+}
+
+function extractDevicePayload(body: any): DeviceRequestPayload {
+  return {
+    deviceModel: typeof body?.deviceModel === 'string' ? body.deviceModel : undefined,
+    deviceBrand: typeof body?.deviceBrand === 'string' ? body.deviceBrand : undefined,
+    deviceFingerprint: typeof body?.deviceFingerprint === 'string' ? body.deviceFingerprint : undefined,
+    clientType: typeof body?.clientType === 'string' ? body.clientType : undefined,
+    deviceCategory: typeof body?.deviceCategory === 'string' ? body.deviceCategory : undefined,
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,7 +43,7 @@ export async function POST(request: NextRequest) {
     // Route to appropriate authentication based on environment variable
     if (IS_DOMESTIC_VERSION) {
       console.log('[LOGIN] Using domestic version (CloudBase)')
-      return handleCloudBaseLogin(request, email, password)
+      return handleCloudBaseLogin(request, email, password, extractDevicePayload(body))
     }
 
     // International version: use Supabase
@@ -371,11 +389,26 @@ export async function POST(request: NextRequest) {
 
     // Get device info
     const userAgent = request.headers.get('user-agent') || ''
-    const deviceModel = body?.deviceModel
-    const deviceBrand = body?.deviceBrand
-    const deviceInfo = parseDeviceInfo(userAgent, deviceModel, deviceBrand)
+    const devicePayload = extractDevicePayload(body)
+    const deviceInfo = parseDeviceInfo(
+      userAgent,
+      devicePayload.deviceModel,
+      devicePayload.deviceBrand,
+      devicePayload.clientType,
+      devicePayload.deviceCategory
+    )
     const ip = getClientIP(request)
     const location = await getLocationFromIP(ip)
+    const deviceFingerprint = buildDeviceFingerprint({
+      explicitFingerprint: devicePayload.deviceFingerprint,
+      userAgent,
+      clientType: deviceInfo.clientType,
+      deviceCategory: deviceInfo.deviceCategory,
+      deviceModel: deviceInfo.deviceModel,
+      deviceBrand: deviceInfo.deviceBrand,
+      os: deviceInfo.os,
+      browser: deviceInfo.browser,
+    })
 
     // Record device
     try {
@@ -383,6 +416,11 @@ export async function POST(request: NextRequest) {
         user_id: updatedUser.id,
         device_name: deviceInfo.deviceName,
         device_type: deviceInfo.deviceType,
+        device_category: deviceInfo.deviceCategory,
+        client_type: deviceInfo.clientType,
+        device_model: deviceInfo.deviceModel,
+        device_brand: deviceInfo.deviceBrand,
+        device_fingerprint: deviceFingerprint,
         browser: deviceInfo.browser,
         os: deviceInfo.os,
         ip_address: ip,
@@ -412,19 +450,18 @@ export async function POST(request: NextRequest) {
 /**
  * Handle CloudBase login (for domestic version)
  */
-async function handleCloudBaseLogin(request: NextRequest, email: string, password: string) {
+async function handleCloudBaseLogin(
+  request: NextRequest,
+  email: string,
+  password: string,
+  devicePayload: DeviceRequestPayload = {}
+) {
   try {
     console.log('[LOGIN] ========== CloudBase Login Started ==========')
     console.log('[LOGIN] CloudBase authentication for:', email)
     console.log('[LOGIN] Password length:', password.length)
     console.log('[LOGIN] Password first 2 chars:', password.substring(0, 2))
     console.log('[LOGIN] Password last 2 chars:', password.substring(password.length - 2))
-
-    // Parse body for device info
-    let body: any = {}
-    try {
-      body = await request.json()
-    } catch {}
 
     // Get user from CloudBase (with password hash for authentication)
     const user = await getCloudBaseUserByEmail(email, true)
@@ -499,11 +536,25 @@ async function handleCloudBaseLogin(request: NextRequest, email: string, passwor
 
     // Get device info
     const userAgent = request.headers.get('user-agent') || ''
-    const deviceModel = body?.deviceModel
-    const deviceBrand = body?.deviceBrand
-    const deviceInfo = parseDeviceInfo(userAgent, deviceModel, deviceBrand)
+    const deviceInfo = parseDeviceInfo(
+      userAgent,
+      devicePayload.deviceModel,
+      devicePayload.deviceBrand,
+      devicePayload.clientType,
+      devicePayload.deviceCategory
+    )
     const ip = getClientIP(request)
     const location = await getLocationFromIP(ip)
+    const deviceFingerprint = buildDeviceFingerprint({
+      explicitFingerprint: devicePayload.deviceFingerprint,
+      userAgent,
+      clientType: deviceInfo.clientType,
+      deviceCategory: deviceInfo.deviceCategory,
+      deviceModel: deviceInfo.deviceModel,
+      deviceBrand: deviceInfo.deviceBrand,
+      os: deviceInfo.os,
+      browser: deviceInfo.browser,
+    })
 
     // Record device
     try {
@@ -511,6 +562,11 @@ async function handleCloudBaseLogin(request: NextRequest, email: string, passwor
         user_id: user.id,
         device_name: deviceInfo.deviceName,
         device_type: deviceInfo.deviceType,
+        device_category: deviceInfo.deviceCategory,
+        client_type: deviceInfo.clientType,
+        device_model: deviceInfo.deviceModel,
+        device_brand: deviceInfo.deviceBrand,
+        device_fingerprint: deviceFingerprint,
         browser: deviceInfo.browser,
         os: deviceInfo.os,
         ip_address: ip,

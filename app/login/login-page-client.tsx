@@ -7,6 +7,7 @@ import { RegisterForm } from '@/components/auth/register-form'
 import { ResetPasswordForm } from '@/components/auth/reset-password-form'
 import { WorkspaceSelector } from '@/components/workspace/workspace-selector'
 import { mockAuth } from '@/lib/mock-auth'
+import { collectClientDeviceInfo } from '@/lib/utils/device-client'
 import { Workspace } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { useSettings } from '@/lib/settings-context'
@@ -121,43 +122,16 @@ export default function LoginPageClient({ initialStep = 'login' }: LoginPageClie
         console.log('📱 Recording device information...')
         ;(async () => {
           try {
-            // Try to get device model from WebView (Android)
-            let deviceModel: string | undefined
-            let deviceBrand: string | undefined
-
-            if (typeof window !== 'undefined') {
-              // Check if running in Android WebView
-              if ((window as any).Android !== undefined) {
-                try {
-                  deviceModel = (window as any).Android.getDeviceModel()
-                  deviceBrand = (window as any).Android.getDeviceBrand()
-                  console.log('📱 Android device info:', deviceBrand, deviceModel)
-                } catch (e) {
-                  console.log('📱 Android device info not available')
-                }
-              }
-              // Check for iOS
-              else if ((window as any).webkit?.messageHandlers?.deviceInfo) {
-                try {
-                  const info = await (window as any).webkit.messageHandlers.deviceInfo.postMessage({})
-                  deviceModel = info?.model
-                  deviceBrand = info?.brand
-                  console.log('📱 iOS device info:', deviceBrand, deviceModel)
-                } catch (e) {
-                  console.log('📱 iOS device info not available')
-                }
-              }
-            }
+            const deviceInfo = await collectClientDeviceInfo()
 
             const deviceResponse = await fetch('/api/devices/record', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...(token ? { 'x-cloudbase-session': token } : {}),
               },
-              body: JSON.stringify({
-                deviceModel: deviceModel || null,
-                deviceBrand: deviceBrand || null,
-              }),
+              body: JSON.stringify(deviceInfo),
             })
 
             if (deviceResponse.ok) {

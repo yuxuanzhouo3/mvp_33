@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { recordDevice } from '@/lib/database/devices'
-import { parseDeviceInfo, getClientIP, getLocationFromIP } from '@/lib/utils/device-parser'
 
 /**
  * Handle Google OAuth callback from Supabase
@@ -119,50 +117,9 @@ export async function GET(request: NextRequest) {
       provider_id: user.id,
     }
 
-    // Store session token
+    // Store session token. Device will be recorded once on /login client side
+    // with richer client payload (fingerprint/model/category), avoiding duplicates.
     const token = session.access_token
-    console.log('[GOOGLE OAUTH] ========== Device Recording Started ==========')
-    console.log('[GOOGLE OAUTH] User ID:', userData.id)
-    console.log('[GOOGLE OAUTH] Session token:', token ? 'present' : 'missing')
-
-    // Get device info and record device
-    const userAgent = request.headers.get('user-agent') || ''
-    console.log('[GOOGLE OAUTH] User-Agent:', userAgent)
-
-    const deviceInfo = parseDeviceInfo(userAgent)
-    console.log('[GOOGLE OAUTH] Device info:', JSON.stringify(deviceInfo, null, 2))
-
-    const ip = getClientIP(request)
-    console.log('[GOOGLE OAUTH] IP address:', ip)
-
-    const location = await getLocationFromIP(ip)
-    console.log('[GOOGLE OAUTH] Location:', location)
-
-    // Record device
-    const deviceData = {
-      user_id: userData.id,
-      device_name: deviceInfo.deviceName,
-      device_type: deviceInfo.deviceType,
-      browser: deviceInfo.browser,
-      os: deviceInfo.os,
-      ip_address: ip,
-      location: location,
-      session_token: token,
-    }
-    console.log('[GOOGLE OAUTH] Device data to record:', JSON.stringify(deviceData, null, 2))
-
-    try {
-      console.log('[GOOGLE OAUTH] Calling recordDevice...')
-      const recordedDevice = await recordDevice(deviceData)
-      console.log('[GOOGLE OAUTH] ✅ Device recorded successfully:', JSON.stringify(recordedDevice, null, 2))
-    } catch (error: any) {
-      console.error('[GOOGLE OAUTH] ❌ Failed to record device')
-      console.error('[GOOGLE OAUTH] Error message:', error?.message)
-      console.error('[GOOGLE OAUTH] Error stack:', error?.stack)
-      console.error('[GOOGLE OAUTH] Full error:', JSON.stringify(error, null, 2))
-      // Don't fail OAuth if device recording fails
-    }
-    console.log('[GOOGLE OAUTH] ========== Device Recording Ended ==========')
 
     // Redirect to frontend with user data (optimized: direct redirect, no extra processing)
     const redirectUrl = new URL(`${origin}/login`)

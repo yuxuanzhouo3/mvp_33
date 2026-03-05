@@ -1,50 +1,157 @@
+import crypto from 'crypto'
 import { UAParser } from 'ua-parser-js'
 
-export function parseDeviceInfo(userAgent: string, deviceModel?: string, deviceBrand?: string) {
+export type DeviceType = 'ios' | 'android' | 'web' | 'desktop'
+export type DeviceCategory = 'desktop' | 'mobile' | 'tablet'
+export type ClientType = 'web' | 'android_app' | 'ios_app' | 'desktop_app'
+
+export interface ParsedDeviceInfo {
+  deviceName: string
+  deviceType: DeviceType
+  deviceCategory: DeviceCategory
+  clientType: ClientType
+  browser: string
+  os: string
+  deviceModel: string | null
+  deviceBrand: string | null
+}
+
+const normalizeText = (value?: string | null): string => {
+  return (value || '').trim()
+}
+
+const normalizeCategory = (value?: string | null): DeviceCategory | null => {
+  const raw = normalizeText(value).toLowerCase()
+  if (!raw) return null
+  if (raw === 'mobile' || raw === 'tablet' || raw === 'desktop') return raw
+  return null
+}
+
+const normalizeClientType = (value?: string | null): ClientType | null => {
+  const raw = normalizeText(value).toLowerCase()
+  if (!raw) return null
+  if (raw === 'web' || raw === 'android_app' || raw === 'ios_app' || raw === 'desktop_app') {
+    return raw
+  }
+  return null
+}
+
+function inferDeviceCategoryFromUA(
+  parserDeviceType: string | undefined,
+  userAgent: string
+): DeviceCategory {
+  if (parserDeviceType === 'tablet') return 'tablet'
+  if (parserDeviceType === 'mobile') return 'mobile'
+  const ua = userAgent.toLowerCase()
+  if (/ipad|tablet|nexus 7|nexus 9|sm-t|lenovo tab|huawei mediapad/.test(ua)) return 'tablet'
+  if (/mobi|iphone|android/.test(ua)) return 'mobile'
+  return 'desktop'
+}
+
+function inferClientType(
+  userAgent: string,
+  parsedOs: string,
+  providedClientType?: string | null,
+  hasNativeDeviceInfo?: boolean
+): ClientType {
+  const normalizedProvided = normalizeClientType(providedClientType)
+  if (normalizedProvided) return normalizedProvided
+
+  const ua = userAgent.toLowerCase()
+  if (hasNativeDeviceInfo || /orbitchatapp|orbitapp|wv\)/.test(ua)) {
+    if (parsedOs.toLowerCase().includes('ios')) return 'ios_app'
+    return 'android_app'
+  }
+
+  if (/electron|tauri/.test(ua)) return 'desktop_app'
+  return 'web'
+}
+
+function inferDeviceType(parsedOs: string, category: DeviceCategory): DeviceType {
+  const os = parsedOs.toLowerCase()
+  if (os.includes('ios') || os.includes('ipad')) return 'ios'
+  if (os.includes('android')) return 'android'
+  if (category === 'desktop') return 'desktop'
+  return 'web'
+}
+
+export function parseDeviceInfo(
+  userAgent: string,
+  deviceModel?: string | null,
+  deviceBrand?: string | null,
+  clientTypeHint?: string | null,
+  deviceCategoryHint?: string | null
+): ParsedDeviceInfo {
   const parser = new UAParser(userAgent)
   const device = parser.getDevice()
   const browser = parser.getBrowser()
   const os = parser.getOS()
 
-  // Check if it's a mobile app (WebView)
-  const isMobileApp = /OrbitChat|OrbitChatApp/i.test(userAgent) ||
-    (deviceModel && deviceBrand)
+  const parsedModel = normalizeText(deviceModel) || normalizeText(device.model)
+  const parsedBrand =
+    normalizeText(deviceBrand) ||
+    normalizeText((device as any).vendor) ||
+    normalizeText((device as any).manufacturer)
+  const parsedOs = normalizeText(os.name) || 'Unknown'
+  const parsedBrowser = normalizeText(browser.name) || 'Unknown'
+  const hasNativeDeviceInfo = Boolean(parsedModel || parsedBrand)
 
-  let deviceName: string
+  const deviceCategory =
+    normalizeCategory(deviceCategoryHint) ||
+    inferDeviceCategoryFromUA(device.type, userAgent)
+  const clientType = inferClientType(userAgent, parsedOs, clientTypeHint, hasNativeDeviceInfo)
+  const deviceType = inferDeviceType(parsedOs, deviceCategory)
 
-  if (isMobileApp && deviceModel) {
-    // Use actual device model for mobile apps
-    deviceName = `${deviceBrand || 'Mobile'} ${deviceModel}`
-  } else if (browser.name && browser.name !== 'Unknown') {
-    deviceName = `${browser.name} on ${os.name || 'Unknown'}`
-  } else if (device.model && device.model !== 'Unknown') {
-    // Fallback to UA parser's device model
-    const manufacturer = (device as any).manufacturer || (device as any).vendor || 'Unknown'
-    deviceName = `${manufacturer} ${device.model}`
+  let deviceName = ''
+  if (parsedModel && parsedBrand) {
+    deviceName = `${parsedBrand} ${parsedModel}`.trim()
+  } else if (parsedModel) {
+    deviceName = parsedModel
+  } else if (parsedBrowser !== 'Unknown' && parsedOs !== 'Unknown') {
+    deviceName = `${parsedBrowser} on ${parsedOs}`
+  } else if (parsedOs !== 'Unknown') {
+    deviceName = `${parsedOs} Device`
   } else {
-    // Default fallback
-    deviceName = `${os.name || 'Unknown'} Device`
-  }
-
-  let deviceType: 'ios' | 'android' | 'web' | 'desktop' = 'web'
-  if (device.type === 'mobile' || isMobileApp) {
-    if (os.name?.toLowerCase().includes('ios')) {
-      deviceType = 'ios'
-    } else if (os.name?.toLowerCase().includes('android') || isMobileApp) {
-      deviceType = 'android'
-    }
-  } else if (device.type === 'tablet') {
-    deviceType = os.name?.toLowerCase().includes('ios') ? 'ios' : 'android'
-  } else {
-    deviceType = 'desktop'
+    deviceName = 'Unknown Device'
   }
 
   return {
     deviceName,
     deviceType,
-    browser: browser.name,
-    os: os.name,
+    deviceCategory,
+    clientType,
+    browser: parsedBrowser,
+    os: parsedOs,
+    deviceModel: parsedModel || null,
+    deviceBrand: parsedBrand || null,
   }
+}
+
+export function buildDeviceFingerprint(params: {
+  explicitFingerprint?: string | null
+  userAgent: string
+  clientType?: string | null
+  deviceCategory?: string | null
+  deviceModel?: string | null
+  deviceBrand?: string | null
+  os?: string | null
+  browser?: string | null
+}): string {
+  const explicit = normalizeText(params.explicitFingerprint)
+  if (explicit) return explicit
+
+  const source = [
+    normalizeText(params.clientType),
+    normalizeText(params.deviceCategory),
+    normalizeText(params.deviceModel),
+    normalizeText(params.deviceBrand),
+    normalizeText(params.os),
+    normalizeText(params.browser),
+    normalizeText(params.userAgent),
+  ].join('|')
+
+  const digest = crypto.createHash('sha256').update(source || 'unknown-device').digest('hex')
+  return `fp_${digest}`
 }
 
 export function getClientIP(request: Request): string {

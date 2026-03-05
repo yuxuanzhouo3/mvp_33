@@ -1,12 +1,20 @@
+import crypto from 'crypto'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCloudBaseDB } from '@/lib/cloudbase/db'
+import { revokeCloudBaseSessionToken } from '@/lib/cloudbase/auth'
+import { ClientType, DeviceCategory, DeviceType } from '@/lib/utils/device-parser'
 import { IS_DOMESTIC_VERSION } from '@/config'
 
 export interface DeviceData {
   user_id: string
   device_name: string
-  device_type: 'ios' | 'android' | 'web' | 'desktop'
+  device_type: DeviceType
+  device_category?: DeviceCategory
+  client_type?: ClientType
+  device_model?: string | null
+  device_brand?: string | null
+  device_fingerprint?: string
   browser?: string
   os?: string
   ip_address?: string
@@ -18,6 +26,105 @@ export interface Device extends DeviceData {
   id: string
   last_active_at: string
   created_at: string
+  is_current?: boolean
+}
+
+const FALLBACK_DEVICE_NAME = 'Unknown Device'
+const FALLBACK_DEVICE_TYPE: DeviceType = 'web'
+const FALLBACK_DEVICE_CATEGORY: DeviceCategory = 'desktop'
+const FALLBACK_CLIENT_TYPE: ClientType = 'web'
+
+function normalizeDeviceFingerprint(value?: string | null): string {
+  return (value || '').trim()
+}
+
+function toTimestamp(value?: string | null): number {
+  if (!value) return 0
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function isNewerDevice(next: Device, prev: Device): boolean {
+  const nextActive = toTimestamp(next.last_active_at)
+  const prevActive = toTimestamp(prev.last_active_at)
+  if (nextActive !== prevActive) return nextActive > prevActive
+  const nextCreated = toTimestamp(next.created_at)
+  const prevCreated = toTimestamp(prev.created_at)
+  if (nextCreated !== prevCreated) return nextCreated > prevCreated
+  return String(next.id).localeCompare(String(prev.id)) > 0
+}
+
+function buildFallbackFingerprint(input: Partial<DeviceData>): string {
+  const source = [
+    input.user_id || '',
+    input.client_type || '',
+    input.device_category || '',
+    input.device_type || '',
+    input.device_brand || '',
+    input.device_model || '',
+    input.browser || '',
+    input.os || '',
+    input.device_name || '',
+  ].join('|')
+  const digest = crypto.createHash('sha256').update(source || 'unknown-device').digest('hex')
+  return `fp_${digest}`
+}
+
+function ensureFingerprint(input: DeviceData): string {
+  const normalized = normalizeDeviceFingerprint(input.device_fingerprint)
+  if (normalized) return normalized
+  return buildFallbackFingerprint(input)
+}
+
+function normalizeDevice(raw: any): Device {
+  const device: Device = {
+    id: String(raw.id || raw._id || ''),
+    user_id: String(raw.user_id || ''),
+    device_name: raw.device_name || FALLBACK_DEVICE_NAME,
+    device_type: (raw.device_type || FALLBACK_DEVICE_TYPE) as DeviceType,
+    device_category: (raw.device_category || FALLBACK_DEVICE_CATEGORY) as DeviceCategory,
+    client_type: (raw.client_type || FALLBACK_CLIENT_TYPE) as ClientType,
+    device_model: raw.device_model || null,
+    device_brand: raw.device_brand || null,
+    device_fingerprint: normalizeDeviceFingerprint(raw.device_fingerprint),
+    browser: raw.browser || undefined,
+    os: raw.os || undefined,
+    ip_address: raw.ip_address || undefined,
+    location: raw.location || undefined,
+    session_token: raw.session_token || '',
+    last_active_at: raw.last_active_at || raw.updated_at || raw.created_at || new Date(0).toISOString(),
+    created_at: raw.created_at || raw.last_active_at || new Date(0).toISOString(),
+  }
+
+  if (!device.device_fingerprint) {
+    device.device_fingerprint = buildFallbackFingerprint(device)
+  }
+  return device
+}
+
+function deduplicateDevices(devices: Device[]): Device[] {
+  const byFingerprint = new Map<string, Device>()
+
+  devices.forEach((device) => {
+    const key = normalizeDeviceFingerprint(device.device_fingerprint) || buildFallbackFingerprint(device)
+    const current = byFingerprint.get(key)
+    if (!current || isNewerDevice(device, current)) {
+      byFingerprint.set(key, device)
+    }
+  })
+
+  return Array.from(byFingerprint.values()).sort(
+    (a, b) => toTimestamp(b.last_active_at) - toTimestamp(a.last_active_at)
+  )
+}
+
+function markCurrentDevice(devices: Device[], currentSessionToken?: string | null): Device[] {
+  const token = (currentSessionToken || '').trim()
+  if (!token) return devices.map((device) => ({ ...device, is_current: false }))
+  return devices.map((device) => ({
+    ...device,
+    is_current: device.session_token === token,
+  }))
 }
 
 async function getSupabaseDevices(userId: string): Promise<Device[]> {
@@ -29,183 +136,248 @@ async function getSupabaseDevices(userId: string): Promise<Device[]> {
     .order('last_active_at', { ascending: false })
 
   if (error) throw error
-  return data || []
+  return (data || []).map(normalizeDevice)
 }
 
-async function recordSupabaseDevice(data: DeviceData): Promise<Device> {
+async function recordSupabaseDevice(input: DeviceData): Promise<Device> {
   const supabase = await createAdminClient()
+  const now = new Date().toISOString()
+  const fingerprint = ensureFingerprint(input)
 
-  // First try to find existing device with same session_token
-  const { data: existingDevice } = await supabase
+  const payload = {
+    user_id: input.user_id,
+    device_name: input.device_name,
+    device_type: input.device_type,
+    device_category: input.device_category || FALLBACK_DEVICE_CATEGORY,
+    client_type: input.client_type || FALLBACK_CLIENT_TYPE,
+    device_model: input.device_model || null,
+    device_brand: input.device_brand || null,
+    device_fingerprint: fingerprint,
+    browser: input.browser || null,
+    os: input.os || null,
+    ip_address: input.ip_address || null,
+    location: input.location || null,
+    session_token: input.session_token,
+    last_active_at: now,
+  }
+
+  const { data: existingByFingerprint, error: existingError } = await supabase
     .from('user_devices')
-    .select('id')
-    .eq('session_token', data.session_token)
-    .single()
+    .select('*')
+    .eq('user_id', input.user_id)
+    .eq('device_fingerprint', fingerprint)
+    .order('last_active_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
 
-  if (existingDevice) {
-    // Update existing device's last_active_at
-    const { data: device, error } = await supabase
+  if (existingError) throw existingError
+
+  if (existingByFingerprint) {
+    const oldToken = String(existingByFingerprint.session_token || '')
+    const newToken = String(input.session_token || '')
+    if (oldToken && newToken && oldToken !== newToken) {
+      try {
+        await supabase.auth.admin.signOut(oldToken)
+      } catch (revokeError) {
+        console.warn('[recordSupabaseDevice] Failed to revoke replaced token:', revokeError)
+      }
+    }
+
+    const { data: updated, error: updateError } = await supabase
       .from('user_devices')
-      .update({
-        device_name: data.device_name,
-        device_type: data.device_type,
-        browser: data.browser,
-        os: data.os,
-        ip_address: data.ip_address,
-        location: data.location,
-        last_active_at: new Date().toISOString(),
-      })
-      .eq('id', existingDevice.id)
+      .update(payload)
+      .eq('id', existingByFingerprint.id)
       .select()
       .single()
 
-    if (error) throw error
-    return device
+    if (updateError) throw updateError
+    return normalizeDevice(updated)
   }
 
-  // Insert new device if not exists
-  const { data: device, error } = await supabase
+  const { data: inserted, error: insertError } = await supabase
     .from('user_devices')
-    .insert(data)
+    .insert(payload)
     .select()
     .single()
 
-  if (error) throw error
-  return device
+  if (insertError) throw insertError
+  return normalizeDevice(inserted)
 }
 
 async function deleteSupabaseDevice(deviceId: string, userId: string): Promise<void> {
-  // Use admin client to bypass RLS policies
   const supabase = await createAdminClient()
 
-  console.log('[DELETE DEVICE] Deleting device:', deviceId, 'for user:', userId)
-
-  // First, get the device's session token
-  const { data: device, error: fetchError } = await supabase
+  const { data: targetDevice, error: fetchError } = await supabase
     .from('user_devices')
-    .select('session_token')
+    .select('id, session_token, device_fingerprint')
     .eq('id', deviceId)
     .eq('user_id', userId)
     .single()
 
-  if (fetchError) {
-    console.error('[DELETE DEVICE] Failed to fetch device:', fetchError)
-    throw fetchError
+  if (fetchError) throw fetchError
+  if (!targetDevice) throw new Error('Device not found')
+
+  let rowsToRevoke: any[] = []
+  if (targetDevice.device_fingerprint) {
+    const { data: sameDeviceRows, error: sameError } = await supabase
+      .from('user_devices')
+      .select('id, session_token')
+      .eq('user_id', userId)
+      .eq('device_fingerprint', targetDevice.device_fingerprint)
+    if (sameError) throw sameError
+    rowsToRevoke = sameDeviceRows || []
+  } else {
+    rowsToRevoke = [targetDevice]
   }
 
-  if (!device) {
-    throw new Error('Device not found')
+  const tokenSet = new Set(
+    rowsToRevoke
+      .map((row: any) => String(row.session_token || '').trim())
+      .filter(Boolean)
+  )
+  for (const token of tokenSet) {
+    try {
+      await supabase.auth.admin.signOut(token)
+    } catch (revokeError) {
+      console.warn('[deleteSupabaseDevice] Failed to revoke token:', revokeError)
+    }
   }
 
-  console.log('[DELETE DEVICE] Found device with session token')
-
-  // Revoke the session using the session token
-  // This will invalidate the user's session on that device
-  try {
-    // Use admin client to revoke the session by JWT
-    await supabase.auth.admin.signOut(device.session_token)
-    console.log('[DELETE DEVICE] Session revoked successfully')
-  } catch (revokeError: any) {
-    console.error('[DELETE DEVICE] Failed to revoke session:', revokeError)
-    // Continue with device deletion even if session revocation fails
-  }
-
-  // Delete the device record
-  const { error } = await supabase
+  let deleteQuery = supabase
     .from('user_devices')
     .delete()
-    .eq('id', deviceId)
     .eq('user_id', userId)
-
-  if (error) {
-    console.error('[DELETE DEVICE] Delete error:', error)
-    throw error
+  if (targetDevice.device_fingerprint) {
+    deleteQuery = deleteQuery.eq('device_fingerprint', targetDevice.device_fingerprint)
+  } else {
+    deleteQuery = deleteQuery.eq('id', deviceId)
   }
 
-  console.log('[DELETE DEVICE] Device deleted successfully')
+  const { error: deleteError } = await deleteQuery
+  if (deleteError) throw deleteError
 }
 
 async function getCloudBaseDevices(userId: string): Promise<Device[]> {
   const db = getCloudBaseDB()
-  const res = await db.collection('user_devices')
+  const res = await db
+    .collection('user_devices')
     .where({ user_id: userId })
     .orderBy('last_active_at', 'desc')
     .get()
 
-  return res.data.map((doc: any) => ({
-    id: doc._id,
-    user_id: doc.user_id,
-    device_name: doc.device_name,
-    device_type: doc.device_type,
-    browser: doc.browser,
-    os: doc.os,
-    ip_address: doc.ip_address,
-    location: doc.location,
-    session_token: doc.session_token,
-    last_active_at: doc.last_active_at,
-    created_at: doc.created_at,
-  }))
+  return (res.data || []).map(normalizeDevice)
 }
 
-async function recordCloudBaseDevice(data: DeviceData): Promise<Device> {
+async function recordCloudBaseDevice(input: DeviceData): Promise<Device> {
   const db = getCloudBaseDB()
   const now = new Date().toISOString()
+  const fingerprint = ensureFingerprint(input)
 
-  // First try to find existing device with same session_token
-  const existing = await db.collection('user_devices')
-    .where({ session_token: data.session_token })
+  const payload = {
+    user_id: input.user_id,
+    device_name: input.device_name,
+    device_type: input.device_type,
+    device_category: input.device_category || FALLBACK_DEVICE_CATEGORY,
+    client_type: input.client_type || FALLBACK_CLIENT_TYPE,
+    device_model: input.device_model || null,
+    device_brand: input.device_brand || null,
+    device_fingerprint: fingerprint,
+    browser: input.browser || null,
+    os: input.os || null,
+    ip_address: input.ip_address || null,
+    location: input.location || null,
+    session_token: input.session_token,
+    last_active_at: now,
+  }
+
+  const existing = await db
+    .collection('user_devices')
+    .where({ user_id: input.user_id, device_fingerprint: fingerprint })
+    .orderBy('last_active_at', 'desc')
+    .limit(1)
     .get()
 
   if (existing.data && existing.data.length > 0) {
-    // Update existing device
-    const existingId = existing.data[0]._id
-    await db.collection('user_devices')
-      .doc(existingId)
-      .update({
-        device_name: data.device_name,
-        device_type: data.device_type,
-        browser: data.browser,
-        os: data.os,
-        ip_address: data.ip_address,
-        location: data.location,
-        last_active_at: now,
-      })
-
-    return {
-      id: existingId,
-      ...data,
-      last_active_at: now,
-      created_at: existing.data[0].created_at,
+    const doc = existing.data[0]
+    const oldToken = String(doc.session_token || '')
+    const newToken = String(input.session_token || '')
+    if (oldToken && newToken && oldToken !== newToken) {
+      await revokeCloudBaseSessionToken(oldToken, input.user_id, 'replaced_session')
     }
+
+    await db.collection('user_devices').doc(doc._id).update(payload)
+
+    return normalizeDevice({
+      ...doc,
+      ...payload,
+      _id: doc._id,
+      created_at: doc.created_at || now,
+    })
   }
 
-  // Insert new device if not exists
-  const res = await db.collection('user_devices').add({
-    ...data,
-    last_active_at: now,
-    created_at: now,
+  const createdAt = now
+  const insertRes = await db.collection('user_devices').add({
+    ...payload,
+    created_at: createdAt,
   })
 
-  return {
-    id: res.id,
-    ...data,
-    last_active_at: now,
-    created_at: now,
-  }
+  return normalizeDevice({
+    ...payload,
+    _id: insertRes.id || insertRes._id,
+    created_at: createdAt,
+  })
 }
 
 async function deleteCloudBaseDevice(deviceId: string, userId: string): Promise<void> {
   const db = getCloudBaseDB()
-  await db.collection('user_devices')
+  const targetRes = await db
+    .collection('user_devices')
     .where({ _id: deviceId, user_id: userId })
-    .remove()
+    .limit(1)
+    .get()
+
+  if (!targetRes.data || targetRes.data.length === 0) {
+    throw new Error('Device not found')
+  }
+
+  const target = targetRes.data[0]
+  const fingerprint = normalizeDeviceFingerprint(target.device_fingerprint)
+  let rowsToDelete: any[] = [target]
+
+  if (fingerprint) {
+    const sameDeviceRes = await db
+      .collection('user_devices')
+      .where({ user_id: userId, device_fingerprint: fingerprint })
+      .get()
+    rowsToDelete = sameDeviceRes.data || rowsToDelete
+  }
+
+  const tokenSet = new Set(
+    rowsToDelete
+      .map((row: any) => String(row.session_token || '').trim())
+      .filter(Boolean)
+  )
+  for (const token of tokenSet) {
+    await revokeCloudBaseSessionToken(token, userId, 'device_kick')
+  }
+
+  if (rowsToDelete.length === 1) {
+    await db.collection('user_devices').doc(rowsToDelete[0]._id).remove()
+    return
+  }
+
+  const ids = rowsToDelete.map((row: any) => row._id).filter(Boolean)
+  if (ids.length === 0) return
+  const cmd = db.command
+  await db.collection('user_devices').where({ _id: cmd.in(ids), user_id: userId }).remove()
 }
 
-export async function getDevices(userId: string): Promise<Device[]> {
-  if (IS_DOMESTIC_VERSION) {
-    return getCloudBaseDevices(userId)
-  }
-  return getSupabaseDevices(userId)
+export async function getDevices(userId: string, currentSessionToken?: string | null): Promise<Device[]> {
+  const raw = IS_DOMESTIC_VERSION
+    ? await getCloudBaseDevices(userId)
+    : await getSupabaseDevices(userId)
+  const deduplicated = deduplicateDevices(raw)
+  return markCurrentDevice(deduplicated, currentSessionToken)
 }
 
 export async function recordDevice(data: DeviceData): Promise<Device> {
