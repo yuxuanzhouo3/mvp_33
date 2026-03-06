@@ -11,6 +11,7 @@ import { Loader2, Mail, CheckCircle } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
 import { IS_DOMESTIC_VERSION } from '@/config'
 import { collectClientDeviceInfo } from '@/lib/utils/device-client'
+import { isAndroidWebView, signInWithGoogle } from '@/lib/google-signin-bridge'
 
 interface LoginFormProps {
   onSuccess: () => void
@@ -248,6 +249,51 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
     setIsLoading(true)
     setError('')
     try {
+      if (provider === 'google' && !IS_DOMESTIC_VERSION && isAndroidWebView()) {
+        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''
+        if (!clientId) {
+          throw new Error('Missing NEXT_PUBLIC_GOOGLE_CLIENT_ID')
+        }
+
+        const nativeResult = await signInWithGoogle(clientId)
+        if (!nativeResult.idToken) {
+          throw new Error('Missing Google ID token from native sign-in')
+        }
+
+        const nativeResponse = await fetch('/api/auth/google-native', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken: nativeResult.idToken }),
+        })
+
+        const nativeData = await nativeResponse.json().catch(() => ({}))
+        if (!nativeResponse.ok || !nativeData?.success || !nativeData?.user || !nativeData?.token) {
+          throw new Error(nativeData?.error || 'Google native sign-in failed')
+        }
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('chat_app_current_user', JSON.stringify(nativeData.user))
+          localStorage.setItem('chat_app_token', nativeData.token)
+        }
+
+        try {
+          const deviceInfo = await collectClientDeviceInfo()
+          await fetch('/api/devices/record', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${nativeData.token}`,
+            },
+            body: JSON.stringify(deviceInfo),
+          })
+        } catch (deviceError) {
+          console.warn('[LOGIN FORM] Native Google login device record failed:', deviceError)
+        }
+
+        onSuccess()
+        return
+      }
+
       const source =
         typeof window !== 'undefined' && (window as any).Android
           ? 'android_app'
