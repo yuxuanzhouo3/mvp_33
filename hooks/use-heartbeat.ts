@@ -11,7 +11,7 @@ export function useHeartbeat(
     if (!userId) return
 
     const resolvedRegion = regionHint || (IS_DOMESTIC_VERSION ? 'cn' : 'global')
-    if (resolvedRegion !== 'cn') return
+    if (!resolvedRegion) return
 
     const sendHeartbeat = async () => {
       try {

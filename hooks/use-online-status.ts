@@ -1,14 +1,39 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { IS_DOMESTIC_VERSION } from '@/config'
+
+const ONLINE_WINDOW_MS = 60 * 1000
+const ONLINE_POLL_INTERVAL_MS = 15 * 1000
+const ONLINE_STATUS_CACHE_TTL_MS = 2 * 60 * 1000
+
+const onlineStatusCache = new Map<string, { isOnline: boolean; updatedAt: number }>()
+
+function getCachedOnlineStatus(userId?: string): boolean | undefined {
+  if (!userId) return undefined
+  const cached = onlineStatusCache.get(userId)
+  if (!cached) return undefined
+
+  if (Date.now() - cached.updatedAt > ONLINE_STATUS_CACHE_TTL_MS) {
+    onlineStatusCache.delete(userId)
+    return undefined
+  }
+
+  return cached.isOnline
+}
+
+function setCachedOnlineStatus(userId: string, isOnline: boolean) {
+  onlineStatusCache.set(userId, {
+    isOnline,
+    updatedAt: Date.now(),
+  })
+}
 
 export function useOnlineStatus(
   userId?: string,
   regionHint?: 'cn' | 'global'
 ) {
-  const [isOnline, setIsOnline] = useState(false)
+  const [isOnline, setIsOnline] = useState<boolean>(() => getCachedOnlineStatus(userId) ?? false)
 
   useEffect(() => {
     if (!userId) {
@@ -16,57 +41,49 @@ export function useOnlineStatus(
       return
     }
 
+    // Keep region resolution for compatibility with existing callers.
     const resolvedRegion = regionHint || (IS_DOMESTIC_VERSION ? 'cn' : 'global')
-    const isGlobal = resolvedRegion === 'global'
+    if (!resolvedRegion) return
 
-    if (isGlobal) {
-      let supabase: any
+    const cached = getCachedOnlineStatus(userId)
+    if (typeof cached === 'boolean') {
+      setIsOnline(cached)
+    }
+
+    let disposed = false
+
+    const checkOnlineStatus = async () => {
       try {
-        supabase = createClient()
-      } catch (error) {
-        console.error('Failed to create Supabase client:', error)
-        return
-      }
-
-      const channel = supabase
-        .channel('online-users')
-        .on('presence', { event: 'sync' }, () => {
-          const state = channel.presenceState()
-          const userPresent = Object.values(state).some((presences: any) =>
-            presences.some((presence: any) => presence.user_id === userId)
-          )
-          setIsOnline(userPresent)
+        const res = await fetch(`/api/users/${encodeURIComponent(userId)}`, {
+          cache: 'no-store',
         })
-        .subscribe()
 
-      return () => {
-        if (supabase) {
-          supabase.removeChannel(channel)
+        if (!res.ok) return
+
+        const { user } = await res.json()
+        const hasLastSeen = Boolean(user?.last_seen_at)
+        const nextIsOnline = hasLastSeen
+          ? Date.now() - new Date(user.last_seen_at).getTime() < ONLINE_WINDOW_MS
+          : false
+
+        if (!disposed) {
+          setIsOnline((prev) => (prev === nextIsOnline ? prev : nextIsOnline))
+          setCachedOnlineStatus(userId, nextIsOnline)
         }
       }
-    } else {
-      const checkOnlineStatus = async () => {
-        try {
-          const res = await fetch(`/api/users/${userId}`)
-          if (res.ok) {
-            const { user } = await res.json()
-            if (user?.last_seen_at) {
-              const lastSeen = new Date(user.last_seen_at).getTime()
-              const now = Date.now()
-              setIsOnline(now - lastSeen < 60000)
-            } else {
-              setIsOnline(false)
-            }
-          }
-        } catch (error) {
-          console.error('Failed to check online status:', error)
-        }
+      catch (error) {
+        console.error('Failed to check online status:', error)
       }
+    }
 
-      checkOnlineStatus()
-      const interval = setInterval(checkOnlineStatus, 15000)
+    void checkOnlineStatus()
+    const interval = setInterval(() => {
+      void checkOnlineStatus()
+    }, ONLINE_POLL_INTERVAL_MS)
 
-      return () => clearInterval(interval)
+    return () => {
+      disposed = true
+      clearInterval(interval)
     }
   }, [userId, regionHint])
 

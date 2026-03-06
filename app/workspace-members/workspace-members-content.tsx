@@ -126,7 +126,7 @@ function WorkspaceMembersPageContent() {
         />
         <div className="relative flex flex-1 min-w-0 overflow-hidden">
           {/* 左侧导航栏（仅桌面端显示） */}
-          {!isMobile && <AppNavigation totalUnreadCount={totalUnreadCount} />}
+          {!isMobile && <AppNavigation />}
           <div className="min-w-0 flex-1 overflow-hidden h-full">
             {currentUser && currentWorkspace && (
               <WorkspaceMembersPanel
@@ -140,7 +140,7 @@ function WorkspaceMembersPageContent() {
             )}
           </div>
         </div>
-        {isMobile && <AppNavigation totalUnreadCount={totalUnreadCount} mobile />}
+        {isMobile && <AppNavigation mobile />}
       </div>
     </>
   )

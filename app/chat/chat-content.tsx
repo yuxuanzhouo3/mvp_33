@@ -8090,6 +8090,51 @@ function ChatPageContent() {
     isGroupConversationForMeta && conversationMetaState === 'failed'
   const shouldGateGroupMeta = shouldShowGroupMetaSkeleton || shouldShowGroupMetaFailed
 
+  const handleWorkspaceChange = useCallback((nextWorkspace: Workspace) => {
+    if (!currentUser) return
+    if (nextWorkspace.id === currentWorkspace?.id) return
+
+    setCurrentWorkspace(nextWorkspace)
+    currentWorkspaceRef.current = nextWorkspace
+
+    // Reset chat detail state to avoid leaking previous workspace context.
+    setSelectedConversationId(undefined)
+    selectedConversationIdRef.current = undefined
+    setMessages([])
+    messagesConversationIdRef.current = undefined
+    setTempConversation(null)
+    setConversationMetaState('idle')
+    setGroupInfoOpen(false)
+    setAnnouncementDrawerOpen(false)
+    selectedConversationIdsRef.current.clear()
+    messagesByConversationRef.current.clear()
+    conversationDetailsRef.current.clear()
+    pendingConversationMapRef.current.clear()
+    loadingConversationsRef.current.clear()
+    loadingMessagesRef.current.clear()
+    pendingRequestsRef.current.clear()
+    pendingConversationRequestsRef.current.clear()
+    pendingConversationsListRef.current = null
+    isLoadingConversationsListRef.current = false
+    setConversations([])
+    conversationsRef.current = []
+    setIsLoadingConversations(true)
+    setIsRefreshingConversations(false)
+
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('conversation')
+    params.delete('userId')
+    params.delete('callType')
+    params.delete('autoCall')
+    const query = params.toString()
+    router.replace(query ? `/chat?${query}` : '/chat', { scroll: false })
+
+    loadConversations(currentUser.id, nextWorkspace.id, true).catch((error) => {
+      console.error('Failed to reload conversations after workspace switch:', error)
+      setIsLoadingConversations(false)
+    })
+  }, [currentUser, currentWorkspace?.id, loadConversations, router, searchParams])
+
   return (
     <>
       <SessionValidator />
@@ -8101,6 +8146,7 @@ function ChatPageContent() {
         totalUnreadCount={conversations
           .filter(conv => conv.type === 'direct')
           .reduce((sum, conv) => sum + (conv.unread_count || 0), 0)}
+        onWorkspaceChange={handleWorkspaceChange}
       />
 
 

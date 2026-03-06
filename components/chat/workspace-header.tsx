@@ -64,6 +64,10 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
   // Initialize with prop value
   const [realTimeUnreadCount, setRealTimeUnreadCount] = useState<number | undefined>(propTotalUnreadCount)
 
+  useEffect(() => {
+    setWorkspace(initialWorkspace)
+  }, [initialWorkspace])
+
   // Load workspaces
   useEffect(() => {
     async function loadWorkspaces() {
@@ -145,7 +149,9 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
             let cachedData = localStorage.getItem(cacheKey)
             let cachedConversations: any[] = []
             if (!cachedData) {
-              const response = await fetch('/api/conversations')
+              const response = await fetch(`/api/conversations?workspaceId=${workspace.id}`, {
+                cache: 'no-store',
+              })
               const data = await response.json()
               if (data.success && data.conversations) {
                 cachedConversations = data.conversations
@@ -166,8 +172,10 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
               }
             }
 
+            let foundConversation = false
             const updated = cachedConversations.map((conv: any) => {
               if (conv.id === newMessage.conversation_id) {
+                foundConversation = true
                 return {
                   ...conv,
                   unread_count: isCurrentlyViewing ? 0 : (conv.unread_count || 0) + 1,
@@ -178,8 +186,19 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
               return conv
             })
 
-            localStorage.setItem(cacheKey, JSON.stringify(updated))
-            const count = updated
+            let latestConversations = updated
+            if (!foundConversation) {
+              const latestRes = await fetch(`/api/conversations?workspaceId=${workspace.id}`, {
+                cache: 'no-store',
+              })
+              const latestData = await latestRes.json()
+              if (latestData?.success && Array.isArray(latestData.conversations)) {
+                latestConversations = latestData.conversations
+              }
+            }
+
+            localStorage.setItem(cacheKey, JSON.stringify(latestConversations))
+            const count = latestConversations
               .filter((conv: any) => conv.type === 'direct')
               .reduce((sum: number, conv: any) => sum + (conv.unread_count || 0), 0)
             setRealTimeUnreadCount(prev => prev !== count ? count : prev)
@@ -203,7 +222,9 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
             const cacheKey = `conversations_${currentUser.id}_${workspace.id}`
 
             // Fetch latest conversations from API
-            const response = await fetch('/api/conversations')
+            const response = await fetch(`/api/conversations?workspaceId=${workspace.id}`, {
+              cache: 'no-store',
+            })
             const data = await response.json()
 
             if (data.success && data.conversations) {
@@ -276,6 +297,11 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
     setWorkspace(ws)
     mockAuth.setCurrentWorkspace(ws)
     setShowWorkspaceMenu(false)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('workspaceChanged', {
+        detail: { workspace: ws },
+      }))
+    }
     // 通知父组件工作区已切换
     onWorkspaceChange?.(ws)
   }

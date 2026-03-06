@@ -430,6 +430,21 @@ export default function ChannelsPage() {
     console.log('Unpin message:', messageId)
   }, [])
 
+  const handleWorkspaceChange = useCallback((newWorkspace: Workspace) => {
+    if (!currentUser) return
+    if (newWorkspace.id === currentWorkspace?.id) return
+
+    setCurrentWorkspace(newWorkspace)
+    setSelectedChannelId(undefined)
+    selectedChannelIdRef.current = undefined
+    messagesConversationIdRef.current = undefined
+    setMessages([])
+    messagesByConversationRef.current.clear()
+    pendingMessageRequestsRef.current.clear()
+
+    void loadConversations(currentUser.id, newWorkspace.id, { showLoading: true })
+  }, [currentUser, currentWorkspace?.id, loadConversations])
+
   if (!currentUser || !currentWorkspace) {
     return (
       <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">
@@ -445,6 +460,7 @@ export default function ChannelsPage() {
       <WorkspaceHeader 
         workspace={currentWorkspace} 
         currentUser={currentUser}
+        onWorkspaceChange={handleWorkspaceChange}
       />
 
       <div className="relative flex flex-1 min-w-0 overflow-hidden mobile-overscroll-contain">

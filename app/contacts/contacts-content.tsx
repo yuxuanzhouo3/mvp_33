@@ -645,6 +645,10 @@ function ContactsPageContent() {
     void handleStartChat(userId, 'video')
   }, [handleStartChat])
 
+  const handleWorkspaceChange = useCallback((newWorkspace: Workspace) => {
+    setCurrentWorkspace(newWorkspace)
+  }, [])
+
   // Legacy code - keeping for reference but not used anymore
   const _legacyCreateConversation = async (userId: string) => {
     if (!currentUser || !currentWorkspace) return
@@ -992,10 +996,11 @@ function ContactsPageContent() {
           workspace={currentWorkspace}
           currentUser={currentUser}
           totalUnreadCount={totalUnreadCount}
+          onWorkspaceChange={handleWorkspaceChange}
         />
         <div className="relative flex flex-1 min-w-0 overflow-hidden mobile-overscroll-contain">
           {/* 左侧导航栏（仅桌面端显示） */}
-          {!isMobile && <AppNavigation totalUnreadCount={totalUnreadCount} />}
+          {!isMobile && <AppNavigation />}
           <div className="min-w-0 flex-1 overflow-hidden">
             <ContactsPanel
               users={contacts}
@@ -1026,7 +1031,7 @@ function ContactsPageContent() {
           </div>
         </div>
         {isMobile && (
-          <AppNavigation totalUnreadCount={totalUnreadCount} mobile />
+          <AppNavigation mobile />
         )}
       </div>
 
