@@ -8045,44 +8045,6 @@ function ChatPageContent() {
 
   const selectedConversation = conversations.find(c => c.id === selectedConversationId)
 
-  if (!currentUser || !currentWorkspace) {
-
-    return (
-      <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">
-        Loading...
-      </div>
-    )
-
-  }
-
-  
-
-  // Use temp conversation only if it matches current selected id, avoid stale cross-conversation display.
-  const displayConversation =
-    selectedConversation ||
-    (tempConversation?.id === selectedConversationId ? tempConversation : null)
-
-  // Check if this is a system assistant conversation (用户不能回复系统通知)
-  const isSystemAssistantConversation = (() => {
-    if (!displayConversation || displayConversation.type !== 'direct') return false
-    return displayConversation.members?.some(
-      (m: any) => isSystemAssistantUserId((m.id || m.user_id || m) as string)
-    ) || false
-  })()
-
-
-  // If conversation is selected but not in list, we still want to show the chat interface
-
-  // The conversation will be loaded shortly
-
-  const showChatInterface = selectedConversationId !== undefined && displayConversation !== null
-  const isGroupConversationForMeta = isGroupConversationType(displayConversation)
-  const shouldShowGroupMetaSkeleton =
-    isGroupConversationForMeta && conversationMetaState === 'loading'
-  const shouldShowGroupMetaFailed =
-    isGroupConversationForMeta && conversationMetaState === 'failed'
-  const shouldGateGroupMeta = shouldShowGroupMetaSkeleton || shouldShowGroupMetaFailed
-
   const handleWorkspaceChange = useCallback((nextWorkspace: Workspace) => {
     if (!currentUser) return
     if (nextWorkspace.id === currentWorkspace?.id) return
@@ -8127,6 +8089,44 @@ function ChatPageContent() {
       setIsLoadingConversations(false)
     })
   }, [currentUser, currentWorkspace?.id, loadConversations, router, searchParams])
+
+  if (!currentUser || !currentWorkspace) {
+
+    return (
+      <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">
+        Loading...
+      </div>
+    )
+
+  }
+
+  
+
+  // Use temp conversation only if it matches current selected id, avoid stale cross-conversation display.
+  const displayConversation =
+    selectedConversation ||
+    (tempConversation?.id === selectedConversationId ? tempConversation : null)
+
+  // Check if this is a system assistant conversation (用户不能回复系统通知)
+  const isSystemAssistantConversation = (() => {
+    if (!displayConversation || displayConversation.type !== 'direct') return false
+    return displayConversation.members?.some(
+      (m: any) => isSystemAssistantUserId((m.id || m.user_id || m) as string)
+    ) || false
+  })()
+
+
+  // If conversation is selected but not in list, we still want to show the chat interface
+
+  // The conversation will be loaded shortly
+
+  const showChatInterface = selectedConversationId !== undefined && displayConversation !== null
+  const isGroupConversationForMeta = isGroupConversationType(displayConversation)
+  const shouldShowGroupMetaSkeleton =
+    isGroupConversationForMeta && conversationMetaState === 'loading'
+  const shouldShowGroupMetaFailed =
+    isGroupConversationForMeta && conversationMetaState === 'failed'
+  const shouldGateGroupMeta = shouldShowGroupMetaSkeleton || shouldShowGroupMetaFailed
 
   return (
     <>

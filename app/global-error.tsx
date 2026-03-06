@@ -10,16 +10,20 @@ export default function GlobalError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
+  const message = error?.message || 'Unknown error'
+  const digest = error?.digest || 'n/a'
+  const stackLine = (error?.stack || '').split('\n').slice(0, 1).join('')
+
   useEffect(() => {
     postClientError({
       type: 'next_global_error',
-      message: error?.message || 'Unknown Next global error',
+      message,
       stack: error?.stack,
-      digest: error?.digest,
+      digest,
       userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
       href: typeof window !== 'undefined' ? window.location.href : undefined,
     })
-  }, [error])
+  }, [error, digest, message])
 
   return (
     <html>
@@ -29,6 +33,11 @@ export default function GlobalError({
           <p className="mb-4 text-sm text-muted-foreground">
             A client-side error occurred. Please try again.
           </p>
+          <div className="mb-4 rounded border bg-muted/40 p-3 text-left text-xs">
+            <p><strong>message:</strong> {message}</p>
+            <p><strong>digest:</strong> {digest}</p>
+            {stackLine ? <p><strong>stack:</strong> {stackLine}</p> : null}
+          </div>
           <button
             type="button"
             onClick={() => reset()}

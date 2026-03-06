@@ -187,17 +187,21 @@ export function AnnouncementsView({
           ) : (
             <div className="space-y-4 pr-4">
               {announcements.map((announcement) => (
+                (() => {
+                  const creatorName = announcement.creator?.full_name || 'User'
+                  const creatorInitial = creatorName.charAt(0).toUpperCase()
+                  return (
                 <div key={announcement.id} className="border rounded-lg p-4 space-y-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2">
                       <Avatar className="h-8 w-8">
-                        <AvatarImage src={announcement.creator.avatar_url || undefined} />
+                        <AvatarImage src={announcement.creator?.avatar_url || undefined} />
                         <AvatarFallback>
-                          {announcement.creator.full_name[0]}
+                          {creatorInitial}
                         </AvatarFallback>
                       </Avatar>
                       <div>
-                        <p className="text-sm font-medium">{announcement.creator.full_name}</p>
+                        <p className="text-sm font-medium">{creatorName}</p>
                         <p className="text-xs text-muted-foreground">
                           {formatDistanceToNow(new Date(announcement.created_at), {
                             addSuffix: true,
@@ -229,6 +233,8 @@ export function AnnouncementsView({
                   </div>
                   <p className="text-sm whitespace-pre-wrap">{announcement.content}</p>
                 </div>
+                  )
+                })()
               ))}
             </div>
           )}

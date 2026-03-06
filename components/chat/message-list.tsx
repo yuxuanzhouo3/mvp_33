@@ -1007,10 +1007,11 @@ export function MessageList({
                     >
                       <Avatar className={cn("h-8 w-8", isMobile && "h-9 w-9")} userId={displaySender?.id} showOnlineStatus={true}>
                         <AvatarImage src={displaySender?.avatar_url || undefined} />
-                        <AvatarFallback name={displaySender?.full_name}>
-                          {displaySender?.full_name
-                            ? displaySender.full_name.split(' ').map(n => n[0]).join('')
-                            : ''}
+                        <AvatarFallback name={getDisplayName(displaySender)}>
+                          {(getDisplayName(displaySender) || '?')
+                            .split(' ')
+                            .map((n: string) => n[0])
+                            .join('')}
                         </AvatarFallback>
                       </Avatar>
                     </button>
@@ -1085,6 +1086,11 @@ export function MessageList({
                         const repliedMessage = messages.find(m => m.id === message.reply_to)
 
                         if (!repliedMessage) return null
+                        const repliedSenderName =
+                          repliedMessage.sender?.full_name ||
+                          repliedMessage.sender?.username ||
+                          repliedMessage.sender?.email ||
+                          (language === 'zh' ? '未知用户' : 'Unknown user')
 
                         return (
 
@@ -1094,7 +1100,7 @@ export function MessageList({
 
                               <Reply className="h-3 w-3" />
 
-                              <span className="font-medium">{repliedMessage.sender.full_name}</span>
+                              <span className="font-medium">{repliedSenderName}</span>
 
                             </div>
 

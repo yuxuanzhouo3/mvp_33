@@ -17,10 +17,34 @@ type ErrorPayload = {
 
 function postClientError(payload: ErrorPayload) {
   try {
+    const authSnapshot = (() => {
+      if (typeof window === 'undefined') return {}
+      const readJson = (key: string) => {
+        try {
+          const raw = localStorage.getItem(key)
+          return raw ? JSON.parse(raw) : null
+        } catch {
+          return null
+        }
+      }
+      const user = readJson('chat_app_current_user')
+      const workspace = readJson('chat_app_current_workspace')
+      return {
+        userId: user?.id,
+        userName: user?.full_name || user?.username || null,
+        workspaceId: workspace?.id,
+        workspaceName: workspace?.name || null,
+      }
+    })()
+
     void fetch('/api/client-errors', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        ...payload,
+        reportedAt: new Date().toISOString(),
+        authSnapshot,
+      }),
       keepalive: true,
     })
   } catch {

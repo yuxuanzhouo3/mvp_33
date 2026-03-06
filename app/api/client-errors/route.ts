@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json().catch(() => ({}))
+    const rawText = await request.text().catch(() => '')
+    let body: any = {}
+    try {
+      body = rawText ? JSON.parse(rawText) : {}
+    } catch {
+      body = { parseError: true, rawTextPreview: rawText.slice(0, 1000) }
+    }
     const safeBody = typeof body === 'object' && body ? body : {}
     console.error('[CLIENT ERROR REPORT]', {
       timestamp: new Date().toISOString(),
@@ -15,7 +21,10 @@ export async function POST(request: NextRequest) {
       column: safeBody.column,
       href: safeBody.href,
       userAgent: safeBody.userAgent,
+      reportedAt: safeBody.reportedAt,
+      authSnapshot: safeBody.authSnapshot,
       extra: safeBody.extra,
+      rawTextPreview: rawText.slice(0, 1000),
     })
 
     return NextResponse.json({ success: true })
