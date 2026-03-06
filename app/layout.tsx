@@ -4,6 +4,7 @@ import { SettingsProvider } from '@/lib/settings-context';
 import { RegionProvider } from '@/lib/region-context';
 import { Toaster } from '@/components/ui/toaster';
 import { DEFAULT_LANGUAGE } from '@/config';
+import { ClientErrorLogger } from '@/components/debug/client-error-logger';
 
 export const metadata: Metadata = {
   title: "Enterprise Chat - Company Communication Platform",
@@ -21,6 +22,7 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         <RegionProvider>
           <SettingsProvider>
+            <ClientErrorLogger />
             {children}
             <Toaster />
           </SettingsProvider>

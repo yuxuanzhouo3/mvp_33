@@ -53,9 +53,10 @@ function ConversationItem({
   const containerRef = useRef<HTMLButtonElement>(null)
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
+  const safeMembers = Array.isArray(conversation.members) ? conversation.members : []
   const directTargetUser =
     conversation.type === 'direct'
-      ? (conversation.members.find(m => m.id !== currentUser.id) || currentUser)
+      ? (safeMembers.find(m => m?.id !== currentUser.id) || currentUser)
       : undefined
 
   const getLastMessagePreview = () => {
@@ -414,9 +415,14 @@ export function Sidebar({
     .filter(conv => {
       if (!searchQuery) return true
       const query = searchQuery.toLowerCase()
+      const members = Array.isArray(conv.members) ? conv.members : []
       return (
         conv.name?.toLowerCase().includes(query) ||
-        conv.members.some(m => m.full_name.toLowerCase().includes(query))
+        members.some((m) =>
+          (m?.full_name || m?.username || m?.email || '')
+            .toLowerCase()
+            .includes(query)
+        )
       )
     })
     // 最终兜底排序：保证任何情况下「置顶的一定在没置顶的上面」
@@ -461,9 +467,10 @@ export function Sidebar({
     })
 
   const getConversationDisplay = (conversation: ConversationWithDetails) => {
+    const members = Array.isArray(conversation.members) ? conversation.members : []
     if (conversation.type === 'direct') {
       // 自聊：members 里只有自己一个人，或者找不到“对方”，就用 currentUser 来展示
-      let otherUser = conversation.members.find(m => m.id !== currentUser.id)
+      let otherUser = members.find(m => m?.id !== currentUser.id)
       if (!otherUser) {
         otherUser = currentUser
       }
@@ -476,7 +483,7 @@ export function Sidebar({
     return {
       name: conversation.name || 'Unnamed',
       avatar: conversation.avatar_url || undefined,
-      subtitle: `${conversation.members.length} members`,
+      subtitle: `${members.length} members`,
     }
   }
 
