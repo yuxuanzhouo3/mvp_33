@@ -1245,14 +1245,20 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
       type: data.type,
       position: data.position,
       fileUrl: data.fileUrl,
+      file_url: data.fileUrl,
       fileUrlCn: data.fileUrlCn,
       fileUrlIntl: data.fileUrlIntl,
       linkUrl: data.linkUrl,
+      link_url: data.linkUrl,
       priority: data.priority ?? 0,
       status: data.status ?? "active",
       startDate: data.startDate,
+      start_date: data.startDate,
       endDate: data.endDate,
-      file_size: data.fileSize || data.file_size || 0,
+      end_date: data.endDate,
+      file_size: data.fileSize ?? data.file_size ?? 0,
+      impression_count: data.impression_count ?? 0,
+      click_count: data.click_count ?? 0,
       created_at: now,
       updated_at: now,
     };
@@ -1278,15 +1284,31 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
     if (data.title !== undefined) update.title = data.title;
     if (data.type !== undefined) update.type = data.type;
     if (data.position !== undefined) update.position = data.position;
-    if (data.fileUrl !== undefined) update.fileUrl = data.fileUrl;
+    if (data.fileUrl !== undefined) {
+      update.fileUrl = data.fileUrl;
+      update.file_url = data.fileUrl;
+    }
     if (data.fileUrlCn !== undefined) update.fileUrlCn = data.fileUrlCn;
     if (data.fileUrlIntl !== undefined) update.fileUrlIntl = data.fileUrlIntl;
-    if (data.linkUrl !== undefined) update.linkUrl = data.linkUrl;
+    if (data.linkUrl !== undefined) {
+      update.linkUrl = data.linkUrl;
+      update.link_url = data.linkUrl;
+    }
     if (data.priority !== undefined) update.priority = data.priority;
     if (data.status !== undefined) update.status = data.status;
-    if (data.startDate !== undefined) update.startDate = data.startDate;
-    if (data.endDate !== undefined) update.endDate = data.endDate;
-    if (data.fileSize !== undefined || data.file_size !== undefined) update.file_size = data.fileSize || data.file_size;
+    if (data.startDate !== undefined) {
+      update.startDate = data.startDate;
+      update.start_date = data.startDate;
+    }
+    if (data.endDate !== undefined) {
+      update.endDate = data.endDate;
+      update.end_date = data.endDate;
+    }
+    if (data.fileSize !== undefined || data.file_size !== undefined) {
+      update.file_size = data.fileSize ?? data.file_size;
+    }
+    if (data.impression_count !== undefined) update.impression_count = data.impression_count;
+    if (data.click_count !== undefined) update.click_count = data.click_count;
 
     try {
       await this.ensureInitialized();
@@ -1364,12 +1386,13 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
    * 辅助方法：从数据库格式转换为 Advertisement
    */
   private dbToAd(doc: any): Advertisement {
+    const createdAt = doc.created_at || doc.createdAt || new Date().toISOString();
     return {
       id: doc._id || doc.id,
       title: doc.title,
       type: doc.type || "image",
       position: doc.position || "bottom",
-      fileUrl: doc.fileUrl || doc.file_url, // 兼容驼峰和蛇形式
+      fileUrl: doc.fileUrl || doc.file_url || doc.image_url || "", // 兼容驼峰和蛇形式
       fileUrlCn: doc.fileUrlCn || doc.file_url_cn,
       fileUrlIntl: doc.fileUrlIntl || doc.file_url_intl,
       linkUrl: doc.linkUrl || doc.link_url || doc.redirect_url, // 兼容多种字段名
@@ -1377,9 +1400,11 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
       status: doc.status ?? "active",
       startDate: doc.startDate || doc.start_date,
       endDate: doc.endDate || doc.end_date,
-      created_at: doc.created_at,
-      updated_at: doc.updated_at,
-      file_size: doc.file_size || doc.fileSize, // 添加文件大小字段
+      created_at: createdAt,
+      updated_at: doc.updated_at || createdAt,
+      file_size: doc.file_size ?? doc.fileSize, // 添加文件大小字段
+      impression_count: doc.impression_count ?? 0,
+      click_count: doc.click_count ?? 0,
     };
   }
 

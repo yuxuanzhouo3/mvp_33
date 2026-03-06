@@ -377,7 +377,12 @@ export interface AdminDatabaseAdapter {
   /**
    * 列出广告
    */
-  listAds(filters: { limit?: number; offset?: number }): Promise<{ items: Advertisement[]; total: number }>;
+  listAds(filters?: AdFilters): Promise<Advertisement[]>;
+
+  /**
+   * 统计广告数量
+   */
+  countAds(filters?: AdFilters): Promise<number>;
 
   /**
    * 根据 ID 获取广告
@@ -392,7 +397,7 @@ export interface AdminDatabaseAdapter {
   /**
    * 更新广告
    */
-  updateAd(id: string, data: Partial<CreateAdData>): Promise<Advertisement>;
+  updateAd(id: string, data: UpdateAdData): Promise<Advertisement>;
 
   /**
    * 删除广告
@@ -714,6 +719,8 @@ export interface Advertisement {
   created_at: string;
   updated_at: string;
   file_size?: number; // 文件大小（字节）
+  impression_count?: number; // 曝光次数
+  click_count?: number; // 点击次数
 }
 
 /**
@@ -732,6 +739,9 @@ export interface CreateAdData {
   startDate?: string; // 保留字段，暂时不使用
   endDate?: string; // 保留字段，暂时不使用
   fileSize?: number; // 文件大小（字节）
+  file_size?: number; // 兼容旧字段
+  impression_count?: number;
+  click_count?: number;
 }
 
 /**
@@ -749,6 +759,10 @@ export interface UpdateAdData {
   status?: AdStatus;
   startDate?: string;
   endDate?: string;
+  fileSize?: number;
+  file_size?: number;
+  impression_count?: number;
+  click_count?: number;
 }
 
 /**

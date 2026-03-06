@@ -9,6 +9,7 @@ import { mockAuth } from '@/lib/mock-auth'
 import { Sidebar } from '@/components/chat/sidebar'
 
 import { WorkspaceHeader } from '@/components/chat/workspace-header'
+import { ChatTopBannerAd } from '@/components/chat/chat-top-banner-ad'
 
 import { ChatHeader } from '@/components/chat/chat-header'
 import { ConversationMetaSkeleton } from '@/components/chat/conversation-meta-skeleton'
@@ -8148,6 +8149,8 @@ function ChatPageContent() {
           .reduce((sum, conv) => sum + (conv.unread_count || 0), 0)}
         onWorkspaceChange={handleWorkspaceChange}
       />
+
+      <ChatTopBannerAd />
 
 
 

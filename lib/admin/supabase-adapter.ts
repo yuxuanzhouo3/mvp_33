@@ -1111,35 +1111,116 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
     };
   }
 
+  private dbToAd(doc: any): Advertisement {
+    const createdAt = doc.created_at || doc.createdAt || new Date().toISOString();
+    const fileUrl = doc.file_url || doc.image_url || doc.fileUrl || "";
+    const linkUrl = doc.link_url || doc.redirect_url || doc.linkUrl;
+
+    return {
+      id: doc.id,
+      title: doc.title,
+      type: doc.type || "image",
+      position: doc.position || "top",
+      fileUrl,
+      fileUrlCn: doc.file_url_cn || doc.fileUrlCn,
+      fileUrlIntl: doc.file_url_intl || doc.fileUrlIntl,
+      linkUrl,
+      priority: doc.priority ?? 0,
+      status: doc.status || "active",
+      startDate: doc.start_date || doc.startDate,
+      endDate: doc.end_date || doc.endDate,
+      created_at: createdAt,
+      updated_at: doc.updated_at || createdAt,
+      file_size: doc.file_size ?? doc.fileSize,
+      impression_count: doc.impression_count ?? 0,
+      click_count: doc.click_count ?? 0,
+    };
+  }
+
+  private applyAdFilters(query: any, filters?: AdFilters): any {
+    if (!filters) {
+      return query;
+    }
+
+    if (filters.status) {
+      query = query.eq("status", filters.status);
+    }
+
+    if (filters.type) {
+      query = query.eq("type", filters.type);
+    }
+
+    if (filters.position) {
+      query = query.eq("position", filters.position);
+    }
+
+    if (filters.search) {
+      query = query.ilike("title", `%${filters.search}%`);
+    }
+
+    if (filters.start_date) {
+      query = query.gte("created_at", filters.start_date);
+    }
+
+    if (filters.end_date) {
+      query = query.lte("created_at", filters.end_date);
+    }
+
+    return query;
+  }
+
   // ==================== 广告管理操作 ====================
 
   /**
-   * 获取广告列表，支持分页
+   * 获取广告列表
    */
-  async listAds(filters: { limit?: number; offset?: number }): Promise<{ items: Advertisement[]; total: number }> {
+  async listAds(filters?: AdFilters): Promise<Advertisement[]> {
     console.log('[SupabaseAdapter] 获取广告列表:', filters);
 
     let query = this.supabase
       .from('advertisements')
-      .select('*', { count: 'exact' })
+      .select('*');
+
+    query = this.applyAdFilters(query, filters)
+      .order('priority', { ascending: false })
       .order('created_at', { ascending: false });
 
-    if (filters.limit) {
+    if (typeof filters?.offset === "number") {
+      const limit = filters.limit || 20;
+      query = query.range(filters.offset, filters.offset + limit - 1);
+    } else if (filters?.limit) {
       query = query.limit(filters.limit);
     }
-    if (filters.offset) {
-      query = query.range(filters.offset, filters.offset + (filters.limit || 20) - 1);
-    }
 
-    const { data, error, count } = await query;
+    const { data, error } = await query;
 
     if (error) {
       console.error('[SupabaseAdapter] 获取广告列表失败:', error);
-      throw new Error(`获取广告列表失败: ${error.message}`);
+      throw handleDatabaseError(error);
     }
 
-    console.log('[SupabaseAdapter] 获取到', data?.length || 0, '个广告，总数:', count);
-    return { items: data || [], total: count || 0 };
+    const ads = (data || []).map((row: any) => this.dbToAd(row));
+    console.log('[SupabaseAdapter] 获取到', ads.length, '个广告');
+    return ads;
+  }
+
+  /**
+   * 统计广告数量
+   */
+  async countAds(filters?: AdFilters): Promise<number> {
+    let query = this.supabase
+      .from("advertisements")
+      .select("id", { count: "exact", head: true });
+
+    query = this.applyAdFilters(query, filters);
+
+    const { count, error } = await query;
+    if (error) {
+      console.error("[SupabaseAdapter] 统计广告数量失败:", error);
+      throw handleDatabaseError(error);
+    }
+
+    return count || 0;
   }
 
   /**
@@ -1154,10 +1235,10 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
 
     if (error) {
       if (error.code === 'PGRST116') return null;
-      throw new Error(`获取广告失败: ${error.message}`);
+      throw handleDatabaseError(error);
     }
 
-    return data;
+    return this.dbToAd(data);
   }
 
   /**
@@ -1165,6 +1246,8 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
    */
   async createAd(data: CreateAdData): Promise<Advertisement> {
     console.log('[SupabaseAdapter] 创建广告:', data.title);
+    const now = toISOString(new Date());
+    const fileSize = data.fileSize ?? data.file_size ?? null;
 
     const { data: result, error } = await this.supabase
       .from('advertisements')
@@ -1173,42 +1256,62 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
         type: data.type,
         position: data.position,
         file_url: data.fileUrl,
+        image_url: data.fileUrl,
         file_url_cn: data.fileUrlCn,
         file_url_intl: data.fileUrlIntl,
         link_url: data.linkUrl,
-        priority: data.priority,
-        status: data.status,
-        file_size: data.file_size,
+        redirect_url: data.linkUrl,
+        priority: data.priority ?? 0,
+        status: data.status ?? 'active',
+        file_size: fileSize,
         start_date: data.startDate,
         end_date: data.endDate,
+        updated_at: now,
+        impression_count: data.impression_count ?? 0,
+        click_count: data.click_count ?? 0,
       })
       .select()
       .single();
 
     if (error) {
       console.error('[SupabaseAdapter] 创建广告失败:', error);
-      throw new Error(`创建广告失败: ${error.message}`);
+      throw handleDatabaseError(error);
     }
 
     console.log('[SupabaseAdapter] 广告创建成功:', result.id);
-    return result;
+    return this.dbToAd(result);
   }
 
   /**
    * 更新广告
    */
-  async updateAd(id: string, data: Partial<CreateAdData>): Promise<Advertisement> {
+  async updateAd(id: string, data: UpdateAdData): Promise<Advertisement> {
     console.log('[SupabaseAdapter] 更新广告:', id);
 
-    const updateData: any = {};
+    const updateData: Record<string, any> = {
+      updated_at: toISOString(new Date()),
+    };
+
     if (data.title !== undefined) updateData.title = data.title;
     if (data.type !== undefined) updateData.type = data.type;
     if (data.position !== undefined) updateData.position = data.position;
-    if (data.linkUrl !== undefined) updateData.link_url = data.linkUrl;
+    if (data.fileUrl !== undefined) {
+      updateData.file_url = data.fileUrl;
+      updateData.image_url = data.fileUrl;
+    }
+    if (data.linkUrl !== undefined) {
+      updateData.link_url = data.linkUrl;
+      updateData.redirect_url = data.linkUrl;
+    }
     if (data.priority !== undefined) updateData.priority = data.priority;
     if (data.status !== undefined) updateData.status = data.status;
     if (data.startDate !== undefined) updateData.start_date = data.startDate;
     if (data.endDate !== undefined) updateData.end_date = data.endDate;
+    if (data.fileSize !== undefined || data.file_size !== undefined) {
+      updateData.file_size = data.fileSize ?? data.file_size;
+    }
+    if (data.impression_count !== undefined) updateData.impression_count = data.impression_count;
+    if (data.click_count !== undefined) updateData.click_count = data.click_count;
 
     const { data: result, error } = await this.supabase
       .from('advertisements')
@@ -1219,11 +1322,11 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
 
     if (error) {
       console.error('[SupabaseAdapter] 更新广告失败:', error);
-      throw new Error(`更新广告失败: ${error.message}`);
+      throw handleDatabaseError(error);
     }
 
     console.log('[SupabaseAdapter] 广告更新成功');
-    return result;
+    return this.dbToAd(result);
   }
 
   /**
@@ -1239,7 +1342,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
 
     if (error) {
       console.error('[SupabaseAdapter] 删除广告失败:', error);
-      throw new Error(`删除广告失败: ${error.message}`);
+      throw handleDatabaseError(error);
     }
 
     console.log('[SupabaseAdapter] 广告删除成功');

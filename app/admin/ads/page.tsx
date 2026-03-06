@@ -112,7 +112,7 @@ export default function AdsManagementPage() {
   const [formData, setFormData] = useState({
     title: "",
     type: "image" as "image" | "video",
-    position: "bottom" as const,
+    position: "top" as const,
     fileUrl: "",
     fileUrlCn: "",
     fileUrlIntl: "",
@@ -294,7 +294,7 @@ export default function AdsManagementPage() {
     setFormData({
       title: "",
       type: "image",
-      position: "bottom",
+      position: "top",
       fileUrl: "",
       fileUrlCn: "",
       fileUrlIntl: "",
@@ -303,6 +303,8 @@ export default function AdsManagementPage() {
       status: "active",
       startDate: "",
       endDate: "",
+      fileSize: 0,
+      file: null,
     });
   }
 
@@ -324,6 +326,8 @@ export default function AdsManagementPage() {
       status: ad.status,
       startDate: ad.startDate || "",
       endDate: ad.endDate || "",
+      fileSize: ad.file_size || 0,
+      file: null,
     });
     setEditingAd(ad);
   }
@@ -395,6 +399,13 @@ export default function AdsManagementPage() {
       month: "2-digit",
       day: "2-digit",
     });
+  }
+
+  function formatCtr(ad: Advertisement): string {
+    const impressions = ad.impression_count || 0;
+    const clicks = ad.click_count || 0;
+    if (impressions <= 0) return "-";
+    return `${((clicks / impressions) * 100).toFixed(1)}%`;
   }
 
   // ==================== 分页 ====================
@@ -583,6 +594,9 @@ export default function AdsManagementPage() {
                       <TableHead className="w-[100px]">大小</TableHead>
                       <TableHead className="w-[140px]">上传时间</TableHead>
                       <TableHead className="w-[80px]">优先级</TableHead>
+                      <TableHead className="w-[90px]">曝光</TableHead>
+                      <TableHead className="w-[90px]">点击</TableHead>
+                      <TableHead className="w-[90px]">CTR</TableHead>
                       <TableHead className="w-[80px]">状态</TableHead>
                       <TableHead className="text-right">操作</TableHead>
                     </TableRow>
@@ -630,6 +644,9 @@ export default function AdsManagementPage() {
                         <TableCell>
                           <Badge variant="secondary">{ad.priority}</Badge>
                         </TableCell>
+                        <TableCell className="text-sm">{ad.impression_count || 0}</TableCell>
+                        <TableCell className="text-sm">{ad.click_count || 0}</TableCell>
+                        <TableCell className="text-sm">{formatCtr(ad)}</TableCell>
                         <TableCell>{getStatusBadge(ad.status)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">

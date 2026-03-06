@@ -27,20 +27,27 @@ CREATE TABLE IF NOT EXISTS advertisements (
   type TEXT NOT NULL CHECK (type IN ('image', 'video')),
   position TEXT NOT NULL,
   file_url TEXT NOT NULL,
+  image_url TEXT,
   file_url_cn TEXT,
   file_url_intl TEXT,
   link_url TEXT,
+  redirect_url TEXT,
   priority INTEGER DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
   file_size INTEGER,
   start_date TIMESTAMPTZ,
   end_date TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  impression_count BIGINT NOT NULL DEFAULT 0,
+  click_count BIGINT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_advertisements_status ON advertisements(status);
 CREATE INDEX IF NOT EXISTS idx_advertisements_position ON advertisements(position);
 CREATE INDEX IF NOT EXISTS idx_advertisements_priority ON advertisements(priority DESC);
+CREATE INDEX IF NOT EXISTS idx_advertisements_status_position_priority ON advertisements(status, position, priority DESC);
+CREATE INDEX IF NOT EXISTS idx_advertisements_active_window ON advertisements(start_date, end_date);
 
 -- ==================== 发布版本表 ====================
 CREATE TABLE IF NOT EXISTS releases (
