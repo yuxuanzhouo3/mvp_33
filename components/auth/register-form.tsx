@@ -251,8 +251,14 @@ export function RegisterForm({ onSuccess, onBack }: RegisterFormProps) {
     setIsLoading(true)
     setError('')
     try {
+      const source =
+        typeof window !== 'undefined' && (window as any).Android
+          ? 'android_app'
+          : typeof window !== 'undefined' && (window as any).webkit?.messageHandlers?.deviceInfo
+            ? 'ios_app'
+            : 'web'
       // Use same logic as login page - OAuth handles both login and registration
-      window.location.href = `/api/auth/oauth/${provider}?action=login`
+      window.location.href = `/api/auth/oauth/${provider}?action=login&source=${encodeURIComponent(source)}`
       // Note: setIsLoading(false) won't execute due to redirect, which is fine
     } catch (err) {
       setError(`${provider === 'wechat' ? t('wechat') : t('google')} ${t('register')} failed`)

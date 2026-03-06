@@ -248,9 +248,15 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
     setIsLoading(true)
     setError('')
     try {
+      const source =
+        typeof window !== 'undefined' && (window as any).Android
+          ? 'android_app'
+          : typeof window !== 'undefined' && (window as any).webkit?.messageHandlers?.deviceInfo
+            ? 'ios_app'
+            : 'web'
       // For better UX, we can open in same window (faster) or new window
       // Using same window redirect for faster response
-      window.location.href = `/api/auth/oauth/${provider}?action=login`
+      window.location.href = `/api/auth/oauth/${provider}?action=login&source=${encodeURIComponent(source)}`
       // Note: setIsLoading(false) won't execute due to redirect, which is fine
     } catch (err) {
       setError(`${provider === 'wechat' ? t('wechat') : t('google')} ${t('signIn')} failed`)

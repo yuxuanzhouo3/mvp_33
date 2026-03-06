@@ -1,14 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+function resolveAppOrigin(request: NextRequest): string {
+  const envUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    process.env.NEXT_PUBLIC_SITE_URL?.trim()
+
+  if (envUrl) {
+    try {
+      return new URL(envUrl).origin
+    } catch {
+      // Fallback to request origin if env value is malformed.
+    }
+  }
+
+  return request.nextUrl.origin
+}
+
 /**
  * Handle Google OAuth callback from Supabase
  * GET /api/auth/oauth/google/callback
  */
 export async function GET(request: NextRequest) {
   try {
-    // Use request origin instead of hardcoded localhost
-    const origin = request.nextUrl.origin
+    const origin = resolveAppOrigin(request)
     
     // Check if Supabase is configured
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
@@ -19,6 +34,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const code = searchParams.get('code')
     const action = searchParams.get('action') || 'login'
+    const source = searchParams.get('source') || 'web'
     const error = searchParams.get('error')
 
     if (error) {
@@ -127,11 +143,12 @@ export async function GET(request: NextRequest) {
     redirectUrl.searchParams.set('provider', 'google')
     redirectUrl.searchParams.set('token', token)
     redirectUrl.searchParams.set('user', JSON.stringify(userData))
+    redirectUrl.searchParams.set('source', source)
 
     return NextResponse.redirect(redirectUrl.toString())
   } catch (error) {
     console.error('Google OAuth callback error:', error)
-    const origin = request.nextUrl.origin
+    const origin = resolveAppOrigin(request)
     return NextResponse.redirect(`${origin}/login?error=oauth_callback_failed`)
   }
 }
