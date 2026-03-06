@@ -27,6 +27,7 @@ import { getTranslation } from '@/lib/i18n'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { JoinWorkspaceDialog } from '@/components/workspace/join-workspace-dialog'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { isAndroidWebView, signOutGoogle } from '@/lib/google-signin-bridge'
 
 interface WorkspaceHeaderProps {
   workspace: Workspace
@@ -283,6 +284,15 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
     : propTotalUnreadCount
 
   const handleLogout = async () => {
+    if (isAndroidWebView()) {
+      try {
+        // Force native Google session to clear so next login shows account chooser.
+        await signOutGoogle()
+      } catch (error) {
+        console.warn('[WORKSPACE HEADER] Native Google signOut failed:', error)
+      }
+    }
+
     try {
       const response = await fetch('/api/auth/logout', { method: 'POST' })
       await response.json()
@@ -463,6 +473,9 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
     { label: t('contacts'), icon: UsersIcon, path: '/contacts' },
   ]
 
+  const displayName = currentUser.full_name || currentUser.username || currentUser.email || 'User'
+  const displayTitle = currentUser.title || ''
+
   return (
     <>
       <div className="border-b bg-background">
@@ -568,16 +581,16 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
                 <Button variant="ghost" size="icon" className={cn("rounded-full", isMobile ? "h-8 w-8" : "")}>
                   <Avatar className={cn(isMobile ? "h-7 w-7" : "h-8 w-8")}>
                     <AvatarImage src={currentUser.avatar_url || undefined} />
-                    <AvatarFallback name={currentUser.full_name}>
-                      {currentUser.full_name.split(' ').map(n => n[0]).join('')}
+                    <AvatarFallback name={displayName}>
+                      {displayName.split(' ').map(n => n[0]).join('')}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <div className="px-2 py-2">
-                  <div className="font-semibold">{currentUser.full_name}</div>
-                  <div className="text-sm text-muted-foreground">{currentUser.title}</div>
+                  <div className="font-semibold">{displayName}</div>
+                  <div className="text-sm text-muted-foreground">{displayTitle}</div>
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => router.push('/settings/profile')}>

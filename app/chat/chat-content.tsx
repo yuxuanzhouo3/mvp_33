@@ -3172,50 +3172,41 @@ function ChatPageContent() {
 
           if (cacheAge < CACHE_DURATION) {
 
-            const cachedConversations = JSON.parse(cachedData)
-
-            // Get deleted conversations list
-
             const deletedKey = `deleted_conversations_${user.id}_${workspace.id}`
 
-            const deletedConversations = typeof window !== 'undefined'
+            try {
+              const cachedConversations = JSON.parse(cachedData)
+              const parsedDeleted = JSON.parse(localStorage.getItem(deletedKey) || '[]')
+              const deletedConversations = Array.isArray(parsedDeleted) ? parsedDeleted : []
 
-              ? JSON.parse(localStorage.getItem(deletedKey) || '[]')
+              const directAndGroups = Array.isArray(cachedConversations)
+                ? cachedConversations.filter(
+                    (c: ConversationWithDetails) =>
+                      c &&
+                      (c.type === 'direct' || c.type === 'group') &&
+                      !deletedConversations.includes(c.id)
+                  )
+                : []
 
-              : []
+              console.log('📦 Loading conversations from cache:', directAndGroups.length)
 
-            
-
-            let directAndGroups = cachedConversations.filter(
-
-              (c: ConversationWithDetails) => 
-
-                c && 
-
-                (c.type === 'direct' || c.type === 'group') &&
-
-                !deletedConversations.includes(c.id)
-
-            )
-
-            console.log('📦 Loading conversations from cache:', directAndGroups.length)
-
-            
-
-            // 这里之前会先用缓存渲染一遍再用 API 覆盖，导致列表“先一版顺序、再一版顺序”闪动
-            // 现在为了稳定顺序，直接只用 API 的结果，缓存只作为后备数据，不再用来即时渲染
-            if (directAndGroups.length === 0) {
-
-              // Cache exists but is empty - clear it and reload from API
-
-              console.log('⚠️ Cache is empty, clearing and reloading from API...')
-
+              // 这里之前会先用缓存渲染一遍再用 API 覆盖，导致列表“先一版顺序、再一版顺序”闪动
+              // 现在为了稳定顺序，直接只用 API 的结果，缓存只作为后备数据，不再用来即时渲染
+              if (directAndGroups.length === 0) {
+                // Cache exists but is empty - clear it and reload from API
+                console.log('⚠️ Cache is empty, clearing and reloading from API...')
+                localStorage.removeItem(cacheKey)
+                localStorage.removeItem(cacheTimestampKey)
+                // Continue to load from API below
+              }
+            } catch (cacheParseError) {
+              console.warn('⚠️ Invalid conversations cache detected, clearing cache keys', {
+                cacheKey,
+                cacheTimestampKey,
+                error: cacheParseError,
+              })
               localStorage.removeItem(cacheKey)
-
               localStorage.removeItem(cacheTimestampKey)
-
-              // Continue to load from API below
-
             }
 
           } else {
@@ -3367,7 +3358,8 @@ function ChatPageContent() {
 
               mockAuth.setCurrentUser(data.user)
 
-              setCurrentUser(data.user)
+              const normalizedUser = mockAuth.getCurrentUser()
+              setCurrentUser(normalizedUser || data.user)
 
             }
 

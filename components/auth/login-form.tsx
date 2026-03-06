@@ -11,7 +11,7 @@ import { Loader2, Mail, CheckCircle } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
 import { IS_DOMESTIC_VERSION } from '@/config'
 import { collectClientDeviceInfo } from '@/lib/utils/device-client'
-import { isAndroidWebView, signInWithGoogle } from '@/lib/google-signin-bridge'
+import { isAndroidWebView, signInWithGoogle, signOutGoogle } from '@/lib/google-signin-bridge'
 
 interface LoginFormProps {
   onSuccess: () => void
@@ -171,7 +171,7 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
         console.log('[LOGIN FORM] Login successful, user status:', data.user.status)
         // Store user and token
         if (typeof window !== 'undefined') {
-          localStorage.setItem('chat_app_current_user', JSON.stringify(data.user))
+          mockAuth.setCurrentUser(data.user)
           localStorage.setItem('chat_app_token', data.token)
         }
         // Call onSuccess immediately - no need to reload page
@@ -229,7 +229,7 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
         console.log('[QUICK LOGIN] Login successful')
         // Store user and token
         if (typeof window !== 'undefined') {
-          localStorage.setItem('chat_app_current_user', JSON.stringify(data.user))
+          mockAuth.setCurrentUser(data.user)
           localStorage.setItem('chat_app_token', data.token)
         }
         onSuccess()
@@ -255,6 +255,11 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
           throw new Error('Missing NEXT_PUBLIC_GOOGLE_CLIENT_ID')
         }
 
+        // Clear native Google session first to force account chooser every time.
+        await signOutGoogle().catch((error) => {
+          console.warn('[LOGIN FORM] Native Google signOut preflight failed:', error)
+        })
+
         const nativeResult = await signInWithGoogle(clientId)
         if (!nativeResult.idToken) {
           throw new Error('Missing Google ID token from native sign-in')
@@ -272,7 +277,7 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
         }
 
         if (typeof window !== 'undefined') {
-          localStorage.setItem('chat_app_current_user', JSON.stringify(nativeData.user))
+          mockAuth.setCurrentUser(nativeData.user)
           localStorage.setItem('chat_app_token', nativeData.token)
         }
 

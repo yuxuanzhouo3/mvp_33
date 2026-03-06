@@ -114,7 +114,7 @@ export default function LoginPageClient({ initialStep = 'login' }: LoginPageClie
         console.log('✅ OAuth callback received, storing user data...')
         // Store user and token
         if (typeof window !== 'undefined') {
-          localStorage.setItem('chat_app_current_user', JSON.stringify(user))
+          mockAuth.setCurrentUser(user)
           localStorage.setItem('chat_app_token', token)
         }
 

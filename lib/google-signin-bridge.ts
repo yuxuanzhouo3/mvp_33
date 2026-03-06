@@ -50,3 +50,35 @@ export function signInWithGoogle(clientId: string): Promise<GoogleSignInResult> 
   })
 }
 
+export function signOutGoogle(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (!isAndroidWebView()) {
+      reject(new Error('Not running in Android WebView'))
+      return
+    }
+
+    const callbackName = `googleSignOutCallback_${Date.now()}`
+    const timeoutId = window.setTimeout(() => {
+      delete (window as any)[callbackName]
+      reject(new Error('Google signOut timeout'))
+    }, 2000)
+
+    ;(window as any)[callbackName] = (result: GoogleSignInResult) => {
+      window.clearTimeout(timeoutId)
+      delete (window as any)[callbackName]
+      if (result?.success) {
+        resolve()
+      } else {
+        reject(new Error(result?.error || 'Sign out failed'))
+      }
+    }
+
+    try {
+      window.GoogleSignIn!.signOut(callbackName)
+    } catch (error) {
+      window.clearTimeout(timeoutId)
+      delete (window as any)[callbackName]
+      reject(error)
+    }
+  })
+}

@@ -3,6 +3,28 @@ import { createClient } from '@/lib/supabase/server'
 import { getDatabaseClientForUser } from '@/lib/database-router'
 import { updateUser as updateCloudBaseUser } from '@/lib/database/cloudbase/users'
 
+function normalizeUserProfile(user: any) {
+  if (!user || typeof user !== 'object') return user
+  const email = typeof user.email === 'string' ? user.email : ''
+  const fallbackUsername = email ? email.split('@')[0] : String(user.id || '').slice(0, 8)
+  const username =
+    typeof user.username === 'string' && user.username.trim()
+      ? user.username
+      : fallbackUsername || 'user'
+  const fullName =
+    typeof user.full_name === 'string' && user.full_name.trim()
+      ? user.full_name
+      : username || 'User'
+
+  return {
+    ...user,
+    email,
+    username,
+    full_name: fullName,
+    region: user.region === 'cn' ? 'cn' : 'global',
+  }
+}
+
 /**
  * Update user profile
  * PATCH /api/users/profile
@@ -143,7 +165,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      user: updatedUser,
+      user: normalizeUserProfile(updatedUser),
     })
   } catch (error: any) {
     const errorMessage = error.message || error.toString() || 'Unknown error'
@@ -234,7 +256,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      user: user,
+      user: normalizeUserProfile(user),
     })
   } catch (error: any) {
     console.error('Get profile error:', error)
