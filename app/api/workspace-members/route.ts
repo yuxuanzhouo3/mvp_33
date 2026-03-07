@@ -3,6 +3,22 @@ import { getDatabaseClient } from '@/lib/database-router'
 import { updateWorkspaceMemberRole as updateWorkspaceMemberRoleSupabase, getWorkspaceMemberRole as getWorkspaceMemberRoleSupabase } from '@/lib/database/supabase/workspace-members'
 import { updateWorkspaceMemberRole as updateWorkspaceMemberRoleCloudbase, getWorkspaceMemberRole as getWorkspaceMemberRoleCloudbase } from '@/lib/database/cloudbase/workspace-members'
 
+async function getCloudBaseUserId(request: NextRequest): Promise<string | null> {
+  const headerUserId = request.headers.get('x-user-id')
+  if (headerUserId) {
+    return headerUserId
+  }
+
+  try {
+    const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+    const user = await verifyCloudBaseSession(request)
+    return user?.id || null
+  } catch (error) {
+    console.warn('[API /api/workspace-members] Failed to verify CloudBase session:', error)
+    return null
+  }
+}
+
 /**
  * Get workspace members for current user
  * GET /api/workspace-members?workspaceId=xxx
@@ -23,8 +39,7 @@ export async function GET(request: NextRequest) {
 
     // CN version: use CloudBase
     if (dbClient.type === 'cloudbase' && userRegion === 'cn') {
-      // Get current user from headers (CloudBase auth)
-      const userId = request.headers.get('x-user-id')
+      const userId = await getCloudBaseUserId(request)
       if (!userId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
@@ -32,6 +47,7 @@ export async function GET(request: NextRequest) {
       // Import CloudBase services
       const { getUserService, getChatService } = await import('@/lib/services')
       const chatService = getChatService()
+      const userService = getUserService()
 
       // Get user's workspaces
       const workspaces = await chatService.getUserWorkspaces(userId)
@@ -51,6 +67,36 @@ export async function GET(request: NextRequest) {
 
       // Filter out current user
       const otherMembers = members.filter((m: any) => m.user_id !== userId)
+      const memberUserIds = Array.from(
+        new Set(otherMembers.map((m: any) => m?.user_id).filter(Boolean))
+      ) as string[]
+
+      const users = memberUserIds.length > 0
+        ? await userService.getUsersByIds(memberUserIds)
+        : []
+      const userMap = new Map(
+        users
+          .filter((user: any) => !!user?.id)
+          .map((user: any) => [user.id, user])
+      )
+
+      const transformedMembers = otherMembers.map((member: any) => {
+        const user = userMap.get(member.user_id)
+        return {
+          id: member.user_id,
+          user_id: member.user_id,
+          workspace_id: member.workspace_id,
+          role: member.role || 'member',
+          joined_at: member.joined_at || null,
+          email: user?.email || '',
+          full_name: user?.full_name || user?.username || member.user_id,
+          username: user?.username || user?.email?.split('@')[0] || member.user_id,
+          avatar_url: user?.avatar_url || null,
+          title: user?.title || '',
+          status: user?.status || 'offline',
+          status_message: user?.status_message || '',
+        }
+      })
 
       // 获取当前用户角色
       const currentUserRole = await getWorkspaceMemberRoleCloudbase(targetWorkspaceId, userId)
@@ -58,7 +104,7 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        members: otherMembers,
+        members: transformedMembers,
         workspaceId: targetWorkspaceId,
         currentUserRole
       })
@@ -122,13 +168,15 @@ export async function GET(request: NextRequest) {
     })).filter(Boolean)
 
     // 获取当前用户角色
-    const fallbackWorkspaceId = workspaceId || (members as any[])?.[0]?.workspace_id
-    const { data: currentUserMembership } = await supabase
-      .from('workspace_members')
-      .select('role')
-      .eq('workspace_id', fallbackWorkspaceId)
-      .eq('user_id', user.id)
-      .single()
+    const fallbackWorkspaceId = workspaceId || (members as any[])?.[0]?.workspaces?.id || null
+    const { data: currentUserMembership } = fallbackWorkspaceId
+      ? await supabase
+        .from('workspace_members')
+        .select('role')
+        .eq('workspace_id', fallbackWorkspaceId)
+        .eq('user_id', user.id)
+        .single()
+      : { data: null as any }
 
     const currentUserRole = currentUserMembership?.role || null
     console.log('[API /api/workspace-members] 当前用户角色 (Supabase):', { userId: user.id, currentUserRole })
@@ -136,7 +184,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       members: transformedMembers,
-      workspaceId: workspaceId || (members?.[0]?.workspaces?.[0]?.id),
+      workspaceId: fallbackWorkspaceId,
       currentUserRole
     })
   } catch (error: any) {
@@ -167,7 +215,7 @@ export async function DELETE(request: NextRequest) {
 
     // CN version: use CloudBase
     if (dbClient.type === 'cloudbase') {
-      const userId = request.headers.get('x-user-id')
+      const userId = await getCloudBaseUserId(request)
       if (!userId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
@@ -301,7 +349,7 @@ export async function PUT(request: NextRequest) {
 
     // CN version: use CloudBase
     if (dbClient.type === 'cloudbase') {
-      const userId = request.headers.get('x-user-id')
+      const userId = await getCloudBaseUserId(request)
       if (!userId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
