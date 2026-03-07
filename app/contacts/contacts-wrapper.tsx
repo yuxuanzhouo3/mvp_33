@@ -4,7 +4,7 @@ import ContactsPageContent from './contacts-content'
 export default function ContactsWrapper() {
   return (
     <Suspense fallback={
-      <div className="flex h-screen flex-col mobile-overscroll-contain">
+      <div className="flex h-screen flex-col mobile-app-shell mobile-overscroll-contain">
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">Loading contacts...</div>
         <div className="border-t bg-background/95 px-2 pt-2 pb-[max(0.4rem,env(safe-area-inset-bottom))]">
           <div className="grid grid-cols-5 gap-1">

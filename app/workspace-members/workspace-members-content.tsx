@@ -109,7 +109,7 @@ function WorkspaceMembersPageContent() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex h-screen mobile-app-shell items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
@@ -117,7 +117,7 @@ function WorkspaceMembersPageContent() {
 
   return (
     <>
-      <div className="flex h-screen flex-col">
+      <div className="flex h-screen flex-col mobile-app-shell mobile-overscroll-contain">
         <WorkspaceHeader
           workspace={currentWorkspace!}
           currentUser={currentUser!}

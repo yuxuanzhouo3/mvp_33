@@ -485,7 +485,7 @@ function ContactsPageContent() {
 
   if (isAuthLoading || !currentUser || !currentWorkspace) {
     return (
-      <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">
+      <div className="flex h-screen mobile-app-shell items-center justify-center text-sm text-muted-foreground">
         Loading...
       </div>
     )
@@ -991,7 +991,7 @@ function ContactsPageContent() {
 
   return (
     <>
-      <div className="flex h-screen flex-col mobile-overscroll-contain">
+      <div className="flex h-screen flex-col mobile-app-shell mobile-overscroll-contain">
         <WorkspaceHeader
           workspace={currentWorkspace}
           currentUser={currentUser}

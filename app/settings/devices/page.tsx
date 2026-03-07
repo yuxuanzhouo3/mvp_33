@@ -218,7 +218,7 @@ export default function DevicesPage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen flex-col">
+      <div className="flex h-screen flex-col mobile-app-shell mobile-overscroll-contain">
         <div className="flex flex-1 items-center justify-center">
           <div className="text-gray-500">加载中...</div>
         </div>
@@ -228,8 +228,8 @@ export default function DevicesPage() {
   }
 
   return (
-    <div className="flex h-screen min-w-0 flex-col">
-      <div className="flex-1 overflow-y-auto">
+    <div className="flex h-screen min-w-0 flex-col mobile-app-shell mobile-overscroll-contain">
+      <div className="flex-1 overflow-y-auto mobile-scroll-y mobile-overscroll-contain">
         <div className="space-y-6 px-4 py-6">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">设备管理</h1>
