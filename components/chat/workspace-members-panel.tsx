@@ -722,7 +722,7 @@ export function WorkspaceMembersPanel({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2">
+        <div className={cn("flex-1 overflow-y-auto px-2", isMobile && "pb-[max(0.75rem,env(safe-area-inset-bottom))]")}>
           {activeTab === 'members' ? (
             filteredMembers.length === 0 ? (
               <div className="p-4 text-center text-gray-400 text-sm">
@@ -818,11 +818,15 @@ export function WorkspaceMembersPanel({
         data-testid="workspace-members-detail-panel"
         className={cn(
           "min-w-0 flex-1 bg-white flex-col",
-          isMobile ? (mobileView === 'list' ? "hidden" : "flex overflow-y-auto") : "flex items-center justify-center p-12"
+          isMobile
+            ? (mobileView === 'list'
+              ? "hidden"
+              : "flex overflow-y-auto pb-[max(0.75rem,env(safe-area-inset-bottom))]")
+            : "flex items-center justify-center p-12"
         )}
       >
         {selectedItem ? (
-          <div className={cn("w-full animate-in fade-in slide-in-from-bottom-4 duration-300", isMobile ? "p-4" : "max-w-xl")}>
+          <div className={cn("w-full animate-in fade-in slide-in-from-bottom-4 duration-300", isMobile ? "p-4 pb-5" : "max-w-xl")}>
             {isMobile && (
               <div className="mb-3 flex items-center gap-1">
                 <button

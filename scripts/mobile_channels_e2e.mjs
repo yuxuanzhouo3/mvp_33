@@ -148,8 +148,10 @@ async function main() {
     await page.screenshot({ path: path.join(outputDir, `${runTag}-02-detail.png`), fullPage: true })
 
     const backToList = await clickIfExists(page, [
-      'button[aria-label="Open conversations"]',
-      'button[aria-label="Open channels"]',
+      'button[aria-label="返回频道列表"]',
+      'button[aria-label="Back to channels"]',
+      'button[aria-label="返回列表"]',
+      'button[aria-label="Back"]',
       'button:has-text("返回频道列表")',
       'button:has-text("Back to channels")',
     ])

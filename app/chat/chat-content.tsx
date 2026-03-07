@@ -96,6 +96,7 @@ const SYSTEM_ASSISTANT_IDS = new Set([
   'system-assistant',
   '00000000-0000-0000-0000-000000000001',
 ])
+const CONVERSATIONS_UPDATED_EVENT_SOURCE = 'chat-content'
 
 type ConversationMetaState = 'idle' | 'loading' | 'ready' | 'failed'
 
@@ -235,6 +236,8 @@ function ChatPageContent() {
   const hasForcedInitialReloadRef = useRef<boolean>(false)
 
   const lastLoadSignatureRef = useRef<string>('')
+  const lastConversationsUpdateEventAtRef = useRef<number>(0)
+  const lastMessageSendTimeRef = useRef<number>(0)
 
   const getValidatedCachedMessages = useCallback((conversationId: string): MessageWithSender[] | undefined => {
     const cached = messagesByConversationRef.current.get(conversationId)
@@ -715,6 +718,16 @@ function ChatPageContent() {
 
   }, [hasMemberDetails])
 
+  const emitConversationsUpdated = useCallback(() => {
+    if (typeof window === 'undefined') return
+    window.dispatchEvent(new CustomEvent('conversationsUpdated', {
+      detail: {
+        source: CONVERSATIONS_UPDATED_EVENT_SOURCE,
+        at: Date.now(),
+      },
+    }))
+  }, [])
+
   const persistConversationsCache = useCallback((updatedList: ConversationWithDetails[], selectedConvId?: string) => {
     if (!currentUser || !currentWorkspace || typeof window === 'undefined') {
       return
@@ -735,11 +748,11 @@ function ChatPageContent() {
       }
       
       // Dispatch custom event to notify WorkspaceHeader of cache update
-      window.dispatchEvent(new Event('conversationsUpdated'))
+      emitConversationsUpdated()
     } catch (error) {
       console.warn('Failed to persist conversations cache:', error)
     }
-  }, [currentUser, currentWorkspace])
+  }, [currentUser, currentWorkspace, emitConversationsUpdated])
 
   // 置顶顺序在本地用一个 id 数组来记（最后置顶的在最上），避免后台刷新时顺序被时间字段“挤掉”
   const readPinnedIds = useCallback((): string[] => {
@@ -1519,7 +1532,7 @@ function ChatPageContent() {
           
           // Dispatch event to notify workspace-header
           if (typeof window !== 'undefined') {
-            window.dispatchEvent(new Event('conversationsUpdated'))
+            emitConversationsUpdated()
           }
           
           return updated
@@ -1528,7 +1541,7 @@ function ChatPageContent() {
 
     }
 
-  }, [getValidatedCachedMessages])
+  }, [getValidatedCachedMessages, emitConversationsUpdated])
 
   const loadConversations = useCallback(async (userId: string, workspaceId: string, skipCache = false) => {
 
@@ -2797,7 +2810,7 @@ function ChatPageContent() {
                 localStorage.setItem(cacheTimestampKey, Date.now().toString())
 
                 // Dispatch custom event to notify WorkspaceHeader of cache update
-                window.dispatchEvent(new Event('conversationsUpdated'))
+                emitConversationsUpdated()
 
                 console.log(`💾 Cached ${enrichedWithPreservedRead.length} conversations from API (including ${enrichedWithPreservedRead.filter(c => !c.last_message).length} without messages)`)
 
@@ -2921,7 +2934,13 @@ function ChatPageContent() {
 
     await requestPromise
 
-  }, [loadSingleConversation, parseConversationsResponse, restoreSelectedConversation, mergePendingConversations, enrichConversation, router]) // Removed searchParams and selectedConversationId to prevent loops
+  }, [loadSingleConversation, parseConversationsResponse, restoreSelectedConversation, mergePendingConversations, enrichConversation, router, emitConversationsUpdated]) // Removed searchParams and selectedConversationId to prevent loops
+
+  const loadSingleConversationRef = useRef(loadSingleConversation)
+
+  useEffect(() => {
+    loadSingleConversationRef.current = loadSingleConversation
+  }, [loadSingleConversation])
 
   // Track if initial load has been done to prevent duplicate loads on route changes
 
@@ -4117,12 +4136,10 @@ function ChatPageContent() {
   useEffect(() => {
 
     if (!selectedConversationId || !currentWorkspace || !currentUser) return
+    if (!IS_DOMESTIC_VERSION) return
 
-    // Poll less frequently: every 10 seconds instead of 2 seconds
-
-    // This reduces server load while still keeping data relatively fresh
-
-    const POLL_INTERVAL = 5000 // 5 seconds
+    // Realtime is the primary source of truth. Keep polling as a slow fallback.
+    const POLL_INTERVAL = 30000
 
     
 
@@ -4130,13 +4147,7 @@ function ChatPageContent() {
 
       // Prevent concurrent polling
 
-      if (isPollingRef.current) {
-
-        console.log('⏭️ Polling already in progress, skipping...')
-
-        return
-
-      }
+        if (isPollingRef.current) return
 
       
 
@@ -4148,23 +4159,13 @@ function ChatPageContent() {
 
       
 
-      // Throttle: don't poll if last poll was less than 8 seconds ago
+        const now = Date.now()
 
-      const now = Date.now()
+        // Keep a small guard against duplicated timers.
+        if (now - lastPollTimeRef.current < 10000) return
 
-      if (now - lastPollTimeRef.current < 8000) {
-
-        console.log('⏭️ Polling throttled, skipping...')
-
-        return
-
-      }
-
-      // Skip polling if message was sent recently (within 3 seconds)
-      if (now - lastMessageSendTimeRef.current < 3000) {
-        console.log('⏭️ Polling skipped: message was sent recently')
-        return
-      }
+        // Skip polling if message was sent recently (within 3 seconds)
+        if (now - lastMessageSendTimeRef.current < 3000) return
 
       
 
@@ -4187,13 +4188,9 @@ function ChatPageContent() {
 
         
 
-        // Also reload conversations list to update last_message for all conversations
-
-        // This ensures both sender and receiver see updates
-
-        // But only if conversations list is not currently loading
-
-        if (!isLoadingConversationsListRef.current) {
+        // For global deployments, realtime already covers conversation updates.
+        // Keep conversation polling only for domestic fallback mode.
+        if (IS_DOMESTIC_VERSION && !isLoadingConversationsListRef.current) {
 
           try {
 
@@ -4471,7 +4468,7 @@ function ChatPageContent() {
 
     return () => clearInterval(interval)
 
-  }, [currentUser, currentWorkspace, loadMessages]) // Include dependencies for currentUser and currentWorkspace
+  }, [selectedConversationId, currentUser, currentWorkspace, loadMessages])
 
   // Listen for contact deletion events to refresh conversations
   useEffect(() => {
@@ -4577,13 +4574,11 @@ function ChatPageContent() {
 
     window.addEventListener('contactDeleted', handleContactDeleted)
 
-    // CRITICAL: Add polling mechanism to check if contacts were deleted by the other party
-    // This ensures both users see the deletion effect even if they don't refresh the page
-    // Poll every 5 seconds to check for deleted contacts (reduced from 30s for faster sync)
+    // Keep this as a low-frequency background safety check.
     const contactCheckInterval = setInterval(async () => {
       if (!currentUser || !currentWorkspace) return
-
-      console.log('👥 [CONTACT-CHECK] Running contact check poll...')
+      // Avoid chat list jitter right after sending a message.
+      if (Date.now() - lastMessageSendTimeRef.current < 8000) return
 
       try {
         // Fetch current contacts list
@@ -4593,16 +4588,12 @@ function ChatPageContent() {
         const contactsData = await contactsResponse.json()
         if (!contactsData.success || !contactsData.contacts) return
 
-        console.log('👥 [CONTACT-CHECK] Contacts fetched:', contactsData.contacts.length)
-
         const currentContactIds = new Set(
           contactsData.contacts.map((c: any) => c.contact_user_id || c.user?.id).filter(Boolean)
         )
 
         // Check if any conversation's other user is no longer in contacts
         setConversations(prev => {
-          console.log('👥 [CONTACT-CHECK] Checking conversations:', prev.length)
-
           const conversationsToRemove: string[] = []
           const updated = prev.filter(conv => {
             if (conv.type === 'direct' && conv.members && conv.members.length === 2) {
@@ -4625,6 +4616,11 @@ function ChatPageContent() {
             }
             return true
           })
+
+          // No structural change: keep previous reference to avoid re-render flicker.
+          if (conversationsToRemove.length === 0) {
+            return prev
+          }
           
           // If we removed conversations, update deleted_conversations list and cache
           if (conversationsToRemove.length > 0 && typeof window !== 'undefined') {
@@ -4673,7 +4669,7 @@ function ChatPageContent() {
       } catch (error) {
         console.error('Error checking contacts for deleted conversations:', error)
       }
-    }, 5000) // Check every 5 seconds for faster sync
+    }, 30000)
 
     return () => {
       window.removeEventListener('contactDeleted', handleContactDeleted as EventListener)
@@ -4686,8 +4682,18 @@ function ChatPageContent() {
   useEffect(() => {
     if (!currentUser || !currentWorkspace) return
 
-    const handleConversationsUpdated = () => {
-      console.log('[ChatContent] Received conversationsUpdated event, refreshing conversations...')
+    const handleConversationsUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<{ source?: string; at?: number }>
+      if (customEvent.detail?.source === CONVERSATIONS_UPDATED_EVENT_SOURCE) {
+        return
+      }
+
+      const now = Date.now()
+      if (now - lastConversationsUpdateEventAtRef.current < 800) {
+        return
+      }
+      lastConversationsUpdateEventAtRef.current = now
+
       loadConversations(currentUser.id, currentWorkspace.id, true).catch(error => {
         console.error('[ChatContent] Failed to refresh conversations:', error)
       })
@@ -5029,9 +5035,6 @@ function ChatPageContent() {
     setShowNewConversation(true)
 
   }, [])
-
-  // Track last message send time to prevent polling flicker
-  const lastMessageSendTimeRef = useRef<number>(0)
 
   const handleSendMessage = useCallback(async (content: string, type: string = 'text', file?: File, metadata?: any) => {
 
@@ -7395,7 +7398,7 @@ function ChatPageContent() {
             const conversation = prev.find(c => c.id === conversationId)
             
             // Show browser notification for new message (if not in current conversation)
-            if (conversation && selectedConversationId !== conversationId) {
+            if (conversation && selectedConversationIdRef.current !== conversationId) {
               // Import and call notification function asynchronously to avoid blocking
               import('@/lib/notifications').then(({ notifyNewMessage }) => {
                 notifyNewMessage(
@@ -7413,7 +7416,7 @@ function ChatPageContent() {
                     members: conversation.members,
                   },
                   currentUser.id,
-                  selectedConversationId,
+                  selectedConversationIdRef.current,
                   currentUser
                 ).catch(error => {
                   console.error('Error showing notification:', error)
@@ -7429,7 +7432,7 @@ function ChatPageContent() {
 
               console.log('⚠️ Conversation not found in list, loading...')
 
-              loadSingleConversation(conversationId, currentWorkspace.id, 0)
+              loadSingleConversationRef.current(conversationId, currentWorkspace.id, 0)
 
               return prev
 
@@ -7518,7 +7521,7 @@ function ChatPageContent() {
                 
                 // If this is the currently selected conversation, keep unread_count at 0
                 // (user is viewing it, so it's already "read")
-                const isCurrentConversation = selectedConversationId === conversationId
+                const isCurrentConversation = selectedConversationIdRef.current === conversationId
                 
                 // Get current unread_count, but don't increment if already processed
                 const currentUnreadCount = conv.unread_count || 0
@@ -7601,7 +7604,7 @@ function ChatPageContent() {
           // If this is the currently selected conversation, also update messages
           // CRITICAL: If user is viewing this conversation, immediately mark it as read
           // This ensures that messages received while viewing don't count as unread later
-          if (selectedConversationId === conversationId) {
+          if (selectedConversationIdRef.current === conversationId) {
 
             setMessages(prev => {
 
@@ -7664,7 +7667,7 @@ function ChatPageContent() {
                       return conv
                     })
                     localStorage.setItem(cacheKey, JSON.stringify(updated))
-                    window.dispatchEvent(new Event('conversationsUpdated'))
+                    emitConversationsUpdated()
                   } catch (e) {
                     console.warn('Failed to update cache after marking as read:', e)
                   }
@@ -7844,7 +7847,7 @@ function ChatPageContent() {
             }
             
             // Also update the message in the current conversation if it's open
-            if (selectedConversationId === conversationId) {
+            if (selectedConversationIdRef.current === conversationId) {
               setMessages(prev => prev.map(msg => {
                 if (msg.id === updatedMessage.id) {
                   return {
@@ -7866,7 +7869,7 @@ function ChatPageContent() {
         if (status === 'SUBSCRIBED') {
           console.log('✅ Successfully subscribed to messages')
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.error('❌ Realtime subscription error:', status)
+          console.warn('⚠️ Realtime subscription status:', status)
         } else if (status === 'CLOSED') {
           // CLOSED is a normal state when component unmounts or channel is cleaned up
           // This happens when:
@@ -7901,7 +7904,7 @@ function ChatPageContent() {
       }
     }
 
-  }, [currentUser, currentWorkspace, selectedConversationId, loadSingleConversation, dispatchIncomingCallPrompt])
+  }, [currentUser, currentWorkspace, dispatchIncomingCallPrompt, emitConversationsUpdated, loadSingleConversationRef])
 
   // Update user status to offline when page closes/unloads
   useEffect(() => {
@@ -8025,7 +8028,7 @@ function ChatPageContent() {
         if (status === 'SUBSCRIBED') {
           console.log('✅ Successfully subscribed to user status changes')
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.error('❌ User status subscription error:', status)
+          console.warn('⚠️ User status subscription status:', status)
         } else if (status === 'CLOSED') {
           console.log('🔕 User status subscription closed (normal cleanup)')
         } else {
@@ -8089,6 +8092,12 @@ function ChatPageContent() {
       setIsLoadingConversations(false)
     })
   }, [currentUser, currentWorkspace?.id, loadConversations, router, searchParams])
+  const closeActiveChannel = useCallback(() => {
+    setActiveChannel('none')
+    if (isMobile && !selectedConversationId) {
+      setMobileView('list')
+    }
+  }, [isMobile, selectedConversationId])
 
   if (!currentUser || !currentWorkspace) {
 
@@ -8127,22 +8136,29 @@ function ChatPageContent() {
   const shouldShowGroupMetaFailed =
     isGroupConversationForMeta && conversationMetaState === 'failed'
   const shouldGateGroupMeta = shouldShowGroupMetaSkeleton || shouldShowGroupMetaFailed
+  const isMobileDetailView = isMobile && mobileView === 'detail'
+  const showTopWorkspaceShell = !isMobileDetailView
+  const showBottomNavigation = isMobile && !isMobileDetailView
 
   return (
     <>
       <SessionValidator />
       <div className="flex h-screen flex-col mobile-overscroll-contain">
 
-      <WorkspaceHeader
-        workspace={currentWorkspace}
-        currentUser={currentUser}
-        totalUnreadCount={conversations
-          .filter(conv => conv.type === 'direct')
-          .reduce((sum, conv) => sum + (conv.unread_count || 0), 0)}
-        onWorkspaceChange={handleWorkspaceChange}
-      />
+      {showTopWorkspaceShell && (
+        <>
+          <WorkspaceHeader
+            workspace={currentWorkspace}
+            currentUser={currentUser}
+            totalUnreadCount={conversations
+              .filter(conv => conv.type === 'direct')
+              .reduce((sum, conv) => sum + (conv.unread_count || 0), 0)}
+            onWorkspaceChange={handleWorkspaceChange}
+          />
 
-      <ChatTopBannerAd />
+          <ChatTopBannerAd />
+        </>
+      )}
 
 
 
@@ -8358,7 +8374,7 @@ function ChatPageContent() {
             activeChannel === 'blind' ? (
               <BlindZoneChat
                 isOpen={activeChannel === 'blind'}
-                onClose={() => setActiveChannel('none')}
+                onClose={closeActiveChannel}
                 workspaceId={currentWorkspace?.id || ''}
                 isWorkspaceAdmin={(() => {
                   // 检查当前用户是否是工作区管理员
@@ -8369,7 +8385,7 @@ function ChatPageContent() {
             ) : (
               <GlobalAnnouncement
                 isOpen={activeChannel === 'announcement'}
-                onClose={() => setActiveChannel('none')}
+                onClose={closeActiveChannel}
                 workspaceId={currentWorkspace?.id || ''}
               />
             )
@@ -8391,6 +8407,7 @@ function ChatPageContent() {
                     conversation={displayConversation}
                     currentUser={currentUser}
                     onToggleSidebar={isMobile ? () => setMobileView('list') : undefined}
+                    mobileBackLabel={language === 'zh' ? '返回会话列表' : 'Back to conversations'}
                     onToggleGroupInfo={() => setGroupInfoOpen(prev => !prev)}
                   />
 
@@ -8574,7 +8591,7 @@ function ChatPageContent() {
         </div>
 
       </div>
-      {isMobile && (
+      {showBottomNavigation && (
         <AppNavigation
           totalUnreadCount={conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0)}
           mobile

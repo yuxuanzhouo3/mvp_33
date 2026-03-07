@@ -27,7 +27,6 @@ const FALLBACK_AD_ID = 'demo-top-banner-ad';
 function createFallbackAd(language: string): TopBannerAd {
   const isZh = language === 'zh';
   const title = isZh ? 'MornScience 广告位演示' : 'MornScience Banner Demo';
-  const subtitle = isZh ? '后台创建广告后将自动替换' : 'This will be replaced by your real ads';
   const href = IS_DOMESTIC_VERSION
     ? 'https://orbital.mornscience.top/'
     : 'https://www.mornscience.work/';
@@ -43,8 +42,10 @@ function createFallbackAd(language: string): TopBannerAd {
   <rect width="1600" height="320" fill="url(#bg)"/>
   <circle cx="1380" cy="70" r="200" fill="rgba(56,189,248,0.18)"/>
   <circle cx="180" cy="300" r="220" fill="rgba(14,165,233,0.16)"/>
-  <text x="88" y="136" fill="#f8fafc" font-size="58" font-family="Arial, sans-serif" font-weight="700">${title}</text>
-  <text x="88" y="196" fill="#cbd5e1" font-size="34" font-family="Arial, sans-serif">${subtitle}</text>
+  <rect x="72" y="88" width="220" height="18" rx="9" fill="rgba(248,250,252,0.82)"/>
+  <rect x="72" y="132" width="560" height="14" rx="7" fill="rgba(203,213,225,0.74)"/>
+  <rect x="72" y="162" width="420" height="14" rx="7" fill="rgba(203,213,225,0.62)"/>
+  <rect x="72" y="192" width="310" height="14" rx="7" fill="rgba(203,213,225,0.52)"/>
 </svg>`;
   const encodedSvg = encodeURIComponent(svg.trim());
 

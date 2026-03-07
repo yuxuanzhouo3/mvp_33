@@ -37,6 +37,8 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.92 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --mobile-chat-own-bubble: #1a9dff;
+  --mobile-chat-peer-bubble: #ffffff;
 }
 
 .dark {
@@ -254,6 +256,20 @@
       min-height: 44px;
       min-width: 44px;
     }
+
+    /* Allow compact controls in dense areas such as chat composer toolbars */
+    .touch-compact {
+      min-height: 0 !important;
+      min-width: 0 !important;
+    }
+
+    .mobile-chat-bubble-own {
+      background: var(--mobile-chat-own-bubble);
+    }
+
+    .mobile-chat-bubble-peer {
+      background: var(--mobile-chat-peer-bubble);
+    }
     
     /* Prevent iOS zoom on input focus */
     input, textarea, select {
@@ -269,6 +285,18 @@
       overscroll-behavior-y: contain;
       touch-action: pan-y;
       -webkit-overflow-scrolling: touch;
+    }
+
+    /* Hide visual scrollbar on mobile while keeping scroll behavior */
+    .mobile-hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    .mobile-hide-scrollbar::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+      display: none;
     }
   }
 }

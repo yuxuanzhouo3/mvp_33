@@ -520,6 +520,7 @@ export default function ChannelsPage() {
                 conversation={selectedChannel} 
                 currentUser={currentUser}
                 onToggleSidebar={isMobile ? () => setMobileView('list') : undefined}
+                mobileBackLabel={language === 'zh' ? '返回频道列表' : 'Back to channels'}
               />
               <MessageList 
                 key={`channel-messages-${selectedChannel.id}`}

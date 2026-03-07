@@ -2,9 +2,8 @@
 
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
 import { ConversationWithDetails, User } from '@/lib/types'
-import { Hash, Lock, Users, Phone, Video, Info, MoreVertical, PanelLeftOpen } from 'lucide-react'
+import { Hash, Lock, Users, Phone, Video, Info, MoreVertical, ChevronLeft } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,9 +27,16 @@ interface ChatHeaderProps {
   currentUser: User
   onToggleSidebar?: () => void
   onToggleGroupInfo?: () => void
+  mobileBackLabel?: string
 }
 
-export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggleGroupInfo }: ChatHeaderProps) {
+export function ChatHeader({
+  conversation,
+  currentUser,
+  onToggleSidebar,
+  onToggleGroupInfo,
+  mobileBackLabel,
+}: ChatHeaderProps) {
   const [showVoiceCall, setShowVoiceCall] = useState(false)
   const [showVideoCall, setShowVideoCall] = useState(false)
   const [incomingCallMessageId, setIncomingCallMessageId] = useState<string | undefined>()
@@ -208,13 +214,20 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
   }
 
   const display = getConversationDisplay()
+  const canShowDirectOnlineStatus = Boolean(
+    conversation.type === 'direct' &&
+    display.user?.id &&
+    display.user.id !== 'placeholder-user' &&
+    !display.user.id.startsWith('00000000-0000-0000-0000-')
+  )
   const isDirectUserOnline = useOnlineStatus(
-    conversation.type === 'direct' ? display.user?.id : undefined,
-    conversation.type === 'direct' ? display.user?.region : undefined
+    canShowDirectOnlineStatus ? display.user?.id : undefined,
+    canShowDirectOnlineStatus ? display.user?.region : undefined
   )
   const displaySubtitle = conversation.type === 'direct'
     ? (display.user?.title || t(isDirectUserOnline ? 'online' : 'offline'))
     : display.subtitle
+  const resolvedMobileBackLabel = mobileBackLabel || (language === 'zh' ? '返回列表' : 'Back')
 
   const isGroupCall = conversation.type === 'group' || conversation.type === 'channel'
   // 确保 callRecipient 始终是对话中的另一个用户（不是当前用户）
@@ -279,32 +292,33 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
 
   return (
     <>
-      <div className={cn("border-b bg-background", isMobile ? "px-2.5 py-2" : "px-4 py-2.5")}>
+      <div className={cn("border-b bg-background", isMobile ? "px-2 py-1.5" : "px-4 py-2.5")}>
         <div className="flex items-center justify-between">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className={cn("flex min-w-0 items-center gap-2", isMobile && "gap-1.5")}>
             {isMobile && onToggleSidebar && (
               <Button
                 size="icon"
                 variant="ghost"
                 onClick={onToggleSidebar}
-                className="h-8 w-8 shrink-0"
-                aria-label="Open conversation list"
+                className="touch-compact h-8 w-8 shrink-0 rounded-md"
+                aria-label={resolvedMobileBackLabel}
+                title={resolvedMobileBackLabel}
               >
-                <PanelLeftOpen className="h-4 w-4" />
+                <ChevronLeft className="h-3.5 w-3.5" />
               </Button>
             )}
             {conversation.type === 'direct' ? (
               <div className="relative">
                 <button
                   onClick={handleAvatarClick}
-                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                  className="touch-compact cursor-pointer hover:opacity-80 transition-opacity"
                   title="View contact details"
                 >
                   <Avatar
-                    className={cn("h-10 w-10", isMobile && "h-9 w-9")}
-                    userId={display.user?.id}
+                    className={cn("h-10 w-10", isMobile && "h-8 w-8")}
+                    userId={canShowDirectOnlineStatus ? display.user?.id : undefined}
                     userRegion={display.user?.region}
-                    showOnlineStatus={true}
+                    showOnlineStatus={canShowDirectOnlineStatus}
                   >
                     <AvatarImage src={display.avatar || undefined} />
                     <AvatarFallback name={display.name}>
@@ -318,32 +332,34 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
                 </button>
               </div>
             ) : (
-              <div className={cn("h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center", isMobile && "h-9 w-9")}>
+              <div className={cn("h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center", isMobile && "h-8 w-8")}>
                 {getConversationIcon()}
               </div>
             )}
             <div className="min-w-0">
-              <h2 className={cn("font-semibold text-base", isMobile && "text-[15px] truncate max-w-[160px]")}>{display.name}</h2>
+              <h2 className={cn("font-semibold text-base", isMobile && "text-[14px] truncate max-w-[150px]")}>{display.name}</h2>
               {!isMobile && <p className="text-sm text-muted-foreground">{displaySubtitle}</p>}
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className={cn("flex items-center gap-1", isMobile && "gap-0.5")}>
             <Button
               size="icon"
               variant="ghost"
               onClick={startVoiceCallFromHeader}
-              className={cn("h-8 w-8", isMobile && "h-7 w-7")}
+              className={cn("touch-compact h-8 w-8", isMobile && "h-7 w-7")}
+              aria-label={language === 'zh' ? '发起语音通话' : 'Start voice call'}
             >
-              <Phone className="h-4 w-4" />
+              <Phone className={cn("h-4 w-4", isMobile && "h-3.5 w-3.5")} />
             </Button>
             <Button
               size="icon"
               variant="ghost"
               onClick={startVideoCallFromHeader}
-              className={cn("h-8 w-8", isMobile && "h-7 w-7")}
+              className={cn("touch-compact h-8 w-8", isMobile && "h-7 w-7")}
+              aria-label={language === 'zh' ? '发起视频通话' : 'Start video call'}
             >
-              <Video className="h-4 w-4" />
+              <Video className={cn("h-4 w-4", isMobile && "h-3.5 w-3.5")} />
             </Button>
             {!isMobile && conversation.type === 'group' && (
               <Button
@@ -357,8 +373,13 @@ export function ChatHeader({ conversation, currentUser, onToggleSidebar, onToggl
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="ghost" className={cn("h-8 w-8", isMobile && "h-7 w-7")}>
-                  <MoreVertical className="h-4 w-4" />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className={cn("touch-compact h-8 w-8", isMobile && "h-7 w-7")}
+                  aria-label={language === 'zh' ? '更多操作' : 'More actions'}
+                >
+                  <MoreVertical className={cn("h-4 w-4", isMobile && "h-3.5 w-3.5")} />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">

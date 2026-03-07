@@ -1,5 +1,15 @@
 /** @type {import('next').NextConfig} */
+const normalizedRegion =
+  (process.env.DEPLOYMENT_REGION || process.env.NEXT_PUBLIC_DEPLOYMENT_REGION || 'INTL')
+    .toUpperCase() === 'CN'
+    ? 'CN'
+    : 'INTL'
+
 const nextConfig = {
+  // Expose a stable client-safe region so switching DEPLOYMENT_REGION in .env.local is enough.
+  env: {
+    NEXT_PUBLIC_DEPLOYMENT_REGION: normalizedRegion,
+  },
   typescript: {
     ignoreBuildErrors: true,
   },

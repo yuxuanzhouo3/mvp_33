@@ -3,7 +3,7 @@
 import { useState, useRef, KeyboardEvent, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Send, Paperclip, Smile, Mic, ImageIcon, AtSign, X, FileIcon, Code2 } from 'lucide-react'
+import { Send, Paperclip, Smile, Mic, ImageIcon, AtSign, X, FileIcon, Code2, Plus } from 'lucide-react'
 import {
   Popover,
   PopoverContent,
@@ -41,7 +41,6 @@ export function MessageInput({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false)
   const [showCodeDialog, setShowCodeDialog] = useState(false)
-  const [isSending, setIsSending] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -111,38 +110,37 @@ export function MessageInput({
     }
   }, [])
 
-  const handleSend = async () => {
-    if ((message.trim() || selectedFile) && !disabled && !isSending) {
-      setIsSending(true) // Set sending state before async operation
-      const contentToSend = message.trim()
-      const fileToSend = selectedFile
-      
-      // Clear input immediately for instant feedback
-      setMessage('')
-      setIsTyping(false)
-      clearFilePreview()
-      
-      // Reset textarea height
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto'
-      }
-      
-      try {
-        // Send message immediately (optimistic update)
-        if (fileToSend) {
-          const fileType = fileToSend.type.startsWith('image/') ? 'image' : 
-                          fileToSend.type.startsWith('video/') ? 'video' : 'file'
-          await onSendMessage(contentToSend, fileType, fileToSend)
-        } else {
-          await onSendMessage(contentToSend)
-        }
-      } catch (error) {
-        console.error('Failed to send message:', error)
-      } finally {
-        // Always reset sending state after operation completes
-        setIsSending(false)
-      }
+  const handleSend = () => {
+    if ((!message.trim() && !selectedFile) || disabled) return
+
+    const contentToSend = message.trim()
+    const fileToSend = selectedFile
+
+    // Clear input immediately for instant feedback and allow consecutive sends.
+    setMessage('')
+    setIsTyping(false)
+    clearFilePreview()
+
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
     }
+
+    const sendTask = async () => {
+      if (fileToSend) {
+        const fileType = fileToSend.type.startsWith('image/')
+          ? 'image'
+          : fileToSend.type.startsWith('video/')
+            ? 'video'
+            : 'file'
+        await onSendMessage(contentToSend, fileType, fileToSend)
+        return
+      }
+      await onSendMessage(contentToSend)
+    }
+
+    void sendTask().catch((error) => {
+      console.error('Failed to send message:', error)
+    })
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -233,11 +231,15 @@ export function MessageInput({
   }
 
   const emojis = ['😀', '😂', '😍', '🎉', '👍', '❤️', '🔥', '✨', '👀', '🙌', '💯', '🚀']
+  const canSend = !!(message.trim() || selectedFile)
 
   return (
     <>
-      <div className={cn("border-t bg-background px-4 py-3", isMobile && "px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]")}>
-        <div className={cn("max-w-4xl mx-auto space-y-2", isMobile && "max-w-none")}>
+      <div className={cn(
+        "border-t bg-background",
+        isMobile ? "px-2.5 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))]" : "px-4 py-3"
+      )}>
+        <div className={cn("max-w-4xl mx-auto space-y-2", isMobile && "max-w-none space-y-1.5")}>
           {selectedFile && (
             <div className={cn("flex items-start gap-3 bg-muted rounded-lg", isMobile ? "p-2 gap-2" : "p-3")}>
               {previewUrl ? (
@@ -261,126 +263,222 @@ export function MessageInput({
                 size="icon"
                 variant="ghost"
                 onClick={clearFilePreview}
-                className="shrink-0"
+                className="touch-compact shrink-0"
               >
                 <X className="h-4 w-4" />
               </Button>
             </div>
           )}
 
-          {/* 飞书风格单行布局 */}
-          <div className="flex items-center gap-2">
-            {/* 隐藏的文件输入 */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              onChange={handleFileSelect}
-              accept="*/*"
-            />
-            <input
-              ref={imageInputRef}
-              type="file"
-              className="hidden"
-              onChange={handleFileSelect}
-              accept="image/*,video/*"
-            />
+          {/* 隐藏的文件输入 */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileSelect}
+            accept="*/*"
+          />
+          <input
+            ref={imageInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileSelect}
+            accept="image/*,video/*"
+          />
 
-            {/* 输入框 */}
-            <Textarea
-              ref={textareaRef}
-              value={message}
-              onChange={handleChange}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              placeholder={t('typeMessage')}
-              disabled={disabled}
-              className={cn("flex-1 min-h-[44px] max-h-[200px] resize-none", isMobile && "text-base")}
-              rows={1}
-            />
+          {isMobile ? (
+            <div className="space-y-1.5">
+              <div className="flex items-end gap-1">
+                <textarea
+                  ref={textareaRef}
+                  value={message}
+                  onChange={handleChange}
+                  onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
+                  placeholder={t('typeMessage')}
+                  disabled={disabled}
+                  className="flex-1 h-[34px] min-h-[34px] max-h-[120px] resize-none rounded-[16px] border border-[#D6DEE6] bg-white px-3 py-1 text-[15px] leading-[1.35] shadow-none outline-none focus:border-[#C7CFD8]"
+                  rows={1}
+                />
+                <Button
+                  onClick={handleSend}
+                  data-testid="chat-composer-send-button"
+                  disabled={!canSend || disabled}
+                  className={cn(
+                    "touch-compact h-[34px] min-w-[68px] rounded-[16px] px-3 text-[13px] font-medium",
+                    canSend && !disabled
+                      ? "bg-[#1a9dff] text-white hover:bg-[#128de7]"
+                      : "bg-[#b8dffa] text-white/90 hover:bg-[#b8dffa]"
+                  )}
+                >
+                  {language === 'zh' ? '发送' : 'Send'}
+                </Button>
+              </div>
 
-            {/* 右侧工具栏 - 飞书风格紧凑布局 */}
-            <div className="flex items-center gap-0.5 shrink-0">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button size="icon" variant="ghost" disabled={disabled} className="h-8 w-8">
-                    <Smile className="h-4 w-4" />
+              <div className="flex items-center justify-between px-0.5 pt-0 pb-1">
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    disabled={disabled}
+                    onClick={() => setShowVoiceRecorder(true)}
+                    className="touch-compact h-7 w-7 rounded-full text-muted-foreground"
+                    aria-label={language === 'zh' ? '语音消息' : 'Voice message'}
+                  >
+                    <Mic className="h-3.5 w-3.5" />
                   </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64 p-2">
-                  <div className="grid grid-cols-6 gap-2">
-                    {emojis.map((emoji) => (
-                      <button
-                        key={emoji}
-                        onClick={() => setMessage(prev => prev + emoji)}
-                        className="text-2xl hover:bg-accent rounded p-1 transition-colors"
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    disabled={disabled}
+                    onClick={() => imageInputRef.current?.click()}
+                    className="touch-compact h-7 w-7 rounded-full text-muted-foreground"
+                    aria-label={language === 'zh' ? '发送图片' : 'Send image'}
+                  >
+                    <ImageIcon className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    disabled={disabled}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="touch-compact h-7 w-7 rounded-full text-muted-foreground"
+                    aria-label={language === 'zh' ? '发送文件' : 'Send file'}
+                  >
+                    <Paperclip className="h-3.5 w-3.5" />
+                  </Button>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        disabled={disabled}
+                        className="touch-compact h-7 w-7 rounded-full text-muted-foreground"
+                        aria-label={language === 'zh' ? '表情' : 'Emoji'}
                       >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
+                        <Smile className="h-3.5 w-3.5" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 p-2">
+                      <div className="grid grid-cols-6 gap-2">
+                        {emojis.map((emoji) => (
+                          <button
+                            key={emoji}
+                            onClick={() => setMessage(prev => prev + emoji)}
+                            className="touch-compact text-2xl hover:bg-accent rounded p-1 transition-colors"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
 
-              {!isMobile && (
-                <Button size="icon" variant="ghost" disabled={disabled} className="h-8 w-8">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  disabled={disabled}
+                  onClick={() => setShowCodeDialog(true)}
+                  className="touch-compact h-7 w-7 rounded-full text-muted-foreground"
+                  aria-label={language === 'zh' ? '更多功能' : 'More actions'}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Textarea
+                ref={textareaRef}
+                value={message}
+                onChange={handleChange}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                placeholder={t('typeMessage')}
+                disabled={disabled}
+                className="flex-1 min-h-[44px] max-h-[200px] resize-none"
+                rows={1}
+              />
+
+              <div className="flex items-center gap-0.5 shrink-0">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button size="icon" variant="ghost" disabled={disabled} className="touch-compact h-8 w-8">
+                      <Smile className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-2">
+                    <div className="grid grid-cols-6 gap-2">
+                      {emojis.map((emoji) => (
+                        <button
+                          key={emoji}
+                          onClick={() => setMessage(prev => prev + emoji)}
+                          className="touch-compact text-2xl hover:bg-accent rounded p-1 transition-colors"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <Button size="icon" variant="ghost" disabled={disabled} className="touch-compact h-8 w-8">
                   <AtSign className="h-4 w-4" />
                 </Button>
-              )}
 
-              <Button
-                size="icon"
-                variant="ghost"
-                disabled={disabled}
-                onClick={() => fileInputRef.current?.click()}
-                className="h-8 w-8"
-              >
-                <Paperclip className="h-4 w-4" />
-              </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  disabled={disabled}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="touch-compact h-8 w-8"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </Button>
 
-              <Button
-                size="icon"
-                variant="ghost"
-                disabled={disabled}
-                onClick={() => imageInputRef.current?.click()}
-                className="h-8 w-8"
-              >
-                <ImageIcon className="h-4 w-4" />
-              </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  disabled={disabled}
+                  onClick={() => imageInputRef.current?.click()}
+                  className="touch-compact h-8 w-8"
+                >
+                  <ImageIcon className="h-4 w-4" />
+                </Button>
 
-              {!isMobile && (
                 <Button
                   size="icon"
                   variant="ghost"
                   disabled={disabled}
                   onClick={() => setShowCodeDialog(true)}
                   title="分享代码"
-                  className="h-8 w-8"
+                  className="touch-compact h-8 w-8"
                 >
                   <Code2 className="h-4 w-4" />
                 </Button>
-              )}
 
-              <Button
-                size="icon"
-                variant="ghost"
-                disabled={disabled}
-                onClick={() => setShowVoiceRecorder(true)}
-                className="h-8 w-8"
-              >
-                <Mic className="h-4 w-4" />
-              </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  disabled={disabled}
+                  onClick={() => setShowVoiceRecorder(true)}
+                  className="touch-compact h-8 w-8"
+                >
+                  <Mic className="h-4 w-4" />
+                </Button>
 
-              <Button
-                size="icon"
-                onClick={handleSend}
-                disabled={(!message.trim() && !selectedFile) || disabled || isSending}
-                className={cn("shrink-0 ml-1", isMobile ? "h-8 w-8" : "h-9 w-9")}
-              >
-                <Send className="h-4 w-4" />
-              </Button>
+                <Button
+                  size="icon"
+                  onClick={handleSend}
+                  disabled={!canSend || disabled}
+                  className="touch-compact shrink-0 ml-1 h-9 w-9"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
 
           {!isMobile && (
             <p className="text-xs text-muted-foreground">

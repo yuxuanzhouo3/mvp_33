@@ -38,7 +38,7 @@ type MemberDoc = {
 
 function loadEnv() {
   const root = process.cwd()
-  for (const file of ['.env', '.env.cn']) {
+  for (const file of ['.env', '.env.local', '.env.cn']) {
     const filePath = path.join(root, file)
     if (fs.existsSync(filePath)) {
       const parsed = dotenv.parse(fs.readFileSync(filePath))

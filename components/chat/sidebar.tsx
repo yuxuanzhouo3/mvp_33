@@ -58,6 +58,11 @@ function ConversationItem({
     conversation.type === 'direct'
       ? (safeMembers.find(m => m?.id !== currentUser.id) || currentUser)
       : undefined
+  const canShowDirectOnlineStatus = Boolean(
+    directTargetUser?.id &&
+    directTargetUser.id !== 'placeholder-user' &&
+    !directTargetUser.id.startsWith('00000000-0000-0000-0000-')
+  )
 
   const getLastMessagePreview = () => {
     const lastMessage = conversation.last_message
@@ -118,9 +123,9 @@ function ConversationItem({
         {conversation.type === 'direct' ? (
           <Avatar
             className="h-10 w-10 rounded-lg"
-            userId={directTargetUser?.id}
+            userId={canShowDirectOnlineStatus ? directTargetUser?.id : undefined}
             userRegion={directTargetUser?.region}
-            showOnlineStatus={true}
+            showOnlineStatus={canShowDirectOnlineStatus}
           >
             <AvatarImage src={display.avatar || undefined} />
             <AvatarFallback name={display.name}>
@@ -372,7 +377,7 @@ export function Sidebar({
         resizeObserver.disconnect()
       }
     }
-  }, [conversations, searchQuery])
+  }, [conversations, searchQuery, isMobile])
 
   const scrollToBottom = () => {
     const scrollContainer = getScrollContainer()
@@ -408,6 +413,11 @@ export function Sidebar({
         }
       }, 50)
     }
+  }
+
+  const mobileScrollCallbackRef = (node: HTMLDivElement | null) => {
+    if (!node) return
+    viewportRef.current = node
   }
 
   const filteredConversations = conversations
@@ -511,6 +521,85 @@ export function Sidebar({
   // 计算总未读消息数量
   const totalUnreadCount = conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0)
 
+  const renderConversationListContent = () => (
+    <div className="p-2">
+      {/* Official channels should scroll with conversation list on mobile. */}
+      {(onSelectAnnouncement || onSelectBlindZone) && (
+        <div data-testid="official-channels-panel" className="mb-2 border-b pb-2">
+          <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+            {t('officialChannels')}
+          </div>
+          <Button
+            data-testid="official-channel-announcement"
+            variant="ghost"
+            className={cn(
+              "w-full justify-start rounded-lg text-sm",
+              activeChannel === 'announcement' && "bg-primary text-primary-foreground"
+            )}
+            onClick={onSelectAnnouncement}
+          >
+            <Bell className="mr-2 h-4 w-4" />
+            {t('globalAnnouncement')}
+          </Button>
+          <Button
+            data-testid="official-channel-blind"
+            variant="ghost"
+            className={cn(
+              "w-full justify-start rounded-lg text-sm",
+              activeChannel === 'blind' && "bg-primary text-primary-foreground"
+            )}
+            onClick={onSelectBlindZone}
+          >
+            <EyeOff className="mr-2 h-4 w-4" />
+            {t('blindZone')}
+          </Button>
+        </div>
+      )}
+
+      {isLoadingConversations ? (
+        <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+          <Loader2 className="h-8 w-8 mb-4 animate-spin opacity-50" />
+          <p className="text-sm">{t('loadingConversations')}</p>
+        </div>
+      ) : filteredConversations.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+          <MessageSquare className="h-12 w-12 mb-4 opacity-50" />
+          <p className="text-sm">{t('noConversationsYet')}</p>
+          <p className="text-xs mt-2 opacity-75">{t('startNewConversation')}</p>
+        </div>
+      ) : (
+        filteredConversations.map((conversation) => {
+          const display = getConversationDisplay(conversation)
+          const isActive = conversation.id === currentConversationId
+
+          return (
+            <ConversationItem
+              key={conversation.id}
+              conversation={conversation}
+              display={display}
+              isActive={isActive}
+              onSelect={() => {
+                onSelectConversation(conversation.id)
+                // Close mobile sidebar when selecting a conversation
+                if (isMobile && onToggleMobile) {
+                  onToggleMobile()
+                }
+              }}
+              getConversationIcon={getConversationIcon}
+              formatTimestamp={formatTimestamp}
+              expanded={expanded}
+              onPinConversation={onPinConversation}
+              onUnpinConversation={onUnpinConversation}
+              onHideConversation={onHideConversation}
+              onDeleteConversation={onDeleteConversation}
+              currentUser={currentUser}
+            />
+          )
+        })
+      )}
+    </div>
+  )
+
   return (
     <div className={cn("flex h-full flex-col bg-background relative z-50", !isMobile && "border-r")}>
       <div className="flex h-full flex-col">
@@ -554,36 +643,6 @@ export function Sidebar({
           />
         </div>
 
-        {/* Official Channels - Global Announcement & Blind Zone */}
-        {(onSelectAnnouncement || onSelectBlindZone) && (
-          <div className="px-2 py-3 space-y-1 border-b">
-            <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-              {t('officialChannels')}
-            </div>
-            <Button
-              variant="ghost"
-              className={cn(
-                "w-full justify-start rounded-lg text-sm",
-                activeChannel === 'announcement' && "bg-primary text-primary-foreground"
-              )}
-              onClick={onSelectAnnouncement}
-            >
-              <Bell className="mr-2 h-4 w-4" />
-              {t('globalAnnouncement')}
-            </Button>
-            <Button
-              variant="ghost"
-              className={cn(
-                "w-full justify-start rounded-lg text-sm",
-                activeChannel === 'blind' && "bg-primary text-primary-foreground"
-              )}
-              onClick={onSelectBlindZone}
-            >
-              <EyeOff className="mr-2 h-4 w-4" />
-              {t('blindZone')}
-            </Button>
-          </div>
-        )}
       </div>
 
       {/* Refresh indicator (small loading bar at top) - Hidden for silent refresh */}
@@ -601,56 +660,23 @@ export function Sidebar({
 
       {/* Conversations list */}
       <div className="flex-1 relative overflow-hidden min-h-0">
-        <ScrollArea 
-          className="h-full" 
-          ref={scrollAreaCallbackRef}
-        >
-          <div className="p-2">
-            {isLoadingConversations ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-                <Loader2 className="h-8 w-8 mb-4 animate-spin opacity-50" />
-                <p className="text-sm">{t('loadingConversations')}</p>
-              </div>
-            ) : filteredConversations.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-                <MessageSquare className="h-12 w-12 mb-4 opacity-50" />
-                <p className="text-sm">{t('noConversationsYet')}</p>
-                <p className="text-xs mt-2 opacity-75">{t('startNewConversation')}</p>
-              </div>
-            ) : (
-              filteredConversations.map((conversation) => {
-                const display = getConversationDisplay(conversation)
-                const isActive = conversation.id === currentConversationId
-
-                return (
-                  <ConversationItem
-                    key={conversation.id}
-                    conversation={conversation}
-                    display={display}
-                    isActive={isActive}
-                    onSelect={() => {
-              onSelectConversation(conversation.id)
-              // Close mobile sidebar when selecting a conversation
-              if (isMobile && onToggleMobile) {
-                onToggleMobile()
-              }
-            }}
-                    getConversationIcon={getConversationIcon}
-                    formatTimestamp={formatTimestamp}
-                    expanded={expanded}
-                    onPinConversation={onPinConversation}
-                    onUnpinConversation={onUnpinConversation}
-                    onHideConversation={onHideConversation}
-                    onDeleteConversation={onDeleteConversation}
-                    currentUser={currentUser}
-                  />
-                )
-              })
-            )}
+        {isMobile ? (
+          <div
+            ref={mobileScrollCallbackRef}
+            className="h-full overflow-y-auto mobile-overscroll-contain mobile-hide-scrollbar"
+          >
+            {renderConversationListContent()}
           </div>
-        </ScrollArea>
+        ) : (
+          <ScrollArea
+            className="h-full"
+            ref={scrollAreaCallbackRef}
+          >
+            {renderConversationListContent()}
+          </ScrollArea>
+        )}
 
-        {showScrollUpButton && (
+        {!isMobile && showScrollUpButton && (
           <Button
             onClick={scrollToTop}
             size="icon"
@@ -661,7 +687,7 @@ export function Sidebar({
             <ChevronUp className="h-4 w-4" />
           </Button>
         )}
-        {showScrollDownButton && (
+        {!isMobile && showScrollDownButton && (
           <Button
             onClick={scrollToBottom}
             size="icon"

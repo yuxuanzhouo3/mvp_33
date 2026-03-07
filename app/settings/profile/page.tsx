@@ -310,11 +310,11 @@ export default function ProfileSettingsPage() {
   }
 
   return (
-    <div className="flex h-screen min-w-0 flex-col">
-      <div className="flex-1 overflow-y-auto">
-        <div className="container mx-auto max-w-4xl px-4 py-8">
+    <div className="flex h-screen min-w-0 flex-col mobile-overscroll-contain">
+      <div className="flex-1 overflow-y-auto mobile-overscroll-contain">
+        <div className="container mx-auto max-w-4xl px-4 py-6 pb-[max(1rem,env(safe-area-inset-bottom))] sm:py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">{t('profileSettings')}</h1>
+        <h1 className="text-2xl font-bold mb-2 sm:text-3xl">{t('profileSettings')}</h1>
         <p className="text-muted-foreground">{t('editWorkInformation')}</p>
       </div>
 

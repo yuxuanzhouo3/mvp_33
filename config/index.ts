@@ -1,17 +1,18 @@
-function readEnv(name: string): string {
-  return (process.env[name] || '').trim()
-}
+const PUBLIC_DEPLOYMENT_REGION = (process.env.NEXT_PUBLIC_DEPLOYMENT_REGION || '').trim().toUpperCase()
+const SERVER_DEPLOYMENT_REGION = (process.env.DEPLOYMENT_REGION || '').trim().toUpperCase()
+const PUBLIC_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || '').trim().toLowerCase()
 
 /**
  * Resolve deployment region in a runtime-safe way.
  * Priority:
- * 1. DEPLOYMENT_REGION
- * 2. current host (for client runtime)
- * 3. NEXT_PUBLIC_SITE_URL host hint
- * 4. fallback INTL
+ * 1. NEXT_PUBLIC_DEPLOYMENT_REGION (client-safe)
+ * 2. DEPLOYMENT_REGION
+ * 3. current host (for client runtime)
+ * 4. NEXT_PUBLIC_SITE_URL host hint
+ * 5. fallback INTL
  */
 export function getDeploymentRegion(): 'CN' | 'INTL' {
-  const region = readEnv('DEPLOYMENT_REGION').toUpperCase()
+  const region = PUBLIC_DEPLOYMENT_REGION || SERVER_DEPLOYMENT_REGION
 
   if (region === 'CN') {
     return 'CN'
@@ -31,7 +32,7 @@ export function getDeploymentRegion(): 'CN' | 'INTL' {
     }
   }
 
-  const siteUrl = readEnv('NEXT_PUBLIC_SITE_URL').toLowerCase()
+  const siteUrl = PUBLIC_SITE_URL
   if (siteUrl) {
     if (siteUrl.includes('mornscience.top')) {
       return 'CN'

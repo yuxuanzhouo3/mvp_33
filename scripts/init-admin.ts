@@ -4,7 +4,7 @@
  * 用于在数据库中创建初始管理员账号
  * 使用方法:
  *   npx tsx scripts/init-admin.ts                    # 使用 .env.local
- *   npx tsx scripts/init-admin.ts .env.cloudbase     # 使用 .env.cloudbase
+ *   npx tsx scripts/init-admin.ts .env.cn            # 显式使用 .env.cn（可选）
  */
 
 import bcrypt from "bcryptjs";
@@ -21,7 +21,7 @@ const result = config({ path: envPath });
 if (result.error) {
   console.error("❌ 加载环境变量失败:", result.error.message);
   console.log("提示: 请确保文件存在，或指定正确的环境变量文件");
-  console.log("用法: npx tsx scripts/init-admin.ts .env.cloudbase");
+  console.log("用法: npx tsx scripts/init-admin.ts .env.local");
   process.exit(1);
 }
 console.log("✅ 环境变量加载成功");

@@ -1,0 +1,125 @@
+{
+  "runTag": "qq-gap-fix-verify-20260307",
+  "baseUrl": "http://127.0.0.1:3000",
+  "email": "gan2@example.com",
+  "steps": [
+    {
+      "step": "open_chat",
+      "metrics": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "url": "/chat",
+        "hasHorizontalOverflow": false,
+        "listPanelVisible": true,
+        "detailPanelVisible": false,
+        "listPanelWidth": 390,
+        "detailPanelWidth": 0,
+        "bottomNavVisible": true
+      }
+    },
+    {
+      "step": "click_conversation",
+      "selector": "button:has-text(\"Global Announcement\")",
+      "metrics": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "url": "/chat",
+        "hasHorizontalOverflow": false,
+        "listPanelVisible": false,
+        "detailPanelVisible": true,
+        "listPanelWidth": 0,
+        "detailPanelWidth": 390,
+        "bottomNavVisible": false
+      }
+    },
+    {
+      "step": "back_to_list",
+      "selector": "button[aria-label=\"Close announcement\"]",
+      "metrics": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "url": "/chat",
+        "hasHorizontalOverflow": false,
+        "listPanelVisible": true,
+        "detailPanelVisible": false,
+        "listPanelWidth": 390,
+        "detailPanelWidth": 0,
+        "bottomNavVisible": true
+      }
+    },
+    {
+      "step": "qq_ui_validation",
+      "validation": {
+        "eligible": false,
+        "selectedIndex": -1,
+        "disabledAfterSecondType": null,
+        "sentMessagesFound": 0,
+        "sentMessagesWithAvatar": 0,
+        "minSentBubbleWidth": 0,
+        "maxSentBubbleWidthRatio": 0,
+        "ownBubbleToAvatarGapMin": null,
+        "ownBubbleToAvatarGapMax": null,
+        "ownBubbleToAvatarGapVariance": null,
+        "ownBubbleBlueTone": null,
+        "peerBubbleNearWhite": null,
+        "reason": "no-conversation-items"
+      },
+      "metrics": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "url": "/chat",
+        "hasHorizontalOverflow": false,
+        "listPanelVisible": true,
+        "detailPanelVisible": false,
+        "listPanelWidth": 390,
+        "detailPanelWidth": 0,
+        "bottomNavVisible": true
+      }
+    },
+    {
+      "step": "switch_to_contacts",
+      "selector": "nav a:has-text(\"联系人\")",
+      "switchDurationMs": 1565,
+      "metrics": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "url": "/contacts",
+        "hasHorizontalOverflow": false,
+        "listPanelVisible": false,
+        "detailPanelVisible": false,
+        "listPanelWidth": 0,
+        "detailPanelWidth": 0,
+        "bottomNavVisible": true
+      }
+    },
+    {
+      "step": "switch_back_to_chat",
+      "selector": "nav a:has-text(\"消息\")",
+      "switchDurationMs": 1249,
+      "metrics": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "url": "/chat",
+        "hasHorizontalOverflow": false,
+        "listPanelVisible": true,
+        "detailPanelVisible": false,
+        "listPanelWidth": 390,
+        "detailPanelWidth": 0,
+        "bottomNavVisible": true
+      }
+    }
+  ],
+  "generatedAt": "2026-03-07T04:07:06.425Z"
+}

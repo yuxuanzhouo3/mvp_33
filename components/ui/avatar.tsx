@@ -53,6 +53,8 @@ function Avatar({
 
 function AvatarImage({
   className,
+  onError,
+  onLoad,
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Image>) {
   return (
@@ -60,9 +62,16 @@ function AvatarImage({
       data-slot="avatar-image"
       className={cn('aspect-square size-full rounded-[inherit] object-cover', className)}
       onError={(e) => {
-        // 当图片加载失败时,隐藏图片元素以显示 Fallback
+        // 当图片加载失败时，隐藏图片元素以显示 Fallback
         const target = e.target as HTMLImageElement
         target.style.display = 'none'
+        onError?.(e)
+      }}
+      onLoad={(e) => {
+        // 如果后续 src 恢复有效，确保图片重新显示
+        const target = e.target as HTMLImageElement
+        target.style.display = ''
+        onLoad?.(e)
       }}
       {...props}
     />
@@ -79,9 +88,12 @@ function AvatarFallback({
   children,
   ...props
 }: AvatarFallbackProps) {
-  // If name is provided, use it to generate color and initials
-  const initials = name ? getInitials(name) : (children as string) || '?'
-  const bgColor = name ? getAvatarColor(name) : undefined
+  const normalizedName = typeof name === 'string' ? name.trim() : ''
+  const fallbackText = typeof children === 'string' ? children.trim() : ''
+  const initials = normalizedName
+    ? getInitials(normalizedName)
+    : (fallbackText || '?').slice(0, 1).toUpperCase()
+  const bgColor = normalizedName ? getAvatarColor(normalizedName) : '#94A3B8'
   
   return (
     <AvatarPrimitive.Fallback
@@ -90,10 +102,10 @@ function AvatarFallback({
         'flex size-full items-center justify-center rounded-[inherit] text-sm font-medium text-white',
         className,
       )}
-      style={bgColor ? { backgroundColor: bgColor } : undefined}
+      style={{ backgroundColor: bgColor }}
       {...props}
     >
-      {name ? initials : children}
+      {initials}
     </AvatarPrimitive.Fallback>
   )
 }

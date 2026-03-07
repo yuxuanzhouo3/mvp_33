@@ -18,6 +18,7 @@ function loadEnvFile(filePath) {
 }
 
 loadEnvFile(path.join(__dirname, '..', '.env'));
+loadEnvFile(path.join(__dirname, '..', '.env.local'));
 loadEnvFile(path.join(__dirname, '..', '.env.cn'));
 
 const cloudbase = require('@cloudbase/node-sdk');

@@ -32,27 +32,27 @@ export default function SettingsPage() {
   return (
     <div className="flex h-screen min-w-0 flex-col mobile-overscroll-contain">
       <div className="flex-1 overflow-y-auto mobile-overscroll-contain">
-        <div className="container mx-auto max-w-4xl px-4 py-8">
+        <div className="container mx-auto max-w-4xl px-4 py-6 pb-[max(1rem,env(safe-area-inset-bottom))] sm:py-8">
       <Button
         variant="ghost"
         size="sm"
         onClick={() => router.back()}
-        className="mb-4"
+        className="mb-4 h-9 px-2"
       >
         <ArrowLeft className="h-4 w-4 mr-2" />
         Back
       </Button>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Settings</h1>
+        <h1 className="text-2xl font-bold mb-2 sm:text-3xl">Settings</h1>
         <p className="text-muted-foreground">Manage your subscription and usage</p>
       </div>
 
       {/* Subscription Status */}
       <Card className="mb-6">
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex flex-wrap items-center gap-2">
                 Subscription Status
                 <SubscriptionBadge subscription={subscription} showDays />
               </CardTitle>
@@ -72,7 +72,7 @@ export default function SettingsPage() {
               <Button
                 onClick={() => router.push('/payment')}
                 variant="default"
-                className="gap-2"
+                className="w-full gap-2 sm:w-auto"
               >
                 Upgrade to Pro
               </Button>
@@ -81,7 +81,7 @@ export default function SettingsPage() {
               <Button
                 onClick={() => router.push('/payment')}
                 variant="outline"
-                className="gap-2"
+                className="w-full gap-2 sm:w-auto"
               >
                 Renew Subscription
               </Button>
@@ -92,7 +92,7 @@ export default function SettingsPage() {
           {subscription.type === 'free' && (
             <Alert>
               <AlertDescription>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="font-medium mb-1">Free Plan Limits</p>
                     <ul className="text-sm text-muted-foreground space-y-1">
@@ -104,7 +104,7 @@ export default function SettingsPage() {
                   </div>
                   <Button
                     onClick={() => router.push('/payment')}
-                    className="gap-2"
+                    className="w-full gap-2 sm:w-auto"
                   >
                     View Pro Plans
                     <ArrowRight className="h-4 w-4" />

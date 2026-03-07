@@ -197,7 +197,12 @@ export function GlobalAnnouncement({ isOpen, onClose, workspaceId }: GlobalAnnou
             </div>
           </div>
         </div>
-        <button onClick={onClose} className="p-2 hover:bg-accent rounded-full text-muted-foreground transition-colors">
+        <button
+          onClick={onClose}
+          className="p-2 hover:bg-accent rounded-full text-muted-foreground transition-colors"
+          aria-label={language === 'zh' ? '关闭公告' : 'Close announcement'}
+          title={language === 'zh' ? '关闭公告' : 'Close announcement'}
+        >
           <X size={20} />
         </button>
       </div>

@@ -11,7 +11,7 @@ import { MessageWithSender, User } from '@/lib/types'
 
 import { cn } from '@/lib/utils'
 
-import { File, ImageIcon, Video, Smile, ChevronDown, ChevronUp, MoreVertical, Edit2, Trash2, Pin, PinOff, EyeOff, Reply, RotateCcw, Copy, Download, Eye, X, Phone, Clock, CheckCircle, XCircle, Bell } from 'lucide-react'
+import { File, ImageIcon, Video, Smile, ChevronDown, ChevronUp, Edit2, Trash2, Pin, PinOff, EyeOff, Reply, RotateCcw, Copy, Download, Eye, X, Phone, Clock, CheckCircle, XCircle, Bell } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
@@ -19,18 +19,6 @@ import { useSettings } from '@/lib/settings-context'
 
 import { getTranslation } from '@/lib/i18n'
 import { useIsMobile } from '@/hooks/use-mobile'
-
-import {
-
-  DropdownMenu,
-
-  DropdownMenuContent,
-
-  DropdownMenuItem,
-
-  DropdownMenuTrigger,
-
-} from '@/components/ui/dropdown-menu'
 
 import {
 
@@ -145,8 +133,6 @@ export function MessageList({
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
 
   const [editContent, setEditContent] = useState('')
-
-  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
 
   const { language } = useSettings()
   const isMobile = useIsMobile()
@@ -840,7 +826,7 @@ export function MessageList({
 
       >
 
-        <div className={cn("p-6", isMobile && "p-3")}>
+        <div className={cn("p-6", isMobile && "p-2")}>
 
           {isLoading && messages.length === 0 ? (
 
@@ -848,43 +834,86 @@ export function MessageList({
 
           ) : (
 
-            <div className={cn("space-y-4 px-4", isMobile && "space-y-3 px-3")} ref={scrollRef}>
+            <div className={cn("space-y-4 px-4", isMobile && "space-y-3 px-1")} ref={scrollRef}>
 
             {messages.map((message, index) => {
 
-            const isOwn = message.sender_id === currentUser.id
+            const normalizedCurrentUserId = String(currentUser?.id || '').trim()
 
-            const participantFallback = message.sender_id
-              ? participantsById?.[message.sender_id]
+            const normalizedCurrentUserEmail = String(currentUser?.email || '').trim().toLowerCase()
+
+            const normalizedSenderId = String(message.sender_id || (message.sender as any)?.id || '').trim()
+
+            const normalizedSenderEmail = String((message.sender as any)?.email || '').trim().toLowerCase()
+
+            const isOwn =
+
+              (normalizedCurrentUserId !== '' && normalizedSenderId === normalizedCurrentUserId) ||
+
+              (normalizedCurrentUserEmail !== '' && normalizedSenderEmail === normalizedCurrentUserEmail)
+
+            const participantLookupId = normalizedSenderId || String((message.sender as any)?.id || '').trim()
+
+            const participantFallback = participantLookupId
+
+              ? participantsById?.[participantLookupId]
+
               : undefined
+
+            const hasSenderIdentity = (sender: User | undefined) =>
+              Boolean(
+                sender?.full_name ||
+                sender?.username ||
+                sender?.avatar_url ||
+                (sender as any)?.group_nickname
+              )
 
             // Fallback sender 信息：
             // 1) message.sender 自身完整信息
             // 2) 当前会话成员映射 participantsById
             // 3) 自己发送的消息补成 currentUser
             const displaySender = (() => {
-              if (message.sender?.full_name || message.sender?.avatar_url) {
-                return message.sender
+              if (isOwn && currentUser) {
+                return {
+                  ...(participantFallback || {}),
+                  ...(message.sender || {}),
+                  ...currentUser,
+                  id: currentUser.id,
+                } as User
+              }
+              if (hasSenderIdentity(message.sender)) {
+                return {
+                  ...(participantFallback || {}),
+                  ...(message.sender || {}),
+                } as User
               }
               if (participantFallback) {
                 return participantFallback
               }
-              if (isOwn && currentUser) {
-                return currentUser
-              }
-              if (message.sender_id) {
+              if (normalizedSenderId) {
                 return {
-                  id: message.sender_id,
+                  id: normalizedSenderId,
                   email: '',
                   username: '',
                   full_name: '',
                   avatar_url: null,
                 } as User
               }
-              return undefined
+              return {
+                id: '',
+                email: '',
+                username: language === 'zh' ? '\u7528\u6237' : 'User',
+                full_name: language === 'zh' ? '\u7528\u6237' : 'User',
+                avatar_url: null,
+              } as User
             })()
 
-            const isSystemWithoutSender = message.type === 'system' && !message.sender_id
+            const isSystemWithoutSender = message.type === 'system' && !normalizedSenderId
+
+            const resolvedAvatarUrl =
+              isOwn
+                ? currentUser?.avatar_url || displaySender?.avatar_url
+                : displaySender?.avatar_url
 
             // 获取显示名称：优先显示群昵称，其次显示真实姓名
             const getDisplayName = (sender: User | undefined) => {
@@ -893,9 +922,10 @@ export function MessageList({
                 (sender as any).group_nickname ||
                 sender.full_name ||
                 sender.username ||
+                sender.email ||
                 (message.type === 'system'
                   ? (language === 'zh' ? '系统消息' : 'System')
-                  : '')
+                  : (language === 'zh' ? '用户' : 'User'))
               )
             }
 
@@ -986,18 +1016,24 @@ export function MessageList({
                 ) : (
 
                 <div
+                  data-testid="chat-message-row"
+                  data-message-side={isOwn ? 'own' : 'peer'}
                   className={cn(
-                    'flex items-start gap-2', // 头像和聊天框并排，从顶部对齐
-                    grouped && 'mt-1',
+                    'flex items-start gap-2', // message row aligns avatar and bubble from the top
+                    isMobile && 'gap-1.5',
+                    isMobile && 'px-0',
+                    grouped && !isMobile && 'mt-1',
                     isOwn && 'flex-row-reverse'
                   )}
                 >
 
                   {/* 头像：系统消息（无 sender）不渲染头像占位 */}
-                  {!grouped && displaySender && (
+                  {displaySender && (
                     <button
                       type="button"
-                      className="shrink-0 mt-0.5 rounded-full hover:opacity-80 transition-opacity"
+                      data-testid="chat-message-avatar"
+                      data-message-side={isOwn ? 'own' : 'peer'}
+                      className="touch-compact shrink-0 mt-0.5 rounded-full hover:opacity-80 transition-opacity"
                       onClick={() => {
                         if (displaySender?.id) {
                           router.push(`/contacts?userId=${displaySender.id}`)
@@ -1005,8 +1041,12 @@ export function MessageList({
                       }}
                       title={getDisplayName(displaySender)}
                     >
-                      <Avatar className={cn("h-8 w-8", isMobile && "h-9 w-9")} userId={displaySender?.id} showOnlineStatus={true}>
-                        <AvatarImage src={displaySender?.avatar_url || undefined} />
+                      <Avatar
+                        className={cn("h-8 w-8")}
+                        userId={displaySender?.id}
+                        showOnlineStatus={false}
+                      >
+                        <AvatarImage src={resolvedAvatarUrl || undefined} />
                         <AvatarFallback name={getDisplayName(displaySender)}>
                           {(getDisplayName(displaySender) || '?')
                             .split(' ')
@@ -1017,17 +1057,15 @@ export function MessageList({
                     </button>
                   )}
 
-                  {grouped && displaySender && <div className="w-8 shrink-0" />}
-
 
 
                   <div 
 
-                    className={cn('flex flex-col', isOwn && 'items-end')}
-
-                    onMouseEnter={() => setHoveredMessageId(message.id)}
-
-                    onMouseLeave={() => setHoveredMessageId(null)}
+                    className={cn(
+                      'flex flex-col',
+                      isOwn && 'items-end',
+                      isMobile && isOwn && 'w-fit max-w-[calc(100%-2.75rem)]'
+                    )}
 
                   >
 
@@ -1054,7 +1092,13 @@ export function MessageList({
 
 
 
-                    <div className="flex items-end gap-2">
+                    <div
+                      className={cn(
+                        "flex items-end",
+                        isMobile ? "relative" : "gap-2",
+                        isMobile && isOwn && "w-fit"
+                      )}
+                    >
 
                       <ContextMenu>
 
@@ -1062,18 +1106,25 @@ export function MessageList({
 
                           <div
 
+                            data-testid="chat-message-bubble"
+                            data-message-side={isOwn ? 'own' : 'peer'}
                             className={cn(
 
                               'relative group break-words',
                               isMobile
-                                ? 'max-w-[85%] px-3 py-2'
+                                ? (message.type === 'text' || message.type === 'system'
+                                  ? 'w-fit max-w-[16rem] min-w-[4.75rem] px-3 py-2 rounded-[14px]'
+                                  : 'max-w-[16rem] rounded-[14px] p-2')
                                 : 'px-4 py-2.5 max-w-xl',
-                              isMobile && (message.type === 'text' || message.type === 'system') && 'w-fit min-w-[3.5rem]',
                               isOwn
 
-                                ? 'bg-[#E8F3FF] text-gray-900 rounded-lg'
+                                ? (isMobile
+                                  ? 'mobile-chat-bubble-own text-white shadow-[0_1px_1px_rgba(0,0,0,0.08)]'
+                                  : 'bg-[#E8F3FF] text-gray-900 rounded-lg')
 
-                                : 'bg-white text-gray-900 rounded-lg shadow-sm border border-gray-200',
+                                : (isMobile
+                                  ? 'mobile-chat-bubble-peer text-[#111827] border border-[#E6ECF2] shadow-[0_1px_1px_rgba(0,0,0,0.05)]'
+                                  : 'bg-white text-gray-900 rounded-lg shadow-sm border border-gray-200'),
 
                               message.type !== 'text' && 'p-2'
 
@@ -1471,7 +1522,7 @@ export function MessageList({
                         <p
                           className={cn(
                             isMobile
-                              ? 'text-[15px] leading-[1.5] whitespace-pre-wrap break-words'
+                              ? 'text-[14px] leading-[1.45] whitespace-pre-wrap break-words'
                               : 'text-[14px] leading-[1.6] whitespace-pre-wrap break-words',
                             (message.is_deleted || message.is_recalled) && 'italic opacity-60',
                           )}
@@ -1632,108 +1683,6 @@ export function MessageList({
                         </ContextMenuContent>
 
                       </ContextMenu>
-
-                      
-
-                      {hoveredMessageId === message.id && !message.is_deleted && !message.is_recalled && (
-
-                        <DropdownMenu>
-
-                          <DropdownMenuTrigger asChild>
-
-                            <Button
-
-                              size="icon"
-
-                              variant="ghost"
-
-                              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-
-                            >
-
-                              <MoreVertical className="h-4 w-4" />
-
-                            </Button>
-
-                          </DropdownMenuTrigger>
-
-                          <DropdownMenuContent align={isOwn ? 'end' : 'start'}>
-
-                            {isOwn && message.type === 'text' && onEditMessage && (
-
-                              <DropdownMenuItem onClick={() => handleEdit(message)}>
-
-                                <Edit2 className="h-4 w-4 mr-2" />
-
-                                {t('edit')}
-
-                              </DropdownMenuItem>
-
-                            )}
-
-                            {(canCopyText || canCopyImage) && (
-
-                              <DropdownMenuItem
-
-                                onClick={() => {
-
-                                  if (canCopyImage) {
-
-                                    copyImageToClipboard(message)
-
-                                  } else if (canCopyText) {
-
-                                    copyTextToClipboard(copyableText)
-
-                                  }
-
-                                }}
-
-                              >
-
-                                <Copy className="h-4 w-4 mr-2" />
-
-                                Copy
-
-                              </DropdownMenuItem>
-
-                            )}
-
-                            {isOwn && onDeleteMessage && (
-
-                              <DropdownMenuItem 
-
-                                onClick={() => handleDelete(message.id)}
-
-                                className="text-destructive"
-
-                              >
-
-                                <Trash2 className="h-4 w-4 mr-2" />
-
-                                {t('deleteMessage')}
-
-                              </DropdownMenuItem>
-
-                            )}
-
-                            {onAddReaction && (
-
-                              <DropdownMenuItem onClick={() => handleReactionClick(message, '👍')}>
-
-                                <Smile className="h-4 w-4 mr-2" />
-
-                                {t('addReaction')}
-
-                              </DropdownMenuItem>
-
-                            )}
-
-                          </DropdownMenuContent>
-
-                        </DropdownMenu>
-
-                      )}
 
                     </div>
 
@@ -2062,5 +2011,3 @@ export function MessageList({
   )
 
 }
-
-

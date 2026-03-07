@@ -18,7 +18,7 @@ export function ChatTabs({ activeTab, onTabChange, className }: ChatTabsProps) {
 
   return (
     <div className={cn('border-b bg-background', className)}>
-      <div className="flex items-center px-4">
+      <div className="flex items-center px-2.5 md:px-4">
         {tabs.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id
@@ -28,14 +28,14 @@ export function ChatTabs({ activeTab, onTabChange, className }: ChatTabsProps) {
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors relative',
+                'flex items-center gap-1 px-2.5 py-2 text-[13px] font-medium transition-colors relative md:gap-1.5 md:px-3 md:py-2.5 md:text-sm',
                 'hover:text-foreground',
                 isActive
                   ? 'text-foreground'
                   : 'text-muted-foreground'
               )}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-3.5 w-3.5 md:h-4 md:w-4" />
               <span>{tab.label}</span>
               {isActive && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />

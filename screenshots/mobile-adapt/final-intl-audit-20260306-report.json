@@ -1,0 +1,295 @@
+{
+  "runTag": "final-intl-audit-20260306",
+  "baseUrl": "http://127.0.0.1:3000",
+  "email": "gan2@example.com",
+  "steps": [
+    {
+      "step": "chat-initial",
+      "screenshot": "final-intl-audit-20260306-01-chat-initial.png",
+      "metrics": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "url": "/chat",
+        "hasHorizontalOverflow": false,
+        "htmlScrollWidth": 390,
+        "bodyScrollWidth": 390,
+        "mobileOverlayVisible": false,
+        "mobileOverlayCount": 0,
+        "bottomNavVisible": true,
+        "bottomNavButtonTexts": [
+          "消息",
+          "联系人",
+          "工作区",
+          "频道",
+          "设置"
+        ],
+        "bottomNavLinks": [
+          {
+            "text": "消息",
+            "href": "/chat"
+          },
+          {
+            "text": "联系人",
+            "href": "/contacts"
+          },
+          {
+            "text": "工作区",
+            "href": "/workspace-members"
+          },
+          {
+            "text": "频道",
+            "href": "/channels"
+          },
+          {
+            "text": "设置",
+            "href": "/settings"
+          }
+        ]
+      }
+    },
+    {
+      "step": "chat-after-close-overlay",
+      "screenshot": "final-intl-audit-20260306-02-chat-after-close-overlay.png",
+      "metrics": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "url": "/chat",
+        "hasHorizontalOverflow": false,
+        "htmlScrollWidth": 390,
+        "bodyScrollWidth": 390,
+        "mobileOverlayVisible": false,
+        "mobileOverlayCount": 0,
+        "bottomNavVisible": true,
+        "bottomNavButtonTexts": [
+          "消息",
+          "联系人",
+          "工作区",
+          "频道",
+          "设置"
+        ],
+        "bottomNavLinks": [
+          {
+            "text": "消息",
+            "href": "/chat"
+          },
+          {
+            "text": "联系人",
+            "href": "/contacts"
+          },
+          {
+            "text": "工作区",
+            "href": "/workspace-members"
+          },
+          {
+            "text": "频道",
+            "href": "/channels"
+          },
+          {
+            "text": "设置",
+            "href": "/settings"
+          }
+        ]
+      },
+      "closedChatOverlay": false
+    },
+    {
+      "step": "after-click-channels",
+      "screenshot": "final-intl-audit-20260306-03-after-click-channels.png",
+      "metrics": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "url": "/channels",
+        "hasHorizontalOverflow": false,
+        "htmlScrollWidth": 390,
+        "bodyScrollWidth": 390,
+        "mobileOverlayVisible": false,
+        "mobileOverlayCount": 0,
+        "bottomNavVisible": true,
+        "bottomNavButtonTexts": [
+          "1消息",
+          "联系人",
+          "工作区",
+          "频道",
+          "设置"
+        ],
+        "bottomNavLinks": [
+          {
+            "text": "1消息",
+            "href": "/chat"
+          },
+          {
+            "text": "联系人",
+            "href": "/contacts"
+          },
+          {
+            "text": "工作区",
+            "href": "/workspace-members"
+          },
+          {
+            "text": "频道",
+            "href": "/channels"
+          },
+          {
+            "text": "设置",
+            "href": "/settings"
+          }
+        ]
+      },
+      "selector": "nav.border-t a:has-text(\"频道\")",
+      "urlAfterClick": "http://127.0.0.1:3000/channels",
+      "navigated": true
+    },
+    {
+      "step": "channels-after-close-overlay",
+      "screenshot": "final-intl-audit-20260306-04-channels-after-close-overlay.png",
+      "metrics": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "url": "/channels",
+        "hasHorizontalOverflow": false,
+        "htmlScrollWidth": 390,
+        "bodyScrollWidth": 390,
+        "mobileOverlayVisible": false,
+        "mobileOverlayCount": 0,
+        "bottomNavVisible": true,
+        "bottomNavButtonTexts": [
+          "1消息",
+          "联系人",
+          "工作区",
+          "频道",
+          "设置"
+        ],
+        "bottomNavLinks": [
+          {
+            "text": "1消息",
+            "href": "/chat"
+          },
+          {
+            "text": "联系人",
+            "href": "/contacts"
+          },
+          {
+            "text": "工作区",
+            "href": "/workspace-members"
+          },
+          {
+            "text": "频道",
+            "href": "/channels"
+          },
+          {
+            "text": "设置",
+            "href": "/settings"
+          }
+        ]
+      },
+      "closedChannelsOverlay": false
+    },
+    {
+      "step": "after-click-settings",
+      "screenshot": "final-intl-audit-20260306-05-after-click-settings.png",
+      "metrics": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "url": "/settings",
+        "hasHorizontalOverflow": false,
+        "htmlScrollWidth": 390,
+        "bodyScrollWidth": 390,
+        "mobileOverlayVisible": false,
+        "mobileOverlayCount": 0,
+        "bottomNavVisible": true,
+        "bottomNavButtonTexts": [
+          "1消息",
+          "联系人",
+          "工作区",
+          "频道",
+          "设置"
+        ],
+        "bottomNavLinks": [
+          {
+            "text": "1消息",
+            "href": "/chat"
+          },
+          {
+            "text": "联系人",
+            "href": "/contacts"
+          },
+          {
+            "text": "工作区",
+            "href": "/workspace-members"
+          },
+          {
+            "text": "频道",
+            "href": "/channels"
+          },
+          {
+            "text": "设置",
+            "href": "/settings"
+          }
+        ]
+      },
+      "selector": "nav.border-t a:has-text(\"设置\")",
+      "urlAfterClick": "http://127.0.0.1:3000/settings",
+      "navigated": true
+    },
+    {
+      "step": "after-click-chat",
+      "screenshot": "final-intl-audit-20260306-06-after-click-chat.png",
+      "metrics": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "url": "/chat",
+        "hasHorizontalOverflow": false,
+        "htmlScrollWidth": 390,
+        "bodyScrollWidth": 390,
+        "mobileOverlayVisible": false,
+        "mobileOverlayCount": 0,
+        "bottomNavVisible": true,
+        "bottomNavButtonTexts": [
+          "1消息",
+          "联系人",
+          "工作区",
+          "频道",
+          "设置"
+        ],
+        "bottomNavLinks": [
+          {
+            "text": "1消息",
+            "href": "/chat"
+          },
+          {
+            "text": "联系人",
+            "href": "/contacts"
+          },
+          {
+            "text": "工作区",
+            "href": "/workspace-members"
+          },
+          {
+            "text": "频道",
+            "href": "/channels"
+          },
+          {
+            "text": "设置",
+            "href": "/settings"
+          }
+        ]
+      },
+      "selector": "nav.border-t a:has-text(\"消息\")",
+      "urlAfterClick": "http://127.0.0.1:3000/chat",
+      "navigated": true
+    }
+  ],
+  "generatedAt": "2026-03-06T12:45:55.609Z"
+}
