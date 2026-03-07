@@ -97,12 +97,122 @@ const SYSTEM_ASSISTANT_IDS = new Set([
   '00000000-0000-0000-0000-000000000001',
 ])
 const CONVERSATIONS_UPDATED_EVENT_SOURCE = 'chat-content'
+// Some mobile/webview gateways reject multipart payloads above ~4.5MB with plain-text 413 responses.
+const MOBILE_UPLOAD_GATEWAY_SAFE_LIMIT_BYTES = Math.floor(4.5 * 1024 * 1024)
+const IMAGE_AUTO_COMPRESS_THRESHOLD_BYTES = Math.floor(4.2 * 1024 * 1024)
+const IMAGE_AUTO_COMPRESS_TARGET_BYTES = Math.floor(3.8 * 1024 * 1024)
+const IMAGE_AUTO_COMPRESS_MAX_EDGE = 1920
 
 type ConversationMetaState = 'idle' | 'loading' | 'ready' | 'failed'
 
 const isSystemAssistantUserId = (userId?: string | null): boolean => {
   if (!userId) return false
   return SYSTEM_ASSISTANT_IDS.has(userId)
+}
+
+const canvasToJpegBlob = (canvas: HTMLCanvasElement, quality: number): Promise<Blob | null> =>
+  new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
+
+const tryCompressImageForUpload = async (file: File): Promise<File> => {
+  if (typeof window === 'undefined') return file
+  if (!file.type.startsWith('image/')) return file
+  if (file.size <= IMAGE_AUTO_COMPRESS_THRESHOLD_BYTES) return file
+
+  const objectUrl = URL.createObjectURL(file)
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error('Failed to decode image'))
+      img.src = objectUrl
+    })
+
+    const sourceWidth = image.naturalWidth || image.width
+    const sourceHeight = image.naturalHeight || image.height
+    if (!sourceWidth || !sourceHeight) {
+      return file
+    }
+
+    const scale = Math.min(1, IMAGE_AUTO_COMPRESS_MAX_EDGE / Math.max(sourceWidth, sourceHeight))
+    let width = Math.max(1, Math.round(sourceWidth * scale))
+    let height = Math.max(1, Math.round(sourceHeight * scale))
+
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
+    if (!context) return file
+
+    let bestBlob: Blob | null = null
+    const maxAttempts = 5
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      canvas.width = width
+      canvas.height = height
+      context.clearRect(0, 0, width, height)
+      context.drawImage(image, 0, 0, width, height)
+
+      const quality = Math.max(0.5, 0.88 - attempt * 0.1)
+      const blob = await canvasToJpegBlob(canvas, quality)
+      if (!blob) continue
+      bestBlob = blob
+
+      if (blob.size <= IMAGE_AUTO_COMPRESS_TARGET_BYTES) {
+        break
+      }
+
+      width = Math.max(1, Math.round(width * 0.86))
+      height = Math.max(1, Math.round(height * 0.86))
+    }
+
+    if (!bestBlob) return file
+    if (bestBlob.size >= file.size) return file
+
+    const baseName = file.name.replace(/\.[^.]+$/, '')
+    const safeBaseName = baseName || 'image'
+    return new File([bestBlob], `${safeBaseName}.jpg`, {
+      type: 'image/jpeg',
+      lastModified: Date.now(),
+    })
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
+}
+
+const isPayloadTooLargeText = (text: string): boolean =>
+  /request entity too large|payload too large|entity too large|request too large/i.test(text)
+
+const parseUploadResponse = async (response: Response): Promise<any> => {
+  const rawText = await response.text()
+  let payload: any = null
+
+  if (rawText) {
+    try {
+      payload = JSON.parse(rawText)
+    } catch {
+      payload = null
+    }
+  }
+
+  if (!response.ok) {
+    const payloadError =
+      payload?.error ||
+      payload?.message ||
+      payload?.details
+
+    if (response.status === 413 || isPayloadTooLargeText(rawText)) {
+      const gatewayLimitMB = (MOBILE_UPLOAD_GATEWAY_SAFE_LIMIT_BYTES / (1024 * 1024)).toFixed(1)
+      throw new Error(`图片文件过大，上传网关限制约 ${gatewayLimitMB}MB。请压缩后重试。`)
+    }
+
+    const snippet = (rawText || '').trim().slice(0, 120)
+    throw new Error(payloadError || (snippet ? `上传失败(${response.status}): ${snippet}` : `上传失败(${response.status})`))
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    const snippet = (rawText || '').trim().slice(0, 120)
+    throw new Error(snippet ? `上传失败: ${snippet}` : '上传失败: 服务端返回格式异常')
+  }
+
+  return payload
 }
 
 function ChatPageContent() {
@@ -5057,19 +5167,37 @@ function ChatPageContent() {
 
     }
 
+    let fileForSend = file
+    if (
+      fileForSend &&
+      fileForSend.type.startsWith('image/') &&
+      fileForSend.size > IMAGE_AUTO_COMPRESS_THRESHOLD_BYTES
+    ) {
+      try {
+        const compressed = await tryCompressImageForUpload(fileForSend)
+        if (compressed.size < fileForSend.size) {
+          console.log('[CHAT UPLOAD] Auto-compressed image before upload:', {
+            originalSize: fileForSend.size,
+            compressedSize: compressed.size,
+            originalName: fileForSend.name,
+            compressedName: compressed.name,
+          })
+          fileForSend = compressed
+        }
+      } catch (compressionError) {
+        console.warn('[CHAT UPLOAD] Failed to auto-compress image, fallback to original file:', compressionError)
+      }
+    }
+
     // Check file size limit if file is provided
-
-    if (file && !limits.canUploadFile(file.size)) {
-
+    if (fileForSend && !limits.canUploadFile(fileForSend.size)) {
       setShowLimitAlert('file')
-
       return
-
     }
 
     const hasText = content.trim().length > 0
 
-    const hasFile = !!file
+    const hasFile = !!fileForSend
 
     // If both file and text exist, send them separately: file first, then text
 
@@ -5077,7 +5205,7 @@ function ChatPageContent() {
 
       // First, send the file message (without text content)
 
-      await handleSendMessage('', type, file, metadata)
+      await handleSendMessage('', type, fileForSend, metadata)
 
       // Then, send the text message separately
 
@@ -5123,17 +5251,17 @@ function ChatPageContent() {
 
       reply_to: replyingToMessageId || undefined,
 
-      metadata: file ? {
+      metadata: fileForSend ? {
 
-        file_name: file.name,
+        file_name: fileForSend.name,
 
-        file_size: file.size,
+        file_size: fileForSend.size,
 
-        mime_type: file.type,
+        mime_type: fileForSend.type,
 
-        file_url: URL.createObjectURL(file),
+        file_url: URL.createObjectURL(fileForSend),
 
-        thumbnail_url: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+        thumbnail_url: fileForSend.type.startsWith('image/') ? URL.createObjectURL(fileForSend) : undefined,
 
       } : metadata || undefined,
 
@@ -5173,7 +5301,7 @@ function ChatPageContent() {
 
             } else if (type === 'file') {
 
-              displayContent = `📎 ${file?.name || 'File'}`
+              displayContent = `📎 ${fileForSend?.name || 'File'}`
 
             } else if (type === 'video') {
 
@@ -5181,7 +5309,7 @@ function ChatPageContent() {
 
             } else {
 
-              displayContent = file?.name || ''
+              displayContent = fileForSend?.name || ''
 
             }
 
@@ -5252,13 +5380,13 @@ function ChatPageContent() {
 
       let fileMetadata = metadata
 
-      if (file) {
+      if (fileForSend) {
 
         try {
 
           const formData = new FormData()
 
-          formData.append('file', file)
+          formData.append('file', fileForSend)
 
           formData.append('conversationId', selectedConversationId)
 
@@ -5270,7 +5398,7 @@ function ChatPageContent() {
 
           })
 
-          const uploadData = await uploadResponse.json()
+          const uploadData = await parseUploadResponse(uploadResponse)
 
           
 
@@ -5292,11 +5420,11 @@ function ChatPageContent() {
 
             file_size: uploadData.file_size,
 
-            mime_type: uploadData.mime_type || uploadData.file_type || file.type,
+            mime_type: uploadData.mime_type || uploadData.file_type || fileForSend.type,
 
             file_url: uploadData.file_url,
 
-            thumbnail_url: file.type.startsWith('image/') ? uploadData.file_url : undefined,
+            thumbnail_url: fileForSend.type.startsWith('image/') ? uploadData.file_url : undefined,
 
           }
 
@@ -5310,7 +5438,7 @@ function ChatPageContent() {
 
           // Show error to user
 
-          alert(`Failed to upload file: ${uploadError.message || 'Unknown error'}`)
+          alert(uploadError?.message || '上传文件失败')
 
           return
 
@@ -5324,7 +5452,7 @@ function ChatPageContent() {
 
       const messageContent = hasFile 
 
-        ? (file?.name || '') 
+        ? (fileForSend?.name || '') 
 
         : (type === 'code' && metadata?.code_content 
 
