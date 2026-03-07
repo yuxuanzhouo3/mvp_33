@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getMessages, createMessage } from '@/lib/database/supabase/messages'
 import { getDatabaseClientForUser } from '@/lib/database-router'
 import { getMessages as getMessagesCN, createMessage as createMessageCN } from '@/lib/database/cloudbase/messages'
+import { grantReferralFirstUseReward } from '@/lib/market/referrals'
 
 // GET /api/messages?conversationId=xxx
 export async function GET(request: NextRequest) {
@@ -208,6 +209,13 @@ export async function POST(request: NextRequest) {
         metadata,
       )
 
+      await grantReferralFirstUseReward({
+        invitedUserId: user.id,
+        toolId: 'chat',
+      }).catch((error) => {
+        console.warn('[messages][CN] grantReferralFirstUseReward skipped:', error)
+      })
+
       return NextResponse.json({
         success: true,
         message,
@@ -292,6 +300,13 @@ export async function POST(request: NextRequest) {
       type,
       metadata
     )
+
+    await grantReferralFirstUseReward({
+      invitedUserId: user.id,
+      toolId: 'chat',
+    }).catch((error) => {
+      console.warn('[messages][INTL] grantReferralFirstUseReward skipped:', error)
+    })
     
     console.log('✅ API: Message created:', {
       id: message.id,

@@ -8,6 +8,7 @@ import { IS_DOMESTIC_VERSION } from '@/config'
 import { verifyPassword } from '@/lib/utils/password'
 import { recordDevice } from '@/lib/database/devices'
 import { buildDeviceFingerprint, parseDeviceInfo, getClientIP, getLocationFromIP } from '@/lib/utils/device-parser'
+import { bindReferralFromRequest } from '@/lib/market/referrals'
 
 interface DeviceRequestPayload {
   deviceModel?: string
@@ -433,6 +434,16 @@ export async function POST(request: NextRequest) {
       // Don't fail login if device recording fails
     }
 
+    try {
+      await bindReferralFromRequest({
+        request,
+        invitedUserId: updatedUser.id,
+        invitedEmail: updatedUser.email,
+      })
+    } catch (bindError) {
+      console.warn('[LOGIN] Referral binding skipped:', bindError)
+    }
+
     return NextResponse.json({
       success: true,
       user: updatedUser,
@@ -580,6 +591,16 @@ async function handleCloudBaseLogin(
     }
 
     // Create response with session cookie
+    try {
+      await bindReferralFromRequest({
+        request,
+        invitedUserId: responseUser.id,
+        invitedEmail: responseUser.email,
+      })
+    } catch (bindError) {
+      console.warn('[LOGIN] CloudBase referral binding skipped:', bindError)
+    }
+
     const response = NextResponse.json({
       success: true,
       user: responseUser,

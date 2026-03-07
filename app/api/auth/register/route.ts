@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { hashPassword } from '@/lib/utils/password'
 import { IS_DOMESTIC_VERSION, getDeploymentRegion } from '@/config'
 import { verificationCodeService } from '@/lib/email/verification-code-service'
+import { bindReferralFromRequest } from '@/lib/market/referrals'
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
     console.log('[REGISTER] Checking version:', { IS_DOMESTIC_VERSION })
     if (IS_DOMESTIC_VERSION) {
       console.log('[REGISTER] ✓ Using CloudBase (domestic version)')
-      return handleCloudBaseRegister(email, password, name, verificationCode)
+      return handleCloudBaseRegister(request, email, password, name, verificationCode)
     } else {
       console.log('[REGISTER] ✓ Using Supabase (global version)')
     }
@@ -279,6 +280,16 @@ export async function POST(request: NextRequest) {
       // 不阻塞注册流程
     }
 
+    try {
+      await bindReferralFromRequest({
+        request,
+        invitedUserId: user.id,
+        invitedEmail: user.email,
+      })
+    } catch (bindError) {
+      console.warn('[REGISTER] Referral binding skipped:', bindError)
+    }
+
     return NextResponse.json({
       success: true,
       user,
@@ -299,6 +310,7 @@ export async function POST(request: NextRequest) {
  * Requires email verification code
  */
 async function handleCloudBaseRegister(
+  request: NextRequest,
   email: string,
   password: string,
   name: string,
@@ -433,6 +445,16 @@ async function handleCloudBaseRegister(
       subscription_expires_at: null,
       created_at: userData.created_at,
       updated_at: userData.updated_at,
+    }
+
+    try {
+      await bindReferralFromRequest({
+        request,
+        invitedUserId: user.id,
+        invitedEmail: user.email,
+      })
+    } catch (bindError) {
+      console.warn('[REGISTER] CloudBase referral binding skipped:', bindError)
     }
 
     // Create session token

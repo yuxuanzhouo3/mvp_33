@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { bindReferralFromRequest } from '@/lib/market/referrals'
 
 function resolveAppOrigin(request: NextRequest): string {
   const envUrl =
@@ -131,6 +132,16 @@ export async function GET(request: NextRequest) {
       updated_at: dbUser?.updated_at || new Date().toISOString(),
       provider: 'google',
       provider_id: user.id,
+    }
+
+    try {
+      await bindReferralFromRequest({
+        request,
+        invitedUserId: userData.id,
+        invitedEmail: userData.email,
+      })
+    } catch (bindError) {
+      console.warn('[GOOGLE OAUTH] Referral binding skipped:', bindError)
     }
 
     // Store session token. Device will be recorded once on /login client side

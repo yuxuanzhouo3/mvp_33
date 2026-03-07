@@ -34,6 +34,14 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // 营销后台路由保护
+  if (pathname.startsWith("/market") && pathname !== "/market/login") {
+    const marketAdminSession = request.cookies.get("market_admin_session");
+    if (!marketAdminSession) {
+      return NextResponse.redirect(new URL("/market/login", request.url));
+    }
+  }
+
   // 初始化响应对象
   let supabaseResponse = NextResponse.next({
     request,

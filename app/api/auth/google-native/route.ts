@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { bindReferralFromRequest } from '@/lib/market/referrals'
 
 export async function POST(request: NextRequest) {
   try {
@@ -112,6 +113,16 @@ export async function POST(request: NextRequest) {
       updated_at: dbUser?.updated_at || nowIso,
       provider: 'google',
       provider_id: user.id,
+    }
+
+    try {
+      await bindReferralFromRequest({
+        request,
+        invitedUserId: responseUser.id,
+        invitedEmail: responseUser.email,
+      })
+    } catch (bindError) {
+      console.warn('[GOOGLE NATIVE] Referral binding skipped:', bindError)
     }
 
     return NextResponse.json({
