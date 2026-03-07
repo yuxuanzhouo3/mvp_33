@@ -281,8 +281,12 @@
       -webkit-overflow-scrolling: touch;
     }
 
+    html, body {
+      overscroll-behavior-y: none;
+    }
+
     .mobile-overscroll-contain {
-      overscroll-behavior-y: contain;
+      overscroll-behavior-y: none;
       touch-action: pan-y;
       -webkit-overflow-scrolling: touch;
     }

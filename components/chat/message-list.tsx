@@ -938,6 +938,8 @@ export function MessageList({
             const canCopyText = !!(copyableText && copyableText.trim() && !message.is_deleted)
 
             const canCopyImage = message.type === 'image' && !!message.metadata?.file_url && !message.is_deleted
+            const isImageMessage = message.type === 'image' && !!message.metadata?.file_url
+            const isMediaLikeMessage = isImageMessage || message.type === 'file' || message.type === 'video'
 
 
             // Use a stable key that doesn't change when message ID changes from temp to real
@@ -1064,7 +1066,11 @@ export function MessageList({
                     className={cn(
                       'flex flex-col',
                       isOwn && 'items-end',
-                      isMobile && isOwn && 'w-fit max-w-[calc(100%-2.75rem)]'
+                      isMobile && isOwn && (
+                        isMediaLikeMessage
+                          ? 'max-w-[calc(100%-2.75rem)]'
+                          : 'w-fit max-w-[calc(100%-2.75rem)]'
+                      )
                     )}
 
                   >
@@ -1096,7 +1102,7 @@ export function MessageList({
                       className={cn(
                         "flex items-end",
                         isMobile ? "relative" : "gap-2",
-                        isMobile && isOwn && "w-fit"
+                        isMobile && isOwn && !isMediaLikeMessage && "w-fit"
                       )}
                     >
 
@@ -1114,19 +1120,25 @@ export function MessageList({
                               isMobile
                                 ? (message.type === 'text' || message.type === 'system'
                                   ? 'w-fit max-w-[16rem] min-w-[4.75rem] px-3 py-2 rounded-[14px]'
-                                  : 'max-w-[16rem] rounded-[14px] p-2')
-                                : 'px-4 py-2.5 max-w-xl',
+                                  : (isImageMessage
+                                    ? 'max-w-[min(70vw,17rem)] min-w-[7.5rem] rounded-[14px] p-1.5'
+                                    : 'max-w-[16rem] rounded-[14px] p-2'))
+                                : (isImageMessage ? 'max-w-[22rem] rounded-xl p-1.5' : 'px-4 py-2.5 max-w-xl'),
                               isOwn
 
                                 ? (isMobile
-                                  ? 'mobile-chat-bubble-own text-white shadow-[0_1px_1px_rgba(0,0,0,0.08)]'
+                                  ? (isImageMessage
+                                    ? 'bg-transparent text-foreground shadow-none border-0'
+                                    : 'mobile-chat-bubble-own text-white shadow-[0_1px_1px_rgba(0,0,0,0.08)]')
                                   : 'bg-[#E8F3FF] text-gray-900 rounded-lg')
 
                                 : (isMobile
-                                  ? 'mobile-chat-bubble-peer text-[#111827] border border-[#E6ECF2] shadow-[0_1px_1px_rgba(0,0,0,0.05)]'
+                                  ? (isImageMessage
+                                    ? 'bg-transparent text-foreground shadow-none border-0'
+                                    : 'mobile-chat-bubble-peer text-[#111827] border border-[#E6ECF2] shadow-[0_1px_1px_rgba(0,0,0,0.05)]')
                                   : 'bg-white text-gray-900 rounded-lg shadow-sm border border-gray-200'),
 
-                              message.type !== 'text' && 'p-2'
+                              message.type !== 'text' && !isImageMessage && 'p-2'
 
                             )}
 
@@ -1219,7 +1231,10 @@ export function MessageList({
 
                               rel="noopener noreferrer"
 
-                              className="block cursor-pointer hover:opacity-90 transition-opacity"
+                              className={cn(
+                                "block cursor-pointer hover:opacity-90 transition-opacity",
+                                isMobile ? "w-[min(70vw,17rem)]" : "w-[min(22rem,40vw)]"
+                              )}
 
                             >
 
@@ -1229,16 +1244,26 @@ export function MessageList({
 
                                 alt={message.metadata.file_name || 'Image'}
 
-                                className={cn("rounded-lg", isMobile ? "max-w-[250px]" : "max-w-sm")}
+                                className={cn(
+                                  "block w-full h-auto rounded-[12px] object-cover bg-muted/30",
+                                  isMobile ? "min-h-[7.5rem] max-h-[20rem]" : "min-h-[8.5rem] max-h-[22rem]"
+                                )}
 
                                 loading="eager"
+                                decoding="async"
 
                                 onError={(e) => {
                                   // If blob URL fails, try real URL
                                   const img = e.target as HTMLImageElement
                                   if (message.metadata && message.metadata._real_file_url && img.src.startsWith('blob:')) {
                                     img.src = message.metadata._real_file_url
+                                    return
                                   }
+                                  // Keep image bubble visible even when source cannot be loaded
+                                  img.onerror = null
+                                  img.src = '/placeholder.jpg'
+                                  img.classList.remove('object-cover')
+                                  img.classList.add('object-contain')
                                 }}
 
                               />
@@ -1247,7 +1272,7 @@ export function MessageList({
 
                           {message.content && message.content.trim() && message.content !== message.metadata?.file_name && (
 
-                            <p className="text-sm px-2">{message.content}</p>
+                            <p className="text-sm px-1 text-foreground/90">{message.content}</p>
 
                           )}
 
