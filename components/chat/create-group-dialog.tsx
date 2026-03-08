@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { User } from '@/lib/types'
 import { Search, ArrowRight, Loader2 } from 'lucide-react'
+import { useSettings } from '@/lib/settings-context'
 
 interface CreateGroupDialogProps {
   open: boolean
@@ -25,6 +26,8 @@ export function CreateGroupDialog({
   workspaceId
 }: CreateGroupDialogProps) {
   const router = useRouter()
+  const { language } = useSettings()
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
   const [selectedUsers, setSelectedUsers] = useState<User[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [isCreating, setIsCreating] = useState(false)
@@ -118,11 +121,11 @@ export function CreateGroupDialog({
         router.push(`/chat?conversation=${data.groupId}`)
       } else {
         console.error('[CreateGroupDialog] 创建失败 - API 返回 success=false', data)
-        alert(`创建群聊失败: ${data.error || '未知错误'}`)
+        alert(tr(`创建群聊失败: ${data.error || '未知错误'}`, `Failed to create group: ${data.error || 'Unknown error'}`))
       }
     } catch (error) {
       console.error('[CreateGroupDialog] 创建失败 - 异常', error)
-      alert(`创建群聊失败: ${error instanceof Error ? error.message : '网络错误'}`)
+      alert(tr(`创建群聊失败: ${error instanceof Error ? error.message : '网络错误'}`, `Failed to create group: ${error instanceof Error ? error.message : 'Network error'}`))
     } finally {
       setIsCreating(false)
       console.log('[CreateGroupDialog] 创建流程结束')
@@ -133,13 +136,13 @@ export function CreateGroupDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[600px] h-[70vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>创建群聊</DialogTitle>
+          <DialogTitle>{tr('创建群聊', 'Create Group')}</DialogTitle>
         </DialogHeader>
 
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="搜索联系人"
+            placeholder={tr('搜索联系人', 'Search contacts')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9 pr-9"
@@ -152,11 +155,11 @@ export function CreateGroupDialog({
             {isLoadingContacts ? (
               <div className="flex items-center justify-center py-8 text-muted-foreground">
                 <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                加载联系人中...
+                {tr('加载联系人中...', 'Loading contacts...')}
               </div>
             ) : filteredContacts.length === 0 ? (
               <div className="text-center py-8 text-sm text-muted-foreground">
-                {searchQuery ? '没有找到匹配的联系人' : '暂无联系人'}
+                {searchQuery ? tr('没有找到匹配的联系人', 'No matching contacts found') : tr('暂无联系人', 'No contacts yet')}
               </div>
             ) : (
               filteredContacts.map(contact => (
@@ -183,7 +186,7 @@ export function CreateGroupDialog({
         {selectedUsers.length > 0 && (
           <div className="border-t pt-3">
             <p className="text-sm text-muted-foreground mb-2">
-              已选择 {selectedUsers.length} 人
+              {tr(`已选择 ${selectedUsers.length} 人`, `${selectedUsers.length} selected`)}
             </p>
             <div className="flex gap-2 flex-wrap">
               {selectedUsers.map(user => (
@@ -198,13 +201,13 @@ export function CreateGroupDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            取消
+            {tr('取消', 'Cancel')}
           </Button>
           <Button
             onClick={handleCreate}
             disabled={isCreating}
           >
-            {isCreating ? '创建中...' : '创建'}
+            {isCreating ? tr('创建中...', 'Creating...') : tr('创建', 'Create')}
           </Button>
         </DialogFooter>
       </DialogContent>

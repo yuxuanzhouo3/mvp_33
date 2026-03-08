@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { useDeviceListener } from '@/hooks/use-device-listener';
 import { AppNavigation } from '@/components/layout/app-navigation';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useSettings } from '@/lib/settings-context';
 
 interface Device {
   id: string;
@@ -46,7 +47,7 @@ const getDeviceIcon = (device: Device) => {
   return <Monitor className="h-5 w-5" />;
 };
 
-const formatTime = (time: string) => {
+const formatTime = (time: string, language: 'zh' | 'en') => {
   const date = new Date(time);
   const now = new Date();
   const diff = now.getTime() - date.getTime();
@@ -54,25 +55,25 @@ const formatTime = (time: string) => {
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
 
-  if (minutes < 1) return '刚刚';
-  if (minutes < 60) return `${minutes}分钟前`;
-  if (hours < 24) return `${hours}小时前`;
-  return `${days}天前`;
+  if (minutes < 1) return language === 'zh' ? '刚刚' : 'Just now';
+  if (minutes < 60) return language === 'zh' ? `${minutes}分钟前` : `${minutes}m ago`;
+  if (hours < 24) return language === 'zh' ? `${hours}小时前` : `${hours}h ago`;
+  return language === 'zh' ? `${days}天前` : `${days}d ago`;
 };
 
-const getDeviceCategoryLabel = (device: Device) => {
+const getDeviceCategoryLabel = (device: Device, language: 'zh' | 'en') => {
   const category = device.device_category;
-  if (category === 'mobile') return '手机';
-  if (category === 'tablet') return '平板';
-  if (category === 'desktop') return '电脑';
-  if (device.device_type === 'android' || device.device_type === 'ios') return '手机';
-  return '电脑';
+  if (category === 'mobile') return language === 'zh' ? '手机' : 'Mobile';
+  if (category === 'tablet') return language === 'zh' ? '平板' : 'Tablet';
+  if (category === 'desktop') return language === 'zh' ? '电脑' : 'Desktop';
+  if (device.device_type === 'android' || device.device_type === 'ios') return language === 'zh' ? '手机' : 'Mobile';
+  return language === 'zh' ? '电脑' : 'Desktop';
 };
 
-const getClientTypeLabel = (clientType?: string) => {
-  if (clientType === 'android_app') return 'Android 客户端';
-  if (clientType === 'ios_app') return 'iOS 客户端';
-  if (clientType === 'desktop_app') return '桌面客户端';
+const getClientTypeLabel = (clientType: string | undefined, language: 'zh' | 'en') => {
+  if (clientType === 'android_app') return language === 'zh' ? 'Android 客户端' : 'Android App';
+  if (clientType === 'ios_app') return language === 'zh' ? 'iOS 客户端' : 'iOS App';
+  if (clientType === 'desktop_app') return language === 'zh' ? '桌面客户端' : 'Desktop App';
   return 'Web';
 };
 
@@ -87,15 +88,17 @@ const formatDeviceTitle = (device: Device) => {
   return device.device_name || 'Unknown Device';
 };
 
-const formatLocationLabel = (location?: string) => {
+const formatLocationLabel = (location: string | undefined, language: 'zh' | 'en') => {
   const text = (location || '').trim();
-  if (!text) return 'Unknown';
+  if (!text) return language === 'zh' ? '未知' : 'Unknown';
   const normalized = text.toLowerCase();
-  if (normalized === 'unknown' || normalized === 'unknown, unknown') return 'Unknown';
+  if (normalized === 'unknown' || normalized === 'unknown, unknown') return language === 'zh' ? '未知' : 'Unknown';
   return text;
 };
 
 export default function DevicesPage() {
+  const { language } = useSettings();
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en);
   const [devices, setDevices] = useState<Device[]>([]);
   const [currentSessionToken, setCurrentSessionToken] = useState<string>('');
   const [kickingDeviceId, setKickingDeviceId] = useState<string | null>(null);
@@ -135,10 +138,10 @@ export default function DevicesPage() {
         const data = await response.json();
         setDevices(data.devices || []);
       } else {
-        toast.error('加载设备列表失败');
+        toast.error(tr('加载设备列表失败', 'Failed to load devices'));
       }
     } catch (error) {
-      toast.error('加载设备列表失败');
+      toast.error(tr('加载设备列表失败', 'Failed to load devices'));
     }
   };
 
@@ -163,13 +166,13 @@ export default function DevicesPage() {
       });
 
       if (response.ok) {
-        toast.success('设备已下线');
+        toast.success(tr('设备已下线', 'Device signed out'));
         await loadDevices();
       } else {
-        toast.error('操作失败');
+        toast.error(tr('操作失败', 'Operation failed'));
       }
     } catch (error) {
-      toast.error('操作失败');
+      toast.error(tr('操作失败', 'Operation failed'));
     } finally {
       setKickingDeviceId(null);
     }
@@ -187,16 +190,20 @@ export default function DevicesPage() {
               <h3 className="truncate text-base font-medium text-gray-900">{formatDeviceTitle(device)}</h3>
               {isCurrentDevice(device) && (
                 <Badge variant="secondary" className="border-green-200 bg-green-50 text-green-700">
-                  当前设备
+                  {tr('当前设备', 'Current device')}
                 </Badge>
               )}
             </div>
             <p className="mt-1 text-sm text-gray-500">
-              {[getClientTypeLabel(device.client_type), getDeviceCategoryLabel(device), `最后活跃 ${formatTime(device.last_active_at)}`].join(' · ')}
+              {[
+                getClientTypeLabel(device.client_type, language as 'zh' | 'en'),
+                getDeviceCategoryLabel(device, language as 'zh' | 'en'),
+                tr('最后活跃 ', 'Last active ') + formatTime(device.last_active_at, language as 'zh' | 'en')
+              ].join(' · ')}
             </p>
             <div className="mt-2 space-y-1 text-sm text-gray-500">
-              <p>IP 地址: {device.ip_address || 'Unknown'}</p>
-              <p>位置: {formatLocationLabel(device.location)}</p>
+              <p>{tr('IP 地址', 'IP')}: {device.ip_address || tr('未知', 'Unknown')}</p>
+              <p>{tr('位置', 'Location')}: {formatLocationLabel(device.location, language as 'zh' | 'en')}</p>
             </div>
           </div>
         </div>
@@ -209,7 +216,7 @@ export default function DevicesPage() {
             className="text-red-600 hover:bg-red-50 hover:text-red-700"
           >
             <LogOut className="mr-2 h-4 w-4" />
-            下线
+            {tr('下线', 'Sign out')}
           </Button>
         )}
       </div>
@@ -220,7 +227,7 @@ export default function DevicesPage() {
     return (
       <div className="flex h-screen flex-col mobile-app-shell mobile-overscroll-contain">
         <div className="flex flex-1 items-center justify-center">
-          <div className="text-gray-500">加载中...</div>
+          <div className="text-gray-500">{tr('加载中...', 'Loading...')}</div>
         </div>
         {isMobile && <AppNavigation mobile />}
       </div>
@@ -232,30 +239,30 @@ export default function DevicesPage() {
       <div className="flex-1 overflow-y-auto mobile-scroll-y mobile-overscroll-contain">
         <div className="space-y-6 px-4 py-6">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">设备管理</h1>
-            <p className="mt-1 text-sm text-gray-500">管理所有登录设备，可以远程下线其他设备</p>
+            <h1 className="text-2xl font-semibold text-gray-900">{tr('设备管理', 'Device Management')}</h1>
+            <p className="mt-1 text-sm text-gray-500">{tr('管理所有登录设备，可以远程下线其他设备', 'Manage all signed-in devices and remotely sign out other devices')}</p>
           </div>
 
           {devices.length === 0 ? (
             <Card className="p-12 text-center">
               <Monitor className="mx-auto mb-4 h-12 w-12 text-gray-400" />
-              <p className="text-gray-500">暂无登录设备</p>
+              <p className="text-gray-500">{tr('暂无登录设备', 'No signed-in devices')}</p>
             </Card>
           ) : (
             <div className="space-y-6">
               <section className="space-y-3">
-                <h2 className="text-sm font-medium uppercase tracking-wide text-gray-500">当前设备</h2>
+                <h2 className="text-sm font-medium uppercase tracking-wide text-gray-500">{tr('当前设备', 'Current Device')}</h2>
                 {currentDevice ? (
                   renderDeviceCard(currentDevice, false)
                 ) : (
-                  <Card className="p-5 text-sm text-gray-500">当前设备识别中，请刷新后重试</Card>
+                  <Card className="p-5 text-sm text-gray-500">{tr('当前设备识别中，请刷新后重试', 'Detecting current device, please refresh and try again')}</Card>
                 )}
               </section>
 
               <section className="space-y-3">
-                <h2 className="text-sm font-medium uppercase tracking-wide text-gray-500">其他设备</h2>
+                <h2 className="text-sm font-medium uppercase tracking-wide text-gray-500">{tr('其他设备', 'Other Devices')}</h2>
                 {otherDevices.length === 0 ? (
-                  <Card className="p-5 text-sm text-gray-500">暂无其他登录设备</Card>
+                  <Card className="p-5 text-sm text-gray-500">{tr('暂无其他登录设备', 'No other signed-in devices')}</Card>
                 ) : (
                   <div className="space-y-4">
                     {otherDevices.map((device) => renderDeviceCard(device, true))}

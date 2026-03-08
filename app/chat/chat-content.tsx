@@ -180,7 +180,8 @@ const tryCompressImageForUpload = async (file: File): Promise<File> => {
 const isPayloadTooLargeText = (text: string): boolean =>
   /request entity too large|payload too large|entity too large|request too large/i.test(text)
 
-const parseUploadResponse = async (response: Response): Promise<any> => {
+const parseUploadResponse = async (response: Response, language: 'zh' | 'en'): Promise<any> => {
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
   const rawText = await response.text()
   let payload: any = null
 
@@ -200,16 +201,30 @@ const parseUploadResponse = async (response: Response): Promise<any> => {
 
     if (response.status === 413 || isPayloadTooLargeText(rawText)) {
       const gatewayLimitMB = (MOBILE_UPLOAD_GATEWAY_SAFE_LIMIT_BYTES / (1024 * 1024)).toFixed(1)
-      throw new Error(`图片文件过大，上传网关限制约 ${gatewayLimitMB}MB。请压缩后重试。`)
+      throw new Error(
+        tr(
+          `图片文件过大，上传网关限制约 ${gatewayLimitMB}MB。请压缩后重试。`,
+          `Image is too large. Upload gateway limit is about ${gatewayLimitMB}MB. Please compress and try again.`
+        )
+      )
     }
 
     const snippet = (rawText || '').trim().slice(0, 120)
-    throw new Error(payloadError || (snippet ? `上传失败(${response.status}): ${snippet}` : `上传失败(${response.status})`))
+    throw new Error(
+      payloadError ||
+      (snippet
+        ? tr(`上传失败(${response.status}): ${snippet}`, `Upload failed (${response.status}): ${snippet}`)
+        : tr(`上传失败(${response.status})`, `Upload failed (${response.status})`))
+    )
   }
 
   if (!payload || typeof payload !== 'object') {
     const snippet = (rawText || '').trim().slice(0, 120)
-    throw new Error(snippet ? `上传失败: ${snippet}` : '上传失败: 服务端返回格式异常')
+    throw new Error(
+      snippet
+        ? tr(`上传失败: ${snippet}`, `Upload failed: ${snippet}`)
+        : tr('上传失败: 服务端返回格式异常', 'Upload failed: unexpected server response format')
+    )
   }
 
   return payload
@@ -1493,7 +1508,7 @@ function ChatPageContent() {
 
           if (!silent) {
 
-            alert('登录已失效，请重新登录后再试。')
+            alert(language === 'zh' ? '登录已失效，请重新登录后再试。' : 'Login session expired, please sign in again.')
 
           }
 
@@ -5398,7 +5413,7 @@ function ChatPageContent() {
 
           })
 
-          const uploadData = await parseUploadResponse(uploadResponse)
+          const uploadData = await parseUploadResponse(uploadResponse, language as 'zh' | 'en')
 
           
 
@@ -5438,7 +5453,7 @@ function ChatPageContent() {
 
           // Show error to user
 
-          alert(uploadError?.message || '上传文件失败')
+          alert(uploadError?.message || (language === 'zh' ? '上传文件失败' : 'File upload failed'))
 
           return
 

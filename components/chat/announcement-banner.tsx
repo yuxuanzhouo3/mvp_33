@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Megaphone, ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useSettings } from '@/lib/settings-context'
 
 interface Announcement {
   id: string
@@ -27,6 +28,8 @@ export function AnnouncementBanner({
   isAdmin,
   onOpenDrawer
 }: AnnouncementBannerProps) {
+  const { language } = useSettings()
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
   const [announcement, setAnnouncement] = useState<Announcement | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -78,7 +81,7 @@ export function AnnouncementBanner({
             onClick={onOpenDrawer}
             className="h-7 text-xs"
           >
-            查看详情
+            {tr('查看详情', 'View details')}
           </Button>
           {needsTruncation && (
             <Button

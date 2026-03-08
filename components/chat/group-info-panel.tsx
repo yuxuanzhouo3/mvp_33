@@ -15,6 +15,7 @@ import { GroupMembersSection } from './group-members-section'
 import { AnnouncementDrawer } from './announcement-drawer'
 import { GroupFilesDialog } from './group-files-dialog'
 import { GroupNicknameDialog } from './group-nickname-dialog'
+import { useSettings } from '@/lib/settings-context'
 
 interface GroupInfoPanelProps {
   conversation: ConversationWithDetails
@@ -31,6 +32,8 @@ export function GroupInfoPanel({
   onClose,
   onUpdate
 }: GroupInfoPanelProps) {
+  const { language } = useSettings()
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
   const [showSettings, setShowSettings] = useState(false)
   const [showAddMembers, setShowAddMembers] = useState(false)
   const [showAnnouncements, setShowAnnouncements] = useState(false)
@@ -54,7 +57,7 @@ export function GroupInfoPanel({
   }
 
   const handleLeaveGroup = async () => {
-    if (!confirm('确定要离开这个群聊吗？')) return
+    if (!confirm(tr('确定要离开这个群聊吗？', 'Are you sure you want to leave this group?'))) return
 
     try {
       const response = await fetch(`/api/conversations/${conversation.id}`, {
@@ -67,7 +70,7 @@ export function GroupInfoPanel({
       }
     } catch (error) {
       console.error('离开群聊失败:', error)
-      alert('离开群聊失败，请重试')
+      alert(tr('离开群聊失败，请重试', 'Failed to leave group, please try again'))
     }
   }
 
@@ -104,7 +107,7 @@ export function GroupInfoPanel({
             {/* Header */}
             <div className="border-b p-4">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-lg">群聊信息</h2>
+                <h2 className="font-semibold text-lg">{tr('群聊信息', 'Group Info')}</h2>
                 <Button
                   size="icon"
                   variant="ghost"
@@ -124,7 +127,9 @@ export function GroupInfoPanel({
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-base truncate">{conversation.name}</h3>
-                  <p className="text-sm text-muted-foreground">{conversation.members.length} 位成员</p>
+                  <p className="text-sm text-muted-foreground">
+                    {language === 'zh' ? `${conversation.members.length} 位成员` : `${conversation.members.length} members`}
+                  </p>
                 </div>
               </div>
 
@@ -146,7 +151,7 @@ export function GroupInfoPanel({
                     onClick={() => setShowAnnouncements(true)}
                   >
                     <Megaphone className="mr-2 h-4 w-4" />
-                    群公告
+                    {tr('群公告', 'Announcements')}
                   </Button>
                   <Button
                     variant="ghost"
@@ -154,7 +159,7 @@ export function GroupInfoPanel({
                     onClick={() => setShowFiles(true)}
                   >
                     <FileIcon className="mr-2 h-4 w-4" />
-                    群文件
+                    {tr('群文件', 'Files')}
                   </Button>
                   <Button
                     variant="ghost"
@@ -162,7 +167,7 @@ export function GroupInfoPanel({
                     onClick={() => setShowNickname(true)}
                   >
                     <Users className="mr-2 h-4 w-4" />
-                    群昵称
+                    {tr('群昵称', 'Group Nickname')}
                   </Button>
                   {isAdmin && (
                     <>
@@ -172,7 +177,7 @@ export function GroupInfoPanel({
                         onClick={() => setShowAddMembers(true)}
                       >
                         <UserPlus className="mr-2 h-4 w-4" />
-                        添加成员
+                        {tr('添加成员', 'Add Members')}
                       </Button>
                       <Button
                         variant="ghost"
@@ -180,7 +185,7 @@ export function GroupInfoPanel({
                         onClick={() => setShowSettings(true)}
                       >
                         <Settings className="mr-2 h-4 w-4" />
-                        群聊设置
+                        {tr('群聊设置', 'Group Settings')}
                       </Button>
                     </>
                   )}
@@ -199,7 +204,7 @@ export function GroupInfoPanel({
                   <div className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors duration-200">
                     <div className="flex items-center gap-2">
                       {isMuted ? <BellOff className="h-4 w-4 text-muted-foreground" /> : <Bell className="h-4 w-4 text-muted-foreground" />}
-                      <span className="text-sm">消息免打扰</span>
+                      <span className="text-sm">{tr('消息免打扰', 'Mute Notifications')}</span>
                     </div>
                     <button
                       onClick={() => setIsMuted(!isMuted)}
@@ -220,7 +225,7 @@ export function GroupInfoPanel({
                   <div className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors duration-200">
                     <div className="flex items-center gap-2">
                       <Pin className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">置顶会话</span>
+                      <span className="text-sm">{tr('置顶会话', 'Pin Conversation')}</span>
                     </div>
                     <button
                       onClick={() => setIsPinned(!isPinned)}
@@ -249,7 +254,7 @@ export function GroupInfoPanel({
                     onClick={handleLeaveGroup}
                   >
                     <LogOut className="mr-2 h-4 w-4" />
-                    离开群聊
+                    {tr('离开群聊', 'Leave Group')}
                   </Button>
                 </div>
               </div>

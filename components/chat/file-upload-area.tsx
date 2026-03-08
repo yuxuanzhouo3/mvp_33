@@ -5,6 +5,7 @@ import { Upload, X, FileIcon, ImageIcon, Video } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
+import { useSettings } from '@/lib/settings-context'
 
 interface FileUploadAreaProps {
   files: File[]
@@ -25,6 +26,8 @@ export function FileUploadArea({
   maxFiles = 10,
   maxSize = 100 * 1024 * 1024, // 100MB default
 }: FileUploadAreaProps) {
+  const { language } = useSettings()
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
   const [isDragging, setIsDragging] = useState(false)
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -51,14 +54,14 @@ export function FileUploadArea({
     const droppedFiles = Array.from(e.dataTransfer.files)
     const validFiles = droppedFiles.filter(file => {
       if (file.size > maxSize) {
-        alert(`文件 ${file.name} 超过最大大小限制 (${(maxSize / 1024 / 1024).toFixed(0)}MB)`)
+        alert(tr(`文件 ${file.name} 超过最大大小限制 (${(maxSize / 1024 / 1024).toFixed(0)}MB)`, `File ${file.name} exceeds size limit (${(maxSize / 1024 / 1024).toFixed(0)}MB)`))
         return false
       }
       return true
     })
 
     if (files.length + validFiles.length > maxFiles) {
-      alert(`最多只能上传 ${maxFiles} 个文件`)
+      alert(tr(`最多只能上传 ${maxFiles} 个文件`, `You can upload at most ${maxFiles} files`))
       return
     }
 
@@ -69,14 +72,14 @@ export function FileUploadArea({
     const selectedFiles = Array.from(e.target.files || [])
     const validFiles = selectedFiles.filter(file => {
       if (file.size > maxSize) {
-        alert(`文件 ${file.name} 超过最大大小限制 (${(maxSize / 1024 / 1024).toFixed(0)}MB)`)
+        alert(tr(`文件 ${file.name} 超过最大大小限制 (${(maxSize / 1024 / 1024).toFixed(0)}MB)`, `File ${file.name} exceeds size limit (${(maxSize / 1024 / 1024).toFixed(0)}MB)`))
         return false
       }
       return true
     })
 
     if (files.length + validFiles.length > maxFiles) {
-      alert(`最多只能上传 ${maxFiles} 个文件`)
+      alert(tr(`最多只能上传 ${maxFiles} 个文件`, `You can upload at most ${maxFiles} files`))
       return
     }
 
@@ -121,10 +124,10 @@ export function FileUploadArea({
           <Upload className={cn('h-8 w-8 text-muted-foreground', isDragging && 'text-primary')} />
           <div>
             <p className="text-sm font-medium">
-              {isDragging ? '松开以上传文件' : '拖拽文件到此处或点击选择'}
+              {isDragging ? tr('松开以上传文件', 'Release to upload files') : tr('拖拽文件到此处或点击选择', 'Drag files here or click to select')}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              支持多文件上传，最大 {maxFiles} 个文件，单个文件最大 {(maxSize / 1024 / 1024).toFixed(0)}MB
+              {tr('支持多文件上传，最大', 'Supports multiple files, up to')} {maxFiles} {tr('个文件，单个文件最大', 'files, each up to')} {(maxSize / 1024 / 1024).toFixed(0)}MB
             </p>
           </div>
           <input
@@ -142,7 +145,7 @@ export function FileUploadArea({
             onClick={() => document.getElementById('file-upload-input')?.click()}
             disabled={disabled}
           >
-            选择文件
+            {tr('选择文件', 'Select Files')}
           </Button>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { AlertCircle, RefreshCw } from 'lucide-react'
+import { useSettings } from '@/lib/settings-context'
 
 type ConversationMetaSkeletonMode = 'loading' | 'failed'
 
@@ -22,6 +23,8 @@ export function ConversationMetaSkeleton({
   isOpen = true,
   onRetry,
 }: ConversationMetaSkeletonProps) {
+  const { language } = useSettings()
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
   const isFailed = mode === 'failed'
 
   if (variant === 'panel') {
@@ -68,7 +71,7 @@ export function ConversationMetaSkeleton({
               <div className="border-t px-4 py-3 text-xs text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
-                  <span>群信息同步中，稍后自动恢复</span>
+                  <span>{tr('群信息同步中，稍后自动恢复', 'Group info is syncing and will recover automatically')}</span>
                 </div>
                 {onRetry && (
                   <Button
@@ -78,7 +81,7 @@ export function ConversationMetaSkeleton({
                     onClick={onRetry}
                   >
                     <RefreshCw className="mr-1.5 h-3 w-3" />
-                    重试
+                    {tr('重试', 'Retry')}
                   </Button>
                 )}
               </div>
@@ -116,11 +119,11 @@ export function ConversationMetaSkeleton({
           <div className="mt-2 flex items-center justify-between rounded-md bg-muted/60 px-2.5 py-1.5 text-xs text-muted-foreground">
             <div className="flex items-center gap-1.5">
               <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
-              <span>群信息同步中，可继续查看消息</span>
+              <span>{tr('群信息同步中，可继续查看消息', 'Group info is syncing, you can continue viewing messages')}</span>
             </div>
             {onRetry && (
               <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={onRetry}>
-                重试
+                {tr('重试', 'Retry')}
               </Button>
             )}
           </div>

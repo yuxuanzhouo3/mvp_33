@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { ConversationWithDetails, User } from '@/lib/types'
 import { Shield, ShieldOff, UserMinus, Crown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useSettings } from '@/lib/settings-context'
 
 interface MemberActionsMenuProps {
   member: User
@@ -27,6 +28,8 @@ export function MemberActionsMenu({
   onUpdate
 }: MemberActionsMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
+  const { language } = useSettings()
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
 
   // 获取成员角色
   const memberData = conversation.members.find(m => m.id === member.id)
@@ -87,11 +90,11 @@ export function MemberActionsMenu({
         onClose()
       } else {
         const data = await response.json()
-        alert(`设置管理员失败: ${data.error || '未知错误'}`)
+        alert(tr(`设置管理员失败: ${data.error || '未知错误'}`, `Failed to set admin: ${data.error || 'Unknown error'}`))
       }
     } catch (error) {
       console.error('设置管理员失败:', error)
-      alert('设置管理员失败，请重试')
+      alert(tr('设置管理员失败，请重试', 'Failed to set admin, please try again'))
     }
   }
 
@@ -108,16 +111,16 @@ export function MemberActionsMenu({
         onClose()
       } else {
         const data = await response.json()
-        alert(`取消管理员失败: ${data.error || '未知错误'}`)
+        alert(tr(`取消管理员失败: ${data.error || '未知错误'}`, `Failed to remove admin: ${data.error || 'Unknown error'}`))
       }
     } catch (error) {
       console.error('取消管理员失败:', error)
-      alert('取消管理员失败，请重试')
+      alert(tr('取消管理员失败，请重试', 'Failed to remove admin, please try again'))
     }
   }
 
   const handleRemoveMember = async () => {
-    if (!confirm(`确定要将 ${member.full_name} 移出群聊吗？`)) {
+    if (!confirm(tr(`确定要将 ${member.full_name} 移出群聊吗？`, `Remove ${member.full_name} from this group?`))) {
       return
     }
 
@@ -131,20 +134,20 @@ export function MemberActionsMenu({
         onClose()
       } else {
         const data = await response.json()
-        alert(`移除成员失败: ${data.error || '未知错误'}`)
+        alert(tr(`移除成员失败: ${data.error || '未知错误'}`, `Failed to remove member: ${data.error || 'Unknown error'}`))
       }
     } catch (error) {
       console.error('移除成员失败:', error)
-      alert('移除成员失败，请重试')
+      alert(tr('移除成员失败，请重试', 'Failed to remove member, please try again'))
     }
   }
 
   const handleTransferOwnership = async () => {
-    if (!confirm(`确定要将群主转让给 ${member.full_name} 吗？转让后您将成为管理员。`)) {
+    if (!confirm(tr(`确定要将群主转让给 ${member.full_name} 吗？转让后您将成为管理员。`, `Transfer group ownership to ${member.full_name}? You will become admin after transfer.`))) {
       return
     }
 
-    if (!confirm('再次确认：转让群主后无法撤销，确定要继续吗？')) {
+    if (!confirm(tr('再次确认：转让群主后无法撤销，确定要继续吗？', 'Please confirm again: ownership transfer cannot be undone. Continue?'))) {
       return
     }
 
@@ -160,11 +163,11 @@ export function MemberActionsMenu({
         onClose()
       } else {
         const data = await response.json()
-        alert(`转让群主失败: ${data.error || '未知错误'}`)
+        alert(tr(`转让群主失败: ${data.error || '未知错误'}`, `Failed to transfer ownership: ${data.error || 'Unknown error'}`))
       }
     } catch (error) {
       console.error('转让群主失败:', error)
-      alert('转让群主失败，请重试')
+      alert(tr('转让群主失败，请重试', 'Failed to transfer ownership, please try again'))
     }
   }
 
@@ -189,12 +192,12 @@ export function MemberActionsMenu({
           {isMemberAdmin ? (
             <>
               <ShieldOff className="h-4 w-4" />
-              取消管理员
+              {tr('取消管理员', 'Remove Admin')}
             </>
           ) : (
             <>
               <Shield className="h-4 w-4" />
-              设为管理员
+              {tr('设为管理员', 'Set as Admin')}
             </>
           )}
         </button>
@@ -210,7 +213,7 @@ export function MemberActionsMenu({
           onClick={handleTransferOwnership}
         >
           <Crown className="h-4 w-4" />
-          转让群主
+          {tr('转让群主', 'Transfer Ownership')}
         </button>
       )}
 
@@ -227,7 +230,7 @@ export function MemberActionsMenu({
           onClick={handleRemoveMember}
         >
           <UserMinus className="h-4 w-4" />
-          移出群聊
+          {tr('移出群聊', 'Remove from Group')}
         </button>
       )}
     </div>

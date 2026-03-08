@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { DEFAULT_LANGUAGE } from '@/config'
+import { DEFAULT_LANGUAGE, DEFAULT_REGION } from '@/config'
 
 type Language = 'en' | 'zh'
 type Theme = 'light' | 'dark' | 'monokai' | 'solarized-dark' | 'light-purple' | 'light-yellow'
@@ -17,6 +17,8 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined)
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
+  const languageStorageKey = `language_${DEFAULT_REGION}`
+  const legacyLanguageStorageKey = 'language'
   // 初始语言从构建配置读取
   const [language, setLanguageState] = useState<Language>(DEFAULT_LANGUAGE as Language)
   const [theme, setThemeState] = useState<Theme>('light')
@@ -46,7 +48,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Load settings from localStorage on mount
   useEffect(() => {
     // 只在客户端读取用户偏好，但不影响环境
-    const savedLanguage = localStorage.getItem('language') as Language
+    const savedLanguage = (
+      localStorage.getItem(languageStorageKey) ||
+      localStorage.getItem(legacyLanguageStorageKey)
+    ) as Language
     const savedTheme = localStorage.getItem('theme') as Theme
 
     // 语言设置仅用于 UI 显示，不影响认证方式和数据库选择
@@ -67,7 +72,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // 语言切换不触发环境切换
   const setLanguage = (newLanguage: Language) => {
     setLanguageState(newLanguage)
-    localStorage.setItem('language', newLanguage)
+    localStorage.setItem(languageStorageKey, newLanguage)
+    // Keep legacy key for compatibility with existing pages/components.
+    localStorage.setItem(legacyLanguageStorageKey, newLanguage)
   }
 
   const setTheme = (newTheme: Theme) => {

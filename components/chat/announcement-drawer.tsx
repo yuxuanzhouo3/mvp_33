@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Loader2, Megaphone, Trash2, Edit2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
+import { useSettings } from '@/lib/settings-context'
 
 interface Announcement {
   id: string
@@ -35,6 +36,8 @@ export function AnnouncementDrawer({
   conversationId,
   isAdmin
 }: AnnouncementDrawerProps) {
+  const { language } = useSettings()
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
@@ -79,11 +82,11 @@ export function AnnouncementDrawer({
         await loadAnnouncements()
       } else {
         const data = await response.json()
-        alert(`发布失败: ${data.error || '未知错误'}`)
+        alert(tr(`发布失败: ${data.error || '未知错误'}`, `Publish failed: ${data.error || 'Unknown error'}`))
       }
     } catch (error) {
       console.error('发布公告失败:', error)
-      alert('发布失败，请重试')
+      alert(tr('发布失败，请重试', 'Publish failed, please try again'))
     } finally {
       setIsCreating(false)
     }
@@ -106,18 +109,18 @@ export function AnnouncementDrawer({
         await loadAnnouncements()
       } else {
         const data = await response.json()
-        alert(`更新失败: ${data.error || '未知错误'}`)
+        alert(tr(`更新失败: ${data.error || '未知错误'}`, `Update failed: ${data.error || 'Unknown error'}`))
       }
     } catch (error) {
       console.error('更新公告失败:', error)
-      alert('更新失败，请重试')
+      alert(tr('更新失败，请重试', 'Update failed, please try again'))
     } finally {
       setIsCreating(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('确定要删除这条公告吗？')) return
+    if (!confirm(tr('确定要删除这条公告吗？', 'Are you sure you want to delete this announcement?'))) return
 
     try {
       const response = await fetch(`/api/groups/${conversationId}/announcements/${id}`, {
@@ -128,11 +131,11 @@ export function AnnouncementDrawer({
         await loadAnnouncements()
       } else {
         const data = await response.json()
-        alert(`删除失败: ${data.error || '未知错误'}`)
+        alert(tr(`删除失败: ${data.error || '未知错误'}`, `Delete failed: ${data.error || 'Unknown error'}`))
       }
     } catch (error) {
       console.error('删除公告失败:', error)
-      alert('删除失败，请重试')
+      alert(tr('删除失败，请重试', 'Delete failed, please try again'))
     }
   }
 
@@ -152,20 +155,20 @@ export function AnnouncementDrawer({
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Megaphone className="h-5 w-5" />
-            群公告
+            {tr('群公告', 'Announcements')}
           </SheetTitle>
         </SheetHeader>
 
         <div className="flex-1 flex flex-col gap-4 overflow-hidden mt-4">
           {isAdmin && (
             <div className="space-y-2">
-              <Textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder={editingId ? "编辑公告内容..." : "发布新公告..."}
-                rows={3}
-                maxLength={500}
-              />
+                <Textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder={editingId ? tr('编辑公告内容...', 'Edit announcement...') : tr('发布新公告...', 'Post a new announcement...')}
+                  rows={3}
+                  maxLength={500}
+                />
               <div className="flex gap-2">
                 <Button
                   onClick={editingId ? () => handleUpdate(editingId) : handleCreate}
@@ -175,15 +178,15 @@ export function AnnouncementDrawer({
                   {isCreating ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {editingId ? '更新中...' : '发布中...'}
+                      {editingId ? tr('更新中...', 'Updating...') : tr('发布中...', 'Publishing...')}
                     </>
                   ) : (
-                    editingId ? '更新公告' : '发布公告'
+                    editingId ? tr('更新公告', 'Update') : tr('发布公告', 'Publish')
                   )}
                 </Button>
                 {editingId && (
                   <Button onClick={cancelEdit} variant="outline" size="sm">
-                    取消
+                    {tr('取消', 'Cancel')}
                   </Button>
                 )}
               </div>
@@ -197,7 +200,7 @@ export function AnnouncementDrawer({
               </div>
             ) : announcements.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                暂无公告
+                {tr('暂无公告', 'No announcements')}
               </div>
             ) : (
               <div className="space-y-4 pr-4">
@@ -220,7 +223,7 @@ export function AnnouncementDrawer({
                           <p className="text-xs text-muted-foreground">
                             {formatDistanceToNow(new Date(announcement.created_at), {
                               addSuffix: true,
-                              locale: zhCN
+                              locale: language === 'zh' ? zhCN : undefined
                             })}
                           </p>
                         </div>

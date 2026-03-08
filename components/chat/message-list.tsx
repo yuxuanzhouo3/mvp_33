@@ -136,6 +136,7 @@ export function MessageList({
 
   const { language } = useSettings()
   const isMobile = useIsMobile()
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
 
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
 
@@ -149,7 +150,7 @@ export function MessageList({
       } else {
         throw new Error('Clipboard API unavailable')
       }
-      toast({ description: '文本已复制' })
+      toast({ description: tr('文本已复制', 'Text copied') })
     } catch (error) {
       try {
         const textarea = document.createElement('textarea')
@@ -161,10 +162,10 @@ export function MessageList({
         textarea.select()
         document.execCommand('copy')
         document.body.removeChild(textarea)
-        toast({ description: '文本已复制' })
+        toast({ description: tr('文本已复制', 'Text copied') })
       } catch (fallbackError) {
         console.error('Failed to copy text:', fallbackError)
-        toast({ description: '复制失败，请手动尝试', variant: 'destructive' })
+        toast({ description: tr('复制失败，请手动尝试', 'Copy failed, please try manually'), variant: 'destructive' })
       }
     }
   }
@@ -207,9 +208,9 @@ export function MessageList({
 
   const fetchMessageBlob = async (message: MessageWithSender) => {
     const url = getFileUrl(message)
-    if (!url) throw new Error('没有可复制的图片链接')
+    if (!url) throw new Error(tr('没有可复制的图片链接', 'No image URL available to copy'))
     const response = await fetch(url)
-    if (!response.ok) throw new Error('无法获取图片数据')
+    if (!response.ok) throw new Error(tr('无法获取图片数据', 'Failed to fetch image data'))
     return response.blob()
   }
 
@@ -234,14 +235,14 @@ export function MessageList({
           const ctx = canvas.getContext('2d')
           if (!ctx) {
             URL.revokeObjectURL(objectUrl)
-            reject(new Error('无法创建画布上下文'))
+            reject(new Error(tr('无法创建画布上下文', 'Failed to create canvas context')))
             return
           }
           ctx.drawImage(img, 0, 0)
           canvas.toBlob((converted) => {
             URL.revokeObjectURL(objectUrl)
             if (!converted) {
-              reject(new Error('图片转换失败'))
+              reject(new Error(tr('图片转换失败', 'Failed to convert image')))
               return
             }
             resolve({ blob: converted, type: 'image/png' })
@@ -254,7 +255,7 @@ export function MessageList({
 
       img.onerror = () => {
         URL.revokeObjectURL(objectUrl)
-        reject(new Error('无法加载图片进行复制'))
+        reject(new Error(tr('无法加载图片进行复制', 'Failed to load image for copying')))
       }
 
       img.src = objectUrl
@@ -265,17 +266,17 @@ export function MessageList({
     try {
       const rawBlob = await fetchMessageBlob(message)
       if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
-        throw new Error('浏览器不支持图片复制')
+        throw new Error(tr('浏览器不支持图片复制', 'Image copy is not supported by this browser'))
       }
 
       const { blob, type } = await normalizeClipboardImageBlob(rawBlob)
       const clipboardItem = new ClipboardItem({ [type]: blob })
       await navigator.clipboard.write([clipboardItem])
-      toast({ description: '图片已复制' })
+      toast({ description: tr('图片已复制', 'Image copied') })
     } catch (error) {
       console.error('Failed to copy image:', error)
       toast({
-        description: error instanceof Error ? error.message : '复制图片失败',
+        description: error instanceof Error ? error.message : tr('复制图片失败', 'Failed to copy image'),
         variant: 'destructive'
       })
     }
@@ -1006,7 +1007,9 @@ export function MessageList({
                 {message.is_recalled ? (
                   <div className="flex justify-center my-2">
                     <span className="text-xs text-muted-foreground">
-                      {isOwn ? '你撤回了一条消息' : `${getDisplayName(displaySender) || '对方'}撤回了一条消息`}
+                      {isOwn
+                        ? tr('你撤回了一条消息', 'You recalled a message')
+                        : `${getDisplayName(displaySender) || tr('对方', 'Other party')} ${tr('撤回了一条消息', 'recalled a message')}`}
                     </span>
                   </div>
                 ) : isSystemWithoutSender ? (
@@ -1169,7 +1172,7 @@ export function MessageList({
 
                             <p className="text-muted-foreground truncate">
 
-                              {repliedMessage.content || '已删除的消息'}
+                              {repliedMessage.content || tr('已删除的消息', 'Deleted message')}
 
                             </p>
 

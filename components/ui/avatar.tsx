@@ -6,6 +6,7 @@ import * as AvatarPrimitive from '@radix-ui/react-avatar'
 import { cn } from '@/lib/utils'
 import { getAvatarColor, getInitials } from '@/lib/avatar-utils'
 import { useOnlineStatus } from '@/hooks/use-online-status'
+import { useSettings } from '@/lib/settings-context'
 
 interface AvatarProps extends React.ComponentProps<typeof AvatarPrimitive.Root> {
   userId?: string
@@ -20,6 +21,7 @@ function Avatar({
   showOnlineStatus,
   ...props
 }: AvatarProps) {
+  const { language } = useSettings()
   const isOnline = useOnlineStatus(
     showOnlineStatus ? userId : undefined,
     userRegion
@@ -38,7 +40,7 @@ function Avatar({
       {showOnlineStatus && (
         <span
           className="pointer-events-none absolute -bottom-1 -right-1 z-10 rounded-full bg-background p-0.5"
-          aria-label={isOnline ? '在线' : '离线'}
+          aria-label={isOnline ? (language === 'zh' ? '在线' : 'Online') : (language === 'zh' ? '离线' : 'Offline')}
         >
           {isOnline ? (
             <span className="block h-[13px] w-[13px] rounded-full border-2 border-background bg-[#2bac76]" />

@@ -735,20 +735,28 @@ function ContactsPageContent() {
 
       if (!response.ok) {
         // Provide more user-friendly error messages（仅用页面内 toast 提示，不再使用浏览器 alert）
-        let title = '发送好友请求失败'
-        let description = data.error || '发送好友请求失败'
+        let title = language === 'zh' ? '发送好友请求失败' : 'Failed to send contact request'
+        let description = data.error || (language === 'zh' ? '发送好友请求失败' : 'Failed to send contact request')
 
         if (data.error === 'Cannot send request to yourself') {
-          description = '不能添加自己为好友，请扫描其他用户的二维码'
+          description = language === 'zh'
+            ? '不能添加自己为好友，请扫描其他用户的二维码'
+            : 'You cannot add yourself. Please scan another user\'s QR code.'
         } else if (data.errorType === 'sent_pending') {
-          title = '好友请求已发送'
-          description = '您已经向该用户发送过好友请求，请在"待处理"列表中查看请求状态。'
+          title = language === 'zh' ? '好友请求已发送' : 'Request already sent'
+          description = language === 'zh'
+            ? '您已经向该用户发送过好友请求，请在"待处理"列表中查看请求状态。'
+            : 'You have already sent a request to this user. Check status in Pending.'
         } else if (data.errorType === 'received_pending') {
-          title = '该用户已发送请求'
-          description = '该用户已经向您发送了好友请求，请在"待处理"列表中接受请求。'
+          title = language === 'zh' ? '该用户已发送请求' : 'Request received from this user'
+          description = language === 'zh'
+            ? '该用户已经向您发送了好友请求，请在"待处理"列表中接受请求。'
+            : 'This user has already sent you a request. Accept it in Pending.'
         } else if (data.error === 'Contact already exists') {
-          title = '已是好友'
-          description = '该用户已经在您的联系人列表中。'
+          title = language === 'zh' ? '已是好友' : 'Already contacts'
+          description = language === 'zh'
+            ? '该用户已经在您的联系人列表中。'
+            : 'This user is already in your contact list.'
         }
 
         console.log('[Toast] 准备显示toast:', { title, description, variant: data.errorType === 'sent_pending' || data.errorType === 'received_pending' ? 'default' : 'destructive' })
@@ -766,8 +774,8 @@ function ContactsPageContent() {
       }
 
       toast({
-        title: 'Contact request sent',
-        description: 'Your contact request has been sent successfully.',
+        title: t('contactRequestSent'),
+        description: t('contactRequestSentDescription'),
       })
 
       // 再给你一个居中大弹窗，和支付成功那种感觉一样明显

@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Loader2, Download, Trash2, Upload, FileIcon, Image, Video, FileText } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
+import { useSettings } from '@/lib/settings-context'
 
 interface GroupFile {
   id: string
@@ -31,6 +32,8 @@ export function FilesView({
   conversationId,
   isAdmin
 }: FilesViewProps) {
+  const { language } = useSettings()
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
   const [files, setFiles] = useState<GroupFile[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -59,7 +62,7 @@ export function FilesView({
     if (!file) return
 
     if (file.size > 100 * 1024 * 1024) {
-      alert('文件大小不能超过 100MB')
+      alert(tr('文件大小不能超过 100MB', 'File size cannot exceed 100MB'))
       return
     }
 
@@ -77,11 +80,11 @@ export function FilesView({
         await loadFiles()
       } else {
         const data = await response.json()
-        alert(`上传失败: ${data.error || '未知错误'}`)
+        alert(tr(`上传失败: ${data.error || '未知错误'}`, `Upload failed: ${data.error || 'Unknown error'}`))
       }
     } catch (error) {
       console.error('上传文件失败:', error)
-      alert('上传失败，请重试')
+      alert(tr('上传失败，请重试', 'Upload failed, please try again'))
     } finally {
       setIsUploading(false)
       e.target.value = ''
@@ -89,7 +92,7 @@ export function FilesView({
   }
 
   const handleDelete = async (fileId: string) => {
-    if (!confirm('确定要删除这个文件吗？')) return
+    if (!confirm(tr('确定要删除这个文件吗？', 'Are you sure you want to delete this file?'))) return
 
     try {
       const response = await fetch(`/api/groups/${conversationId}/files/${fileId}`, {
@@ -100,11 +103,11 @@ export function FilesView({
         await loadFiles()
       } else {
         const data = await response.json()
-        alert(`删除失败: ${data.error || '未知错误'}`)
+        alert(tr(`删除失败: ${data.error || '未知错误'}`, `Delete failed: ${data.error || 'Unknown error'}`))
       }
     } catch (error) {
       console.error('删除文件失败:', error)
-      alert('删除失败，请重试')
+      alert(tr('删除失败，请重试', 'Delete failed, please try again'))
     }
   }
 
@@ -129,7 +132,7 @@ export function FilesView({
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="flex-1 flex flex-col gap-4 p-4 overflow-hidden">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">群文件</h3>
+          <h3 className="text-lg font-semibold">{tr('群文件', 'Group Files')}</h3>
           <div>
             <input
               type="file"
@@ -146,12 +149,12 @@ export function FilesView({
               {isUploading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  上传中...
+                  {tr('上传中...', 'Uploading...')}
                 </>
               ) : (
                 <>
                   <Upload className="mr-2 h-4 w-4" />
-                  上传文件
+                  {tr('上传文件', 'Upload File')}
                 </>
               )}
             </Button>
@@ -165,7 +168,7 @@ export function FilesView({
             </div>
           ) : files.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              暂无文件
+              {tr('暂无文件', 'No files')}
             </div>
           ) : (
             <div className="space-y-2 pr-4">
@@ -185,7 +188,7 @@ export function FilesView({
                           <span>
                             {formatDistanceToNow(new Date(file.created_at), {
                               addSuffix: true,
-                              locale: zhCN
+                              locale: language === 'zh' ? zhCN : undefined
                             })}
                           </span>
                         </div>

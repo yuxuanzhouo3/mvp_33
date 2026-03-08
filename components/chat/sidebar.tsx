@@ -611,7 +611,7 @@ export function Sidebar({
             className="absolute -right-4 top-1/2 -translate-y-1/2 z-30 h-8 w-8 rounded-full bg-background border-2 shadow-lg hover:bg-accent hover:scale-110 transition-transform"
             onClick={onToggleExpand}
             aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
-            title={expanded ? '收起侧边栏' : '展开侧边栏'}
+            title={expanded ? (language === 'zh' ? '收起侧边栏' : 'Collapse sidebar') : (language === 'zh' ? '展开侧边栏' : 'Expand sidebar')}
           >
             {expanded ? (
               <ChevronLeft className="h-4 w-4" />

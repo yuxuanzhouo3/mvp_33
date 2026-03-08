@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ConversationWithDetails } from '@/lib/types'
 import { Loader2, Trash2, Upload, Users } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useSettings } from '@/lib/settings-context'
 
 interface GroupSettingsDialogProps {
   open: boolean
@@ -27,6 +28,8 @@ export function GroupSettingsDialog({
   onUpdate
 }: GroupSettingsDialogProps) {
   const router = useRouter()
+  const { language } = useSettings()
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState(conversation.name || '')
   const [description, setDescription] = useState(conversation.description || '')
@@ -56,12 +59,12 @@ export function GroupSettingsDialog({
     if (!file) return
 
     if (!file.type.startsWith('image/')) {
-      alert('请选择图片文件')
+      alert(tr('请选择图片文件', 'Please select an image file'))
       return
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      alert('图片大小不能超过5MB')
+      alert(tr('图片大小不能超过5MB', 'Image size cannot exceed 5MB'))
       return
     }
 
@@ -87,11 +90,11 @@ export function GroupSettingsDialog({
       } else {
         const data = await response.json()
         console.error('[GroupSettings] Avatar upload failed:', data.error)
-        alert(`上传失败: ${data.error || '未知错误'}`)
+        alert(tr(`上传失败: ${data.error || '未知错误'}`, `Upload failed: ${data.error || 'Unknown error'}`))
       }
     } catch (error) {
       console.error('[GroupSettings] 上传头像失败:', error)
-      alert('上传失败，请重试')
+      alert(tr('上传失败，请重试', 'Upload failed, please try again'))
     } finally {
       setIsUploadingAvatar(false)
     }
@@ -99,7 +102,7 @@ export function GroupSettingsDialog({
 
   const handleUpdate = async () => {
     if (!name.trim()) {
-      alert('群名称不能为空')
+      alert(tr('群名称不能为空', 'Group name cannot be empty'))
       return
     }
 
@@ -119,22 +122,22 @@ export function GroupSettingsDialog({
         onOpenChange(false)
       } else {
         const data = await response.json()
-        alert(`更新失败: ${data.error || '未知错误'}`)
+        alert(tr(`更新失败: ${data.error || '未知错误'}`, `Update failed: ${data.error || 'Unknown error'}`))
       }
     } catch (error) {
       console.error('更新群设置失败:', error)
-      alert('更新失败，请重试')
+      alert(tr('更新失败，请重试', 'Update failed, please try again'))
     } finally {
       setIsUpdating(false)
     }
   }
 
   const handleDelete = async () => {
-    if (!confirm('确定要删除这个群聊吗？此操作无法撤销，所有消息和数据都将被永久删除。')) {
+    if (!confirm(tr('确定要删除这个群聊吗？此操作无法撤销，所有消息和数据都将被永久删除。', 'Delete this group? This action cannot be undone and all messages/data will be permanently removed.'))) {
       return
     }
 
-    if (!confirm('再次确认：删除后无法恢复，确定要继续吗？')) {
+    if (!confirm(tr('再次确认：删除后无法恢复，确定要继续吗？', 'Please confirm again: this cannot be recovered. Continue?'))) {
       return
     }
 
@@ -149,11 +152,11 @@ export function GroupSettingsDialog({
         router.push('/chat')
       } else {
         const data = await response.json()
-        alert(`删除失败: ${data.error || '未知错误'}`)
+        alert(tr(`删除失败: ${data.error || '未知错误'}`, `Delete failed: ${data.error || 'Unknown error'}`))
       }
     } catch (error) {
       console.error('删除群聊失败:', error)
-      alert('删除失败，请重试')
+      alert(tr('删除失败，请重试', 'Delete failed, please try again'))
     } finally {
       setIsDeleting(false)
     }
@@ -163,12 +166,12 @@ export function GroupSettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>群聊设置</DialogTitle>
+          <DialogTitle>{tr('群聊设置', 'Group Settings')}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label>群头像</Label>
+            <Label>{tr('群头像', 'Group Avatar')}</Label>
             <div className="flex items-center gap-4">
               <Avatar className="h-20 w-20">
                 <AvatarImage src={avatarUrl || undefined} />
@@ -194,38 +197,38 @@ export function GroupSettingsDialog({
                   {isUploadingAvatar ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      上传中...
+                      {tr('上传中...', 'Uploading...')}
                     </>
                   ) : (
                     <>
                       <Upload className="mr-2 h-4 w-4" />
-                      上传头像
+                      {tr('上传头像', 'Upload Avatar')}
                     </>
                   )}
                 </Button>
-                <p className="text-xs text-muted-foreground mt-1">支持JPG、PNG格式，最大5MB</p>
+                <p className="text-xs text-muted-foreground mt-1">{tr('支持JPG、PNG格式，最大5MB', 'Supports JPG/PNG, up to 5MB')}</p>
               </div>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="group-name">群名称</Label>
+            <Label htmlFor="group-name">{tr('群名称', 'Group Name')}</Label>
             <Input
               id="group-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="输入群名称"
+              placeholder={tr('输入群名称', 'Enter group name')}
               maxLength={50}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="group-description">群描述</Label>
+            <Label htmlFor="group-description">{tr('群描述', 'Description')}</Label>
             <Textarea
               id="group-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="输入群描述（可选）"
+              placeholder={tr('输入群描述（可选）', 'Enter group description (optional)')}
               rows={3}
               maxLength={200}
             />
@@ -235,9 +238,9 @@ export function GroupSettingsDialog({
             <>
               <div className="border-t pt-4 mt-6">
                 <div className="space-y-2">
-                  <Label className="text-destructive">危险操作</Label>
+                  <Label className="text-destructive">{tr('危险操作', 'Danger Zone')}</Label>
                   <p className="text-sm text-muted-foreground">
-                    删除群聊后，所有消息和数据都将被永久删除，此操作无法撤销。
+                    {tr('删除群聊后，所有消息和数据都将被永久删除，此操作无法撤销。', 'Deleting this group permanently removes all messages and data. This cannot be undone.')}
                   </p>
                   <Button
                     variant="destructive"
@@ -248,12 +251,12 @@ export function GroupSettingsDialog({
                     {isDeleting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        删除中...
+                        {tr('删除中...', 'Deleting...')}
                       </>
                     ) : (
                       <>
                         <Trash2 className="mr-2 h-4 w-4" />
-                        删除群聊
+                        {tr('删除群聊', 'Delete Group')}
                       </>
                     )}
                   </Button>
@@ -265,16 +268,16 @@ export function GroupSettingsDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            取消
+            {tr('取消', 'Cancel')}
           </Button>
           <Button onClick={handleUpdate} disabled={isUpdating}>
             {isUpdating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                保存中...
+                {tr('保存中...', 'Saving...')}
               </>
             ) : (
-              '保存'
+              tr('保存', 'Save')
             )}
           </Button>
         </DialogFooter>

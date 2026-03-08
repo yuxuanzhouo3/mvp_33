@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils'
 import { MessageSquare, Megaphone, FileText, Pin, FolderOpen } from 'lucide-react'
+import { useSettings } from '@/lib/settings-context'
 
 interface ChatTabsProps {
   activeTab: string
@@ -10,10 +11,11 @@ interface ChatTabsProps {
 }
 
 export function ChatTabs({ activeTab, onTabChange, className }: ChatTabsProps) {
+  const { language } = useSettings()
   const tabs = [
-    { id: 'messages', label: '消息', icon: MessageSquare },
-    { id: 'announcements', label: '群公告', icon: Megaphone },
-    { id: 'files', label: '文件', icon: FolderOpen },
+    { id: 'messages', label: language === 'zh' ? '消息' : 'Messages', icon: MessageSquare },
+    { id: 'announcements', label: language === 'zh' ? '群公告' : 'Announcements', icon: Megaphone },
+    { id: 'files', label: language === 'zh' ? '文件' : 'Files', icon: FolderOpen },
   ]
 
   return (

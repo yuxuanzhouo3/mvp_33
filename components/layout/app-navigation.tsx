@@ -7,38 +7,42 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { MessageSquare, Users, Hash, Settings, Building2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useSettings } from '@/lib/settings-context'
 
 interface NavItem {
   href: string
   icon: React.ComponentType<{ className?: string }>
-  label: string
+  label: {
+    zh: string
+    en: string
+  }
 }
 
 const navItems: NavItem[] = [
   {
     href: '/chat',
     icon: MessageSquare,
-    label: '消息',
+    label: { zh: '消息', en: 'Messages' },
   },
   {
     href: '/contacts',
     icon: Users,
-    label: '联系人',
+    label: { zh: '联系人', en: 'Contacts' },
   },
   {
     href: '/workspace-members',
     icon: Building2,
-    label: '工作区',
+    label: { zh: '工作区', en: 'Workspace' },
   },
   {
     href: '/channels',
     icon: Hash,
-    label: '频道',
+    label: { zh: '频道', en: 'Channels' },
   },
   {
     href: '/settings',
     icon: Settings,
-    label: '设置',
+    label: { zh: '设置', en: 'Settings' },
   },
 ]
 
@@ -48,6 +52,7 @@ interface AppNavigationProps {
 }
 
 export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigationProps) {
+  const { language } = useSettings()
   const pathname = usePathname()
   const router = useRouter()
   const refreshInFlightRef = useRef(false)
@@ -346,7 +351,7 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
                       </Badge>
                     )}
                   </span>
-                  <span className="text-[10px] font-medium leading-none">{item.label}</span>
+                  <span className="text-[10px] font-medium leading-none">{item.label[language]}</span>
                 </Link>
               </Button>
             )
@@ -377,7 +382,7 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
           >
             <Link href={item.href}>
               <Icon className="h-5 w-5 shrink-0" />
-              <span className="text-sm font-medium">{item.label}</span>
+              <span className="text-sm font-medium">{item.label[language]}</span>
               {showChatBadge && (
                 <Badge
                   variant="destructive"

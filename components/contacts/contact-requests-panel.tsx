@@ -54,6 +54,7 @@ export function ContactRequestsPanel({
   const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false)
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
 
   const emitPendingRequestsUpdated = (requests: ContactRequest[]) => {
     window.dispatchEvent(new CustomEvent('friend-requests-updated', {
@@ -210,7 +211,7 @@ export function ContactRequestsPanel({
       }, 1000)
     } catch (error: any) {
       console.error('Accept request error:', error)
-      alert(`Failed to accept request: ${error.message}`)
+      alert(tr(`接受请求失败：${error.message}`, `Failed to accept request: ${error.message}`))
       loadRequests('pending', false)
     } finally {
       setProcessingIds(prev => {
@@ -272,12 +273,12 @@ export function ContactRequestsPanel({
     const diff = now.getTime() - date.getTime()
     const days = Math.floor(diff / (1000 * 60 * 60 * 24))
 
-    if (days === 0) return '今天'
-    if (days === 1) return '昨天'
-    if (days < 7) return `${days}天前`
-    if (days < 30) return `${Math.floor(days / 7)}周前`
-    if (days < 365) return `${Math.floor(days / 30)}个月前`
-    return `${Math.floor(days / 365)}年前`
+    if (days === 0) return tr('今天', 'Today')
+    if (days === 1) return tr('昨天', 'Yesterday')
+    if (days < 7) return tr(`${days}天前`, `${days} days ago`)
+    if (days < 30) return tr(`${Math.floor(days / 7)}周前`, `${Math.floor(days / 7)} weeks ago`)
+    if (days < 365) return tr(`${Math.floor(days / 30)}个月前`, `${Math.floor(days / 30)} months ago`)
+    return tr(`${Math.floor(days / 365)}年前`, `${Math.floor(days / 365)} years ago`)
   }
 
   const renderRequest = (request: ContactRequest, isPending: boolean) => {
@@ -302,17 +303,17 @@ export function ContactRequestsPanel({
             {isPending ? (
               <Badge variant="outline" className="text-xs">
                 <Clock className="h-3 w-3 mr-1" />
-                待处理
+                {tr('待处理', 'Pending')}
               </Badge>
             ) : request.status === 'accepted' ? (
               <Badge variant="default" className="text-xs bg-green-500">
                 <CheckCircle2 className="h-3 w-3 mr-1" />
-                已接受
+                {tr('已接受', 'Accepted')}
               </Badge>
             ) : (
               <Badge variant="secondary" className="text-xs">
                 <XCircle className="h-3 w-3 mr-1" />
-                已拒绝
+                {tr('已拒绝', 'Rejected')}
               </Badge>
             )}
           </div>
@@ -370,11 +371,11 @@ export function ContactRequestsPanel({
   }
 
   return (
-    <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'pending' | 'history')} className="flex flex-col h-full">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'pending' | 'history')} className="flex flex-col h-full">
       <TabsList className="grid w-full grid-cols-2 mx-4 mt-2">
-        <TabsTrigger value="history">历史记录</TabsTrigger>
+        <TabsTrigger value="history">{tr('历史记录', 'History')}</TabsTrigger>
         <TabsTrigger value="pending" className="relative">
-          待处理
+          {tr('待处理', 'Pending')}
           {pendingRequests.length > 0 && (
             <Badge variant="destructive" className="ml-2 h-5 min-w-5 px-1">
               {pendingRequests.length}
@@ -402,7 +403,7 @@ export function ContactRequestsPanel({
         {historyRequests.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
             <Clock className="h-12 w-12 mb-4 opacity-50" />
-            <p>暂无历史记录</p>
+            <p>{tr('暂无历史记录', 'No history')}</p>
           </div>
         ) : (
           <ScrollArea className="h-full">

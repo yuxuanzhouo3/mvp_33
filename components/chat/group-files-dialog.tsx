@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Loader2, FileIcon, Trash2, Download, Upload } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
+import { useSettings } from '@/lib/settings-context'
 
 interface GroupFile {
   id: string
@@ -38,6 +39,8 @@ export function GroupFilesDialog({
   currentUserId,
   isAdmin
 }: GroupFilesDialogProps) {
+  const { language } = useSettings()
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
   const [files, setFiles] = useState<GroupFile[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -69,7 +72,7 @@ export function GroupFilesDialog({
     if (!file) return
 
     if (file.size > 100 * 1024 * 1024) {
-      alert('文件大小不能超过100MB')
+      alert(tr('文件大小不能超过100MB', 'File size cannot exceed 100MB'))
       return
     }
 
@@ -90,18 +93,18 @@ export function GroupFilesDialog({
         }
       } else {
         const data = await response.json()
-        alert(`上传失败: ${data.error || '未知错误'}`)
+        alert(tr(`上传失败: ${data.error || '未知错误'}`, `Upload failed: ${data.error || 'Unknown error'}`))
       }
     } catch (error) {
       console.error('上传文件失败:', error)
-      alert('上传失败，请重试')
+      alert(tr('上传失败，请重试', 'Upload failed, please try again'))
     } finally {
       setIsUploading(false)
     }
   }
 
   const handleDelete = async (fileId: string) => {
-    if (!confirm('确定要删除这个文件吗？')) return
+    if (!confirm(tr('确定要删除这个文件吗？', 'Are you sure you want to delete this file?'))) return
 
     try {
       const response = await fetch(`/api/groups/${conversationId}/files/${fileId}`, {
@@ -112,11 +115,11 @@ export function GroupFilesDialog({
         await loadFiles()
       } else {
         const data = await response.json()
-        alert(`删除失败: ${data.error || '未知错误'}`)
+        alert(tr(`删除失败: ${data.error || '未知错误'}`, `Delete failed: ${data.error || 'Unknown error'}`))
       }
     } catch (error) {
       console.error('删除文件失败:', error)
-      alert('删除失败，请重试')
+      alert(tr('删除失败，请重试', 'Delete failed, please try again'))
     }
   }
 
@@ -133,7 +136,7 @@ export function GroupFilesDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileIcon className="h-5 w-5" />
-            群文件
+            {tr('群文件', 'Group Files')}
           </DialogTitle>
         </DialogHeader>
 
@@ -153,16 +156,16 @@ export function GroupFilesDialog({
               {isUploading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  上传中...
+                  {tr('上传中...', 'Uploading...')}
                 </>
               ) : (
                 <>
                   <Upload className="mr-2 h-4 w-4" />
-                  上传文件
+                  {tr('上传文件', 'Upload File')}
                 </>
               )}
             </Button>
-            <p className="text-xs text-muted-foreground mt-1">最大100MB</p>
+            <p className="text-xs text-muted-foreground mt-1">{tr('最大100MB', 'Max 100MB')}</p>
           </div>
 
           <ScrollArea className="h-[500px]">
@@ -172,7 +175,7 @@ export function GroupFilesDialog({
               </div>
             ) : files.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                暂无文件
+                {tr('暂无文件', 'No files')}
               </div>
             ) : (
               <div className="space-y-2">
@@ -189,7 +192,7 @@ export function GroupFilesDialog({
                         <span>
                           {formatDistanceToNow(new Date(file.created_at), {
                             addSuffix: true,
-                            locale: zhCN
+                            locale: language === 'zh' ? zhCN : undefined
                           })}
                         </span>
                       </div>

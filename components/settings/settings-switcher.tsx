@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 
 export function SettingsSwitcher() {
   const { language, theme, setLanguage, setTheme, t } = useSettings()
+  const isZh = language === 'zh'
 
   return (
     <DropdownMenu>
@@ -33,7 +34,7 @@ export function SettingsSwitcher() {
           ) : (
             <Moon className="h-5 w-5" />
           )}
-          <span className="sr-only">Settings</span>
+          <span className="sr-only">{isZh ? '设置' : 'Settings'}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
@@ -66,7 +67,7 @@ export function SettingsSwitcher() {
         
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => window.location.href = '/settings'}>
-          <span>订阅管理</span>
+          <span>{isZh ? '订阅管理' : 'Subscription'}</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         

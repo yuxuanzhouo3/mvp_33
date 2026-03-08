@@ -21,6 +21,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Code2, Copy, Check, Eye } from 'lucide-react'
+import { useSettings } from '@/lib/settings-context'
 
 // Map language names to Prism-compatible language identifiers
 const languageMap: Record<string, string> = {
@@ -92,15 +93,17 @@ const codeLanguages = [
 ]
 
 export function CodeInputDialog({ open, onOpenChange, onSend }: CodeInputDialogProps) {
+  const { language: uiLanguage } = useSettings()
+  const tr = (zh: string, en: string) => (uiLanguage === 'zh' ? zh : en)
   const [code, setCode] = useState('')
-  const [language, setLanguage] = useState('javascript')
+  const [codeLanguage, setCodeLanguage] = useState('javascript')
   const [copied, setCopied] = useState(false)
 
   const handleSend = () => {
     if (code.trim()) {
-      onSend(code.trim(), language)
+      onSend(code.trim(), codeLanguage)
       setCode('')
-      setLanguage('javascript')
+      setCodeLanguage('javascript')
       onOpenChange(false)
     }
   }
@@ -117,14 +120,14 @@ export function CodeInputDialog({ open, onOpenChange, onSend }: CodeInputDialogP
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Code2 className="h-5 w-5" />
-            分享代码
+            {tr('分享代码', 'Share Code')}
           </DialogTitle>
         </DialogHeader>
         
         <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground whitespace-nowrap">语言:</span>
-            <Select value={language} onValueChange={setLanguage}>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">{tr('语言:', 'Language:')}</span>
+            <Select value={codeLanguage} onValueChange={setCodeLanguage}>
               <SelectTrigger className="w-[200px]">
                 <SelectValue />
               </SelectTrigger>
@@ -146,12 +149,12 @@ export function CodeInputDialog({ open, onOpenChange, onSend }: CodeInputDialogP
                 {copied ? (
                   <>
                     <Check className="h-4 w-4" />
-                    已复制
+                    {tr('已复制', 'Copied')}
                   </>
                 ) : (
                   <>
                     <Copy className="h-4 w-4" />
-                    复制
+                    {tr('复制', 'Copy')}
                   </>
                 )}
               </Button>
@@ -160,10 +163,10 @@ export function CodeInputDialog({ open, onOpenChange, onSend }: CodeInputDialogP
           
           <Tabs defaultValue="input" className="w-full flex-1 flex flex-col overflow-hidden">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="input">编辑</TabsTrigger>
+              <TabsTrigger value="input">{tr('编辑', 'Edit')}</TabsTrigger>
               <TabsTrigger value="preview" disabled={!code.trim()}>
                 <Eye className="h-4 w-4 mr-1" />
-                预览
+                {tr('预览', 'Preview')}
               </TabsTrigger>
             </TabsList>
             
@@ -171,7 +174,7 @@ export function CodeInputDialog({ open, onOpenChange, onSend }: CodeInputDialogP
               <Textarea
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="粘贴或输入代码..."
+                placeholder={tr('粘贴或输入代码...', 'Paste or type code...')}
                 className="font-mono text-sm min-h-[300px] resize-none"
                 spellCheck={false}
               />
@@ -181,7 +184,7 @@ export function CodeInputDialog({ open, onOpenChange, onSend }: CodeInputDialogP
               <div className="relative rounded-lg overflow-hidden border max-h-[400px] overflow-auto">
                 {code.trim() ? (
                   <SyntaxHighlighter
-                    language={getPrismLanguage(language)}
+                    language={getPrismLanguage(codeLanguage)}
                     style={oneDark}
                     customStyle={{
                       margin: 0,
@@ -200,14 +203,14 @@ export function CodeInputDialog({ open, onOpenChange, onSend }: CodeInputDialogP
                     PreTag="div"
                     CodeTag="code"
                     codeTagProps={{
-                      className: `language-${getPrismLanguage(language)}`,
+                      className: `language-${getPrismLanguage(codeLanguage)}`,
                     }}
                   >
                     {code}
                   </SyntaxHighlighter>
                 ) : (
                   <div className="min-h-[300px] flex items-center justify-center text-muted-foreground">
-                    请输入代码以查看预览
+                    {tr('请输入代码以查看预览', 'Enter code to preview')}
                   </div>
                 )}
               </div>
@@ -217,10 +220,10 @@ export function CodeInputDialog({ open, onOpenChange, onSend }: CodeInputDialogP
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            取消
+            {tr('取消', 'Cancel')}
           </Button>
           <Button onClick={handleSend} disabled={!code.trim()}>
-            发送
+            {tr('发送', 'Send')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Input } from '@/components/ui/input'
 import { User } from '@/lib/types'
 import { Search, ChevronRight, Plus } from 'lucide-react'
+import { useSettings } from '@/lib/settings-context'
 
 interface GroupMembersSectionProps {
   conversationId: string
@@ -17,6 +18,8 @@ export function GroupMembersSection({
   isAdmin,
   onAddMembers
 }: GroupMembersSectionProps) {
+  const { language } = useSettings()
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
   const [members, setMembers] = useState<User[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
@@ -81,7 +84,7 @@ export function GroupMembersSection({
         className="flex items-center justify-between p-3 hover:bg-accent cursor-pointer transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <span className="text-sm font-medium">群成员 {members.length}</span>
+        <span className="text-sm font-medium">{tr('群成员', 'Members')} {members.length}</span>
         <ChevronRight className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
       </div>
 
@@ -90,7 +93,7 @@ export function GroupMembersSection({
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="搜索"
+              placeholder={tr('搜索', 'Search')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
