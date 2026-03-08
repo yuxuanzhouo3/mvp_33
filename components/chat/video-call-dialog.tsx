@@ -254,8 +254,13 @@ export function VideoCallDialog({
 
   // Outgoing dialing stage: show local camera preview before remote answers.
   useEffect(() => {
-    if (!open || isIncoming || callStatus !== 'calling' || !isVideoOn) {
+    if (!open || isIncoming || callStatus !== 'calling') {
       stopPreCallPreview()
+      return
+    }
+
+    if (!isVideoOn) {
+      stopPreCallPreview({ releaseStream: false, disableTrack: true })
       return
     }
 
@@ -266,10 +271,10 @@ export function VideoCallDialog({
   useEffect(() => {
     if (!open) return
     if (!preCallPreviewStreamRef.current) return
-    if (callStatus !== 'calling') return
+    if (callStatus !== 'calling' || !isVideoOn) return
     setHasLocalPreview(attachPreCallPreview())
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, callStatus])
+  }, [open, callStatus, isVideoOn])
 
   // Prevent stale "ended" dialog from blocking the next incoming invite.
   useEffect(() => {
@@ -367,15 +372,27 @@ export function VideoCallDialog({
     }
   }
 
-  const stopPreCallPreview = () => {
+  const stopPreCallPreview = (options?: { releaseStream?: boolean; disableTrack?: boolean }) => {
+    const releaseStream = options?.releaseStream ?? true
+    const disableTrack = options?.disableTrack ?? false
     const stream = preCallPreviewStreamRef.current
     if (stream) {
-      stream.getTracks().forEach((track) => {
-        try {
-          track.stop()
-        } catch {}
-      })
-      preCallPreviewStreamRef.current = null
+      if (disableTrack) {
+        stream.getVideoTracks().forEach((track) => {
+          try {
+            track.enabled = false
+          } catch {}
+        })
+      }
+
+      if (releaseStream) {
+        stream.getTracks().forEach((track) => {
+          try {
+            track.stop()
+          } catch {}
+        })
+        preCallPreviewStreamRef.current = null
+      }
     }
 
     const videoEl = localPreviewVideoRef.current
@@ -394,13 +411,25 @@ export function VideoCallDialog({
     if (typeof window === 'undefined') return
     if (!navigator.mediaDevices?.getUserMedia) return
     if (!isVideoOnRef.current) {
-      stopPreCallPreview()
+      stopPreCallPreview({ releaseStream: false, disableTrack: true })
       return
     }
 
     if (preCallPreviewStreamRef.current) {
-      setHasLocalPreview(attachPreCallPreview())
-      return
+      const videoTracks = preCallPreviewStreamRef.current.getVideoTracks()
+      const hasLiveTrack = videoTracks.some((track) => track.readyState === 'live')
+
+      if (!hasLiveTrack) {
+        stopPreCallPreview()
+      } else {
+        videoTracks.forEach((track) => {
+          try {
+            track.enabled = true
+          } catch {}
+        })
+        setHasLocalPreview(attachPreCallPreview())
+        return
+      }
     }
 
     try {
@@ -424,6 +453,11 @@ export function VideoCallDialog({
         return
       }
 
+      stream.getVideoTracks().forEach((track) => {
+        try {
+          track.enabled = true
+        } catch {}
+      })
       preCallPreviewStreamRef.current = stream
       setHasLocalPreview(attachPreCallPreview())
     } catch (error) {
@@ -2493,7 +2527,7 @@ export function VideoCallDialog({
 
     if (!agoraClientRef.current) {
       if (!newVideoOn) {
-        stopPreCallPreview()
+        stopPreCallPreview({ releaseStream: false, disableTrack: true })
         return
       }
 
