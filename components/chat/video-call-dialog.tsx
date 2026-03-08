@@ -2488,6 +2488,7 @@ export function VideoCallDialog({
 
   const handleToggleVideo = async () => {
     const newVideoOn = !isVideoOnRef.current
+    isVideoOnRef.current = newVideoOn
     setIsVideoOn(newVideoOn)
 
     if (!agoraClientRef.current) {
@@ -2498,6 +2499,7 @@ export function VideoCallDialog({
 
       await startPreCallPreview(prefersFrontCameraRef.current)
       if (!preCallPreviewStreamRef.current) {
+        isVideoOnRef.current = false
         setIsVideoOn(false)
       }
       return
@@ -2531,6 +2533,7 @@ export function VideoCallDialog({
     } catch (error) {
       console.error('Failed to toggle local video:', error)
       setHasConnectedLocalVideo(false)
+      isVideoOnRef.current = !newVideoOn
       setIsVideoOn(!newVideoOn)
     }
   }
