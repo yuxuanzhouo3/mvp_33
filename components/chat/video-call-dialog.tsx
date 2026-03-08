@@ -98,6 +98,10 @@ export function VideoCallDialog({
   const [hasLocalPreview, setHasLocalPreview] = useState(false)
   const [hasConnectedLocalVideo, setHasConnectedLocalVideo] = useState(false)
   const callStartTimeRef = useRef<number | null>(null)
+  const isMutedRef = useRef(isMuted)
+  const isVideoOnRef = useRef(isVideoOn)
+  const isSpeakerOnRef = useRef(isSpeakerOn)
+  const prefersFrontCameraRef = useRef(prefersFrontCamera)
   
   const agoraClientRef = useRef<TrtcClient | null>(null)
   const localVideoRef = useRef<HTMLDivElement>(null)
@@ -179,6 +183,22 @@ export function VideoCallDialog({
   }, [callStatus])
 
   useEffect(() => {
+    isMutedRef.current = isMuted
+  }, [isMuted])
+
+  useEffect(() => {
+    isVideoOnRef.current = isVideoOn
+  }, [isVideoOn])
+
+  useEffect(() => {
+    isSpeakerOnRef.current = isSpeakerOn
+  }, [isSpeakerOn])
+
+  useEffect(() => {
+    prefersFrontCameraRef.current = prefersFrontCamera
+  }, [prefersFrontCamera])
+
+  useEffect(() => {
     if (!open) {
       previousStatusRef.current = callStatus
       return
@@ -234,19 +254,14 @@ export function VideoCallDialog({
 
   // Outgoing dialing stage: show local camera preview before remote answers.
   useEffect(() => {
-    if (!open || isIncoming) {
+    if (!open || isIncoming || callStatus !== 'calling' || !isVideoOn) {
       stopPreCallPreview()
       return
     }
 
-    if (callStatus === 'calling') {
-      void startPreCallPreview()
-      return
-    }
-
-    stopPreCallPreview()
+    void startPreCallPreview(prefersFrontCameraRef.current)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isIncoming, callStatus])
+  }, [open, isIncoming, callStatus, isVideoOn])
 
   useEffect(() => {
     if (!open) return
@@ -327,6 +342,12 @@ export function VideoCallDialog({
     }
   }
 
+  const getPreCallVideoConstraints = (preferFrontCamera: boolean): MediaTrackConstraints => ({
+    facingMode: {
+      ideal: preferFrontCamera ? 'user' : 'environment',
+    },
+  })
+
   const attachPreCallPreview = () => {
     const stream = preCallPreviewStreamRef.current
     const videoEl = localPreviewVideoRef.current
@@ -369,9 +390,13 @@ export function VideoCallDialog({
     setHasLocalPreview(false)
   }
 
-  const startPreCallPreview = async () => {
+  const startPreCallPreview = async (preferFrontCamera = prefersFrontCameraRef.current) => {
     if (typeof window === 'undefined') return
     if (!navigator.mediaDevices?.getUserMedia) return
+    if (!isVideoOnRef.current) {
+      stopPreCallPreview()
+      return
+    }
 
     if (preCallPreviewStreamRef.current) {
       setHasLocalPreview(attachPreCallPreview())
@@ -379,13 +404,22 @@ export function VideoCallDialog({
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: false,
-      })
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: getPreCallVideoConstraints(preferFrontCamera),
+          audio: false,
+        })
+      } catch (preferredCameraError) {
+        console.warn('Failed to start pre-call preview with preferred camera, falling back to default device:', preferredCameraError)
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        })
+      }
 
-      // 如果状态已变化（如通话已结束/已接听），立即释放预览流
-      if (callStatusRef.current !== 'calling') {
+      // 如果状态已变化（如通话已结束/已接听）或本地已关闭视频，立即释放预览流
+      if (callStatusRef.current !== 'calling' || !isVideoOnRef.current) {
         stream.getTracks().forEach((track) => track.stop())
         return
       }
@@ -396,6 +430,16 @@ export function VideoCallDialog({
       console.warn('Failed to start pre-call preview:', error)
       setHasLocalPreview(false)
     }
+  }
+
+  const restartPreCallPreview = async (preferFrontCamera = prefersFrontCameraRef.current) => {
+    stopPreCallPreview()
+
+    if (callStatusRef.current !== 'calling' || !isVideoOnRef.current) {
+      return
+    }
+
+    await startPreCallPreview(preferFrontCamera)
   }
 
   useEffect(() => {
@@ -1932,12 +1976,45 @@ export function VideoCallDialog({
         }
       }
       // 注意：callStartTimeRef 只在远程用户加入时设置，这样双方的时间是同步的
+      const activeClient = agoraClientRef.current || currentClient
+
+      try {
+        await activeClient.setMuted(isMutedRef.current)
+      } catch (error) {
+        console.warn('Failed to apply mute state after joining:', error)
+      }
+
+      try {
+        await activeClient.setRemoteAudioEnabled(isSpeakerOnRef.current)
+      } catch (error) {
+        console.warn('Failed to apply speaker state after joining:', error)
+      }
+
+      if (!isVideoOnRef.current) {
+        try {
+          await activeClient.setVideoEnabled(false)
+        } catch (error) {
+          console.warn('Failed to keep local video disabled after joining:', error)
+        }
+        setHasConnectedLocalVideo(false)
+      } else if (!prefersFrontCameraRef.current) {
+        try {
+          const switched = await activeClient.switchCamera(false)
+          if (!switched) {
+            console.warn('Preferred rear camera is not available after joining the call.')
+          }
+        } catch (error) {
+          console.warn('Failed to apply preferred camera after joining:', error)
+        }
+      }
       
       // 检查摄像头是否可用
-      const localVideoTrack = client.getLocalVideoTrack()
+      const localVideoTrack = activeClient.getLocalVideoTrack()
       if (!localVideoTrack) {
-        console.warn('Camera not available - call will continue as audio-only')
-        setIsVideoOn(false)
+        if (isVideoOnRef.current) {
+          console.warn('Camera not available - call will continue as audio-only')
+          setIsVideoOn(false)
+        }
         setHasConnectedLocalVideo(false)
         // 不显示 alert，只在控制台记录
         // 摄像头不可用可能是权限被拒绝、设备问题、或被占用，用户可以从浏览器权限设置中检查
@@ -1945,7 +2022,12 @@ export function VideoCallDialog({
       
       // 显示本地视频 - 立即尝试播放，确保发起方也能看到自己的视频
       const playLocalVideo = () => {
-        const track = client.getLocalVideoTrack()
+        if (!isVideoOnRef.current) {
+          setHasConnectedLocalVideo(false)
+          return
+        }
+
+        const track = activeClient.getLocalVideoTrack()
         if (track && localVideoRef.current) {
           try {
             // Clear any existing content
@@ -1983,15 +2065,19 @@ export function VideoCallDialog({
         }
       }
       
-      // 立即尝试播放
-      playLocalVideo()
-      
-      // 也使用 requestAnimationFrame 确保 DOM 就绪
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          playLocalVideo()
-        }, 100)
-      })
+      if (isVideoOnRef.current) {
+        // 立即尝试播放
+        playLocalVideo()
+        
+        // 也使用 requestAnimationFrame 确保 DOM 就绪
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            playLocalVideo()
+          }, 100)
+        })
+      } else if (localVideoRef.current?.firstChild) {
+        localVideoRef.current.innerHTML = ''
+      }
     } catch (error: any) {
       const errorMsg = error?.message || 'Failed to connect to call'
       const errorCode = error?.code || ''
@@ -2367,10 +2453,16 @@ export function VideoCallDialog({
   }
 
   const handleToggleMute = async () => {
-    if (agoraClientRef.current) {
-      const newMuted = !isMuted
+    const newMuted = !isMutedRef.current
+    setIsMuted(newMuted)
+
+    if (!agoraClientRef.current) return
+
+    try {
       await agoraClientRef.current.setMuted(newMuted)
-      setIsMuted(newMuted)
+    } catch (error) {
+      console.error('Failed to toggle local mute:', error)
+      setIsMuted(!newMuted)
     }
   }
 
@@ -2395,39 +2487,56 @@ export function VideoCallDialog({
   }
 
   const handleToggleVideo = async () => {
-    if (agoraClientRef.current) {
-      const newVideoOn = !isVideoOn
-      try {
-        await agoraClientRef.current.setVideoEnabled(newVideoOn, newVideoOn ? localVideoRef.current : undefined)
-        setIsVideoOn(newVideoOn)
+    const newVideoOn = !isVideoOnRef.current
+    setIsVideoOn(newVideoOn)
 
-        if (!newVideoOn) {
-          if (localVideoRef.current?.firstChild) {
-            localVideoRef.current.innerHTML = ''
-          }
-          setHasConnectedLocalVideo(false)
-          return
+    if (!agoraClientRef.current) {
+      if (!newVideoOn) {
+        stopPreCallPreview()
+        return
+      }
+
+      await startPreCallPreview(prefersFrontCameraRef.current)
+      if (!preCallPreviewStreamRef.current) {
+        setIsVideoOn(false)
+      }
+      return
+    }
+
+    try {
+      await agoraClientRef.current.setVideoEnabled(newVideoOn, newVideoOn ? localVideoRef.current : undefined)
+
+      if (!newVideoOn) {
+        if (localVideoRef.current?.firstChild) {
+          localVideoRef.current.innerHTML = ''
         }
-
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            if (!playLocalPreview()) {
-              console.warn('Local preview not ready yet after toggling camera on.')
-            }
-          }, 80)
-        })
-      } catch (error) {
-        console.error('Failed to toggle local video:', error)
         setHasConnectedLocalVideo(false)
-        if (newVideoOn) {
-          setIsVideoOn(false)
+        return
+      }
+
+      if (!prefersFrontCameraRef.current) {
+        const switched = await agoraClientRef.current.switchCamera(false)
+        if (!switched) {
+          console.warn('Preferred rear camera is not available while enabling local video.')
         }
       }
+
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (!playLocalPreview()) {
+            console.warn('Local preview not ready yet after toggling camera on.')
+          }
+        }, 80)
+      })
+    } catch (error) {
+      console.error('Failed to toggle local video:', error)
+      setHasConnectedLocalVideo(false)
+      setIsVideoOn(!newVideoOn)
     }
   }
 
   const handleToggleSpeaker = async () => {
-    const newSpeakerOn = !isSpeakerOn
+    const newSpeakerOn = !isSpeakerOnRef.current
     setIsSpeakerOn(newSpeakerOn)
 
     if (!agoraClientRef.current) return
@@ -2435,21 +2544,31 @@ export function VideoCallDialog({
       await agoraClientRef.current.setRemoteAudioEnabled(newSpeakerOn)
     } catch (error) {
       console.error('Failed to toggle remote audio:', error)
+      setIsSpeakerOn(!newSpeakerOn)
     }
   }
 
   const handleSwitchCamera = async () => {
-    if (!agoraClientRef.current || callStatus !== 'connected' || !isVideoOn) return
+    const nextPrefersFrontCamera = !prefersFrontCameraRef.current
+    setPrefersFrontCamera(nextPrefersFrontCamera)
 
-    const nextPrefersFrontCamera = !prefersFrontCamera
+    if (!isVideoOnRef.current) {
+      return
+    }
+
+    if (!agoraClientRef.current) {
+      await restartPreCallPreview(nextPrefersFrontCamera)
+      return
+    }
+
     try {
       const switched = await agoraClientRef.current.switchCamera(nextPrefersFrontCamera)
       if (!switched) {
         console.warn('No additional camera is available for switching.')
+        setPrefersFrontCamera(!nextPrefersFrontCamera)
         return
       }
 
-      setPrefersFrontCamera(nextPrefersFrontCamera)
       requestAnimationFrame(() => {
         setTimeout(() => {
           if (!playLocalPreview()) {
@@ -2459,6 +2578,7 @@ export function VideoCallDialog({
       })
     } catch (error) {
       console.error('Failed to switch camera:', error)
+      setPrefersFrontCamera(!nextPrefersFrontCamera)
     }
   }
 
@@ -2686,10 +2806,9 @@ export function VideoCallDialog({
                           variant="secondary"
                           className={cn(
                             'h-12 w-12 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/18',
-                            callStatus !== 'connected' || !isVideoOn ? 'bg-white/5 text-white/45' : '',
+                            !isVideoOn && 'bg-white/5 text-white/65',
                           )}
                           onClick={handleSwitchCamera}
-                          disabled={callStatus !== 'connected' || !isVideoOn}
                           aria-label={tr('翻转镜头', 'Flip camera')}
                         >
                           <SwitchCamera className="h-5 w-5" />
@@ -2706,7 +2825,6 @@ export function VideoCallDialog({
                             !isSpeakerOn && 'bg-white/5 text-white/65',
                           )}
                           onClick={handleToggleSpeaker}
-                          disabled={callStatus !== 'connected'}
                           aria-label={tr('切换扬声器', 'Toggle speaker')}
                         >
                           {isSpeakerOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
@@ -2725,7 +2843,6 @@ export function VideoCallDialog({
                             !isVideoOn && 'shadow-[0_10px_20px_rgba(239,68,68,0.35)]',
                           )}
                           onClick={handleToggleVideo}
-                          disabled={callStatus !== 'connected'}
                           aria-label={isVideoOn ? tr('关闭视频', 'Turn off video') : tr('打开视频', 'Turn on video')}
                         >
                           {isVideoOn ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
@@ -2755,7 +2872,6 @@ export function VideoCallDialog({
                             isMuted && 'shadow-[0_10px_20px_rgba(239,68,68,0.35)]',
                           )}
                           onClick={handleToggleMute}
-                          disabled={callStatus !== 'connected'}
                           aria-label={isMuted ? tr('取消静音', 'Unmute') : tr('静音麦克风', 'Mute microphone')}
                         >
                           {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}

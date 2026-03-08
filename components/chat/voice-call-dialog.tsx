@@ -112,6 +112,8 @@ export function VoiceCallDialog({
   const [callStatus, setCallStatus] = useState<'calling' | 'ringing' | 'connected' | 'ended'>(isIncoming ? 'ringing' : 'calling')
   const [remoteUserJoined, setRemoteUserJoined] = useState(false) // 跟踪远程用户是否已加入
   const callStartTimeRef = useRef<number | null>(null)
+  const isMutedRef = useRef(isMuted)
+  const isSpeakerOnRef = useRef(isSpeakerOn)
   
   const agoraClientRef = useRef<TrtcClient | null>(null)
   const callMessageIdRef = useRef<string | undefined>(callMessageId)
@@ -360,6 +362,14 @@ export function VoiceCallDialog({
   useEffect(() => {
     callStatusRef.current = callStatus
   }, [callStatus])
+
+  useEffect(() => {
+    isMutedRef.current = isMuted
+  }, [isMuted])
+
+  useEffect(() => {
+    isSpeakerOnRef.current = isSpeakerOn
+  }, [isSpeakerOn])
 
   const shouldPlayRingtone =
     open &&
@@ -1159,7 +1169,8 @@ export function VoiceCallDialog({
           channel: resolvedChannelName,
         }))
         await client.join({ audioOnly: true })
-        await client.setRemoteAudioEnabled(isSpeakerOn)
+        await client.setMuted(isMutedRef.current)
+        await client.setRemoteAudioEnabled(isSpeakerOnRef.current)
         clearOutgoingAnsweredTimeout()
         console.log('[VoiceCallDialog] Joined voice channel successfully', {
           source,
@@ -1398,15 +1409,21 @@ export function VoiceCallDialog({
   }
 
   const handleToggleMute = async () => {
-    if (agoraClientRef.current) {
-      const newMuted = !isMuted
+    const newMuted = !isMutedRef.current
+    setIsMuted(newMuted)
+
+    if (!agoraClientRef.current) return
+
+    try {
       await agoraClientRef.current.setMuted(newMuted)
-      setIsMuted(newMuted)
+    } catch (error) {
+      console.error('Failed to toggle local mute:', error)
+      setIsMuted(!newMuted)
     }
   }
 
   const handleToggleSpeaker = async () => {
-    const newSpeakerOn = !isSpeakerOn
+    const newSpeakerOn = !isSpeakerOnRef.current
     setIsSpeakerOn(newSpeakerOn)
 
     if (!agoraClientRef.current) return
@@ -1414,6 +1431,7 @@ export function VoiceCallDialog({
       await agoraClientRef.current.setRemoteAudioEnabled(newSpeakerOn)
     } catch (error) {
       console.error('Failed to toggle remote audio:', error)
+      setIsSpeakerOn(!newSpeakerOn)
     }
   }
 
@@ -1582,7 +1600,6 @@ export function VoiceCallDialog({
                         !isSpeakerOn && 'bg-white/5 text-white/65',
                       )}
                       onClick={handleToggleSpeaker}
-                      disabled={callStatus !== 'connected'}
                       aria-label={tr('切换扬声器', 'Toggle speaker')}
                     >
                       {isSpeakerOn ? <Volume2 className="h-6 w-6" /> : <VolumeX className="h-6 w-6" />}
@@ -1612,7 +1629,6 @@ export function VoiceCallDialog({
                         isMuted && 'shadow-[0_10px_20px_rgba(239,68,68,0.35)]',
                       )}
                       onClick={handleToggleMute}
-                      disabled={callStatus !== 'connected'}
                       aria-label={isMuted ? tr('取消静音', 'Unmute') : tr('静音', 'Mute')}
                     >
                       {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
