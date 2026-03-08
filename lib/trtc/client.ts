@@ -107,6 +107,8 @@ export class TrtcClient {
   private onRemoteUserPublished?: (user: any) => void
   private onRemoteUserUnpublished?: (uid: string) => void
   private localAudioMuted = false
+  private prefersFrontCamera = true
+  private currentCameraId: string | null = null
 
   constructor(private config: TrtcConfig) {}
 
@@ -193,6 +195,85 @@ export class TrtcClient {
   private bind(eventName: any, handler: (event: any) => void) {
     if (!eventName || !this.trtc || typeof this.trtc.on !== 'function') return
     this.trtc.on(eventName, handler)
+  }
+
+  private async listVideoInputDevices(): Promise<MediaDeviceInfo[]> {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
+      return []
+    }
+
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      return devices.filter((device) => device.kind === 'videoinput')
+    } catch (error) {
+      console.warn('Failed to list video input devices:', error)
+      return []
+    }
+  }
+
+  private async tryUpdateLocalVideo(payloads: any[]): Promise<boolean> {
+    if (!this.trtc || typeof this.trtc.updateLocalVideo !== 'function') return false
+
+    for (const payload of payloads) {
+      try {
+        await Promise.resolve(this.trtc.updateLocalVideo(payload))
+        return true
+      } catch (error) {
+        console.debug('[TRTC] updateLocalVideo payload failed', { payload, error })
+      }
+    }
+
+    return false
+  }
+
+  private async trySwitchVideoDevice(cameraId: string): Promise<boolean> {
+    if (!this.trtc) return false
+
+    if (typeof this.trtc.switchDevice === 'function') {
+      const candidates: Array<[string, string]> = [
+        ['video', cameraId],
+        ['videoinput', cameraId],
+      ]
+
+      for (const [type, deviceId] of candidates) {
+        try {
+          await Promise.resolve(this.trtc.switchDevice(type, deviceId))
+          this.currentCameraId = cameraId
+          return true
+        } catch (error) {
+          console.debug('[TRTC] switchDevice failed', { type, deviceId, error })
+        }
+      }
+    }
+
+    const updated = await this.tryUpdateLocalVideo([
+      { option: { cameraId } },
+      { cameraId },
+    ])
+    if (updated) {
+      this.currentCameraId = cameraId
+      return true
+    }
+
+    if (typeof this.trtc.startLocalVideo === 'function') {
+      const payloads = [
+        { option: { cameraId } },
+        { cameraId },
+      ]
+
+      for (const payload of payloads) {
+        try {
+          await Promise.resolve(this.trtc.startLocalVideo(payload))
+          this.currentCameraId = cameraId
+          this.localVideoTrack = this.createLocalVideoTrack()
+          return true
+        } catch (error) {
+          console.debug('[TRTC] startLocalVideo camera payload failed', { payload, error })
+        }
+      }
+    }
+
+    return false
   }
 
   private async startRemoteAudio(uid: string, streamType: any) {
@@ -299,6 +380,7 @@ export class TrtcClient {
         await Promise.resolve(this.trtc.startLocalVideo())
       }
       this.localVideoTrack = this.createLocalVideoTrack()
+      this.currentCameraId = null
     } catch (error: any) {
       const message = String(error?.message || '')
       if (message.toLowerCase().includes('already')) {
@@ -308,6 +390,7 @@ export class TrtcClient {
           } catch {}
         }
         this.localVideoTrack = this.createLocalVideoTrack()
+        this.currentCameraId = null
         return
       }
       this.localVideoTrack = null
@@ -392,6 +475,8 @@ export class TrtcClient {
     this.remoteAudioEnabled = true
     this.localVideoTrack = null
     this.localAudioMuted = false
+    this.prefersFrontCamera = true
+    this.currentCameraId = null
 
     this.trtc = trtcSDK.create({
       assetsPath: TRTC_ASSETS_PATH,
@@ -474,6 +559,8 @@ export class TrtcClient {
     this.remoteUsers.clear()
     this.remoteAudioStartedKeys.clear()
     this.remoteAudioEnabled = true
+    this.prefersFrontCamera = true
+    this.currentCameraId = null
   }
 
   async setMuted(muted: boolean): Promise<void> {
@@ -520,6 +607,7 @@ export class TrtcClient {
           await Promise.resolve(this.trtc.updateLocalVideo({ mute: true }))
         }
         this.localVideoTrack = null
+        this.currentCameraId = null
         return
       }
 
@@ -548,6 +636,44 @@ export class TrtcClient {
       const streamType = user._audioStreamType ?? this.getMainStreamType()
       await this.startRemoteAudio(user.uid, streamType)
     }
+  }
+
+  async switchCamera(preferFront?: boolean): Promise<boolean> {
+    if (!this.trtc || !this.localVideoTrack) return false
+
+    const targetFrontCamera =
+      typeof preferFront === 'boolean' ? preferFront : !this.prefersFrontCamera
+
+    const frontCameraUpdated = await this.tryUpdateLocalVideo([
+      { option: { useFrontCamera: targetFrontCamera } },
+      { useFrontCamera: targetFrontCamera },
+    ])
+
+    if (frontCameraUpdated) {
+      this.prefersFrontCamera = targetFrontCamera
+      this.currentCameraId = null
+      return true
+    }
+
+    const devices = await this.listVideoInputDevices()
+    if (devices.length < 2) {
+      return false
+    }
+
+    const currentIndex = this.currentCameraId
+      ? devices.findIndex((device) => device.deviceId === this.currentCameraId)
+      : -1
+    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % devices.length : 1 % devices.length
+    const nextDevice = devices[nextIndex]
+    if (!nextDevice?.deviceId) {
+      return false
+    }
+
+    const switched = await this.trySwitchVideoDevice(nextDevice.deviceId)
+    if (switched) {
+      this.prefersFrontCamera = targetFrontCamera
+    }
+    return switched
   }
 
   getLocalVideoTrack(): any {

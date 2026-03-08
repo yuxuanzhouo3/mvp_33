@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Mic, MicOff, Phone, Volume2, VolumeX } from 'lucide-react'
 import { User } from '@/lib/types'
+import { useSettings } from '@/lib/settings-context'
 import { cn } from '@/lib/utils'
 import { TrtcClient } from '@/lib/trtc/client'
 import {
@@ -129,6 +130,7 @@ export function VoiceCallDialog({
   const initializePromiseRef = useRef<Promise<void> | null>(null)
   const initializeContextRef = useRef<'answer' | 'outgoing' | 'signal' | null>(null)
   const callSessionIdRef = useRef<string>(normalizeCallSessionId(callSessionId) || fallbackCallSessionId(callMessageId))
+  const { language } = useSettings()
 
   const ensureCallSessionId = (candidate?: unknown, messageId?: string): string => {
     const incomingSessionId = normalizeCallSessionId(candidate)
@@ -1415,16 +1417,27 @@ export function VoiceCallDialog({
     }
   }
 
+  const isZh = language === 'zh'
+  const tr = (zh: string, en: string) => (isZh ? zh : en)
   const displayName = isGroup
-    ? groupName || 'Group call'
-    : recipient.full_name || recipient.username || recipient.email || 'User'
+    ? groupName || tr('群组通话', 'Group call')
+    : recipient.full_name || recipient.username || recipient.email || tr('用户', 'User')
   const displayMembers = isGroup ? groupMembers : [recipient]
 
   const getStatusText = () => {
-    if (callStatus === 'ringing') return 'Incoming voice call'
-    if (callStatus === 'calling') return 'Calling...'
-    if (callStatus === 'connected') return remoteUserJoined ? formatDuration(callDuration) : 'Connecting...'
-    return 'Call ended'
+    if (callStatus === 'ringing') return tr('语音来电', 'Incoming voice call')
+    if (callStatus === 'calling') return tr('正在呼叫...', 'Calling...')
+    if (callStatus === 'connected') return remoteUserJoined ? formatDuration(callDuration) : tr('正在连接...', 'Connecting...')
+    return tr('通话结束', 'Call ended')
+  }
+
+  const getBadgeText = () => {
+    if (callStatus === 'connected') {
+      return remoteUserJoined ? tr('通话中', 'In Call') : tr('连接中', 'Connecting')
+    }
+    if (callStatus === 'ringing') return tr('来电', 'Incoming')
+    if (callStatus === 'calling') return tr('呼出', 'Outgoing')
+    return tr('已结束', 'Ended')
   }
 
   const statusBadgeClass = cn(
@@ -1447,50 +1460,42 @@ export function VoiceCallDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="sm:max-w-md border-0 bg-transparent p-0 shadow-none"
+        className="border-0 bg-transparent p-0 shadow-none sm:max-w-md"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogHeader className="sr-only">
           <DialogTitle>
-            {isGroup ? `Group voice call with ${groupName || 'group'}` : `Voice call with ${displayName}`}
+            {isGroup ? tr(('群组语音通话 ' + (groupName || '')).trim(), 'Group voice call with ' + (groupName || 'group')) : tr('与 ' + displayName + ' 语音通话', 'Voice call with ' + displayName)}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="relative overflow-hidden rounded-[30px] border border-white/10 bg-[#050b16] text-white shadow-[0_28px_70px_rgba(2,8,23,0.75)]">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_100%_0%,rgba(56,189,248,0.23),transparent_62%),radial-gradient(90%_80%_at_0%_100%,rgba(16,185,129,0.18),transparent_64%)]" />
-          <div className="pointer-events-none absolute inset-0 opacity-30 [background:linear-gradient(120deg,rgba(255,255,255,0.08)_0%,transparent_26%,transparent_74%,rgba(255,255,255,0.06)_100%)]" />
+        <div className="relative mx-auto w-full max-w-[360px] overflow-hidden rounded-[32px] border border-white/10 bg-[#07111f] text-white shadow-[0_28px_72px_rgba(2,8,23,0.78)]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_50%_20%,rgba(34,197,94,0.16),transparent_52%),radial-gradient(95%_80%_at_0%_100%,rgba(56,189,248,0.16),transparent_60%)]" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-white/10 to-transparent" />
 
-          <div className="relative flex min-h-[560px] flex-col px-6 pb-6 pt-5">
-            <div className="flex items-center justify-between">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-white/85">
-                Voice
+          <div className="relative flex min-h-[640px] flex-col px-6 pb-6 pt-6">
+            <div className="flex items-center justify-between gap-3">
+              <div className="inline-flex items-center rounded-full border border-white/15 bg-white/8 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.28em] text-white/78">
+                {tr('语音', 'VOICE')}
               </div>
-              <div className={statusBadgeClass}>
-                {callStatus === 'connected'
-                  ? (remoteUserJoined ? 'In Call' : 'Connecting')
-                  : callStatus === 'ringing'
-                    ? 'Incoming'
-                    : callStatus === 'calling'
-                      ? 'Outgoing'
-                      : 'Ended'}
-              </div>
+              <div className={statusBadgeClass}>{getBadgeText()}</div>
             </div>
 
-            <div className="mt-9 flex flex-col items-center">
+            <div className="mt-10 flex flex-col items-center text-center">
               {isGroup ? (
                 <div className="relative flex justify-center -space-x-5">
                   {displayMembers.slice(0, 3).map((member, index) => (
                     <Avatar
                       key={member.id}
                       className={cn(
-                        'h-24 w-24 border-4 border-white/20 shadow-xl shadow-black/40',
-                        index === 1 && 'translate-y-1',
+                        'h-24 w-24 border-4 border-white/15 shadow-2xl shadow-black/35',
+                        index === 1 && 'translate-y-2',
                       )}
                     >
                       <AvatarImage src={member.avatar_url || undefined} />
                       <AvatarFallback
-                        className="bg-slate-700 text-lg"
+                        className="bg-slate-800 text-lg text-white"
                         name={member.full_name || member.email || 'User'}
                       >
                         {(member.full_name || member.email || 'User')
@@ -1505,12 +1510,15 @@ export function VoiceCallDialog({
               ) : (
                 <div className="relative">
                   {callStatus !== 'ended' && (
-                    <div className="absolute -inset-3 rounded-full border border-emerald-300/35 opacity-70 animate-ping" />
+                    <>
+                      <div className="absolute -inset-6 rounded-full bg-emerald-400/10 blur-3xl" />
+                      <div className="absolute -inset-3 rounded-full border border-emerald-300/30 animate-ping" />
+                    </>
                   )}
-                  <Avatar className="relative h-32 w-32 border-4 border-white/20 shadow-2xl shadow-black/40">
+                  <Avatar className="relative h-32 w-32 border-4 border-white/15 shadow-[0_22px_48px_rgba(15,23,42,0.55)]">
                     <AvatarImage src={recipient.avatar_url || undefined} />
                     <AvatarFallback
-                      className="bg-slate-700 text-3xl"
+                      className="bg-gradient-to-br from-emerald-400 to-emerald-600 text-3xl text-white"
                       name={recipient.full_name || recipient.email || 'User'}
                     >
                       {(recipient.full_name || recipient.email || 'User')
@@ -1523,19 +1531,17 @@ export function VoiceCallDialog({
                 </div>
               )}
 
-              <div className="mt-7 text-center">
-                <h3 className="text-[30px] font-semibold leading-none tracking-tight">{displayName}</h3>
-                {isGroup && (
-                  <p className="mt-2 text-sm text-white/70">{displayMembers.length} participants</p>
-                )}
-                {!isGroup && recipient.title && (
-                  <p className="mt-2 text-sm text-white/70">{recipient.title}</p>
-                )}
-                <p className="mt-4 text-sm font-medium tracking-wide text-white/80">{getStatusText()}</p>
-              </div>
+              <h3 className="mt-8 text-[30px] font-semibold leading-none tracking-tight">{displayName}</h3>
+              {isGroup && (
+                <p className="mt-2 text-sm text-white/70">{tr(String(displayMembers.length) + ' 位参与者', String(displayMembers.length) + ' participants')}</p>
+              )}
+              {!isGroup && recipient.title && (
+                <p className="mt-2 text-sm text-white/70">{recipient.title}</p>
+              )}
+              <p className="mt-4 text-sm font-medium tracking-[0.18em] text-white/72">{getStatusText()}</p>
             </div>
 
-            <div className="mt-auto rounded-2xl border border-white/15 bg-white/[0.08] px-4 py-5 backdrop-blur-xl">
+            <div className="mt-auto rounded-[28px] border border-white/10 bg-black/35 p-4 backdrop-blur-xl">
               {callStatus === 'ringing' && isIncoming ? (
                 <div className="flex items-center justify-center gap-8">
                   <div className="flex flex-col items-center gap-2">
@@ -1546,59 +1552,73 @@ export function VoiceCallDialog({
                       onClick={() => {
                         void handleRejectCall()
                       }}
+                      aria-label={tr('拒绝语音通话', 'Decline voice call')}
                     >
                       <Phone className="h-6 w-6 rotate-90" />
                     </Button>
-                    <span className="text-xs text-white/70">Decline</span>
+                    <span className="text-xs text-white/72">{tr('拒绝', 'Decline')}</span>
                   </div>
                   <div className="flex flex-col items-center gap-2">
                     <Button
                       size="icon"
                       variant="default"
-                      className="h-16 w-16 rounded-full border border-emerald-200/40 bg-emerald-500 hover:bg-emerald-600 shadow-[0_14px_26px_rgba(16,185,129,0.45)]"
+                      className="h-16 w-16 rounded-full border border-emerald-200/40 bg-emerald-500 text-white hover:bg-emerald-600 shadow-[0_14px_26px_rgba(16,185,129,0.45)]"
                       onClick={handleAnswerCall}
+                      aria-label={tr('接听语音通话', 'Answer voice call')}
                     >
                       <Phone className="h-6 w-6" />
                     </Button>
-                    <span className="text-xs text-white/80">Answer</span>
+                    <span className="text-xs text-white/80">{tr('接听', 'Answer')}</span>
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-center gap-4">
-                  <Button
-                    size="icon"
-                    variant="secondary"
-                    className={cn(
-                      'h-12 w-12 rounded-full border border-white/25 bg-white/12 text-white hover:bg-white/20',
-                      !isSpeakerOn && 'bg-white/5 text-white/70',
-                    )}
-                    onClick={handleToggleSpeaker}
-                    disabled={callStatus !== 'connected'}
-                  >
-                    {isSpeakerOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
-                  </Button>
+                <div className="grid grid-cols-3 items-end gap-3">
+                  <div className="flex flex-col items-center gap-2">
+                    <Button
+                      size="icon"
+                      variant="secondary"
+                      className={cn(
+                        'h-14 w-14 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/18',
+                        !isSpeakerOn && 'bg-white/5 text-white/65',
+                      )}
+                      onClick={handleToggleSpeaker}
+                      disabled={callStatus !== 'connected'}
+                      aria-label={tr('切换扬声器', 'Toggle speaker')}
+                    >
+                      {isSpeakerOn ? <Volume2 className="h-6 w-6" /> : <VolumeX className="h-6 w-6" />}
+                    </Button>
+                    <span className="text-xs text-white/70">{tr('免提', 'Speaker')}</span>
+                  </div>
 
-                  <Button
-                    size="icon"
-                    variant={isMuted ? 'destructive' : 'secondary'}
-                    className={cn(
-                      'h-12 w-12 rounded-full border border-white/25 bg-white/12 text-white hover:bg-white/20',
-                      isMuted && 'shadow-[0_10px_20px_rgba(239,68,68,0.35)]',
-                    )}
-                    onClick={handleToggleMute}
-                    disabled={callStatus !== 'connected'}
-                  >
-                    {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-                  </Button>
+                  <div className="flex flex-col items-center gap-2">
+                    <Button
+                      size="icon"
+                      variant="destructive"
+                      className="h-16 w-16 rounded-full shadow-[0_16px_28px_rgba(239,68,68,0.45)]"
+                      onClick={handleEndCall}
+                      aria-label={tr('挂断语音通话', 'End voice call')}
+                    >
+                      <Phone className="h-6 w-6 rotate-[135deg]" />
+                    </Button>
+                    <span className="text-xs text-white/82">{tr('挂断', 'Hang up')}</span>
+                  </div>
 
-                  <Button
-                    size="icon"
-                    variant="destructive"
-                    className="h-16 w-16 rounded-full shadow-[0_14px_26px_rgba(239,68,68,0.45)]"
-                    onClick={handleEndCall}
-                  >
-                    <Phone className="h-6 w-6 rotate-[135deg]" />
-                  </Button>
+                  <div className="flex flex-col items-center gap-2">
+                    <Button
+                      size="icon"
+                      variant={isMuted ? 'destructive' : 'secondary'}
+                      className={cn(
+                        'h-14 w-14 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/18',
+                        isMuted && 'shadow-[0_10px_20px_rgba(239,68,68,0.35)]',
+                      )}
+                      onClick={handleToggleMute}
+                      disabled={callStatus !== 'connected'}
+                      aria-label={isMuted ? tr('取消静音', 'Unmute') : tr('静音', 'Mute')}
+                    >
+                      {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                    </Button>
+                    <span className="text-xs text-white/70">{isMuted ? tr('取消静音', 'Unmute') : tr('静音', 'Mute')}</span>
+                  </div>
                 </div>
               )}
             </div>

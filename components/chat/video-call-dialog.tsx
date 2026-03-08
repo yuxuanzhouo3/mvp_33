@@ -9,8 +9,9 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Mic, MicOff, Phone, Video, VideoOff, Monitor } from 'lucide-react'
+import { Mic, MicOff, Phone, Video, VideoOff, Volume2, VolumeX, SwitchCamera } from 'lucide-react'
 import { User } from '@/lib/types'
+import { useSettings } from '@/lib/settings-context'
 import { cn } from '@/lib/utils'
 import { TrtcClient } from '@/lib/trtc/client'
 import {
@@ -88,7 +89,8 @@ export function VideoCallDialog({
 }: VideoCallDialogProps) {
   const [isMuted, setIsMuted] = useState(false)
   const [isVideoOn, setIsVideoOn] = useState(true)
-  const [isScreenSharing, setIsScreenSharing] = useState(false)
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true)
+  const [prefersFrontCamera, setPrefersFrontCamera] = useState(true)
   const [callDuration, setCallDuration] = useState(0)
   const [callStatus, setCallStatus] = useState<'calling' | 'ringing' | 'connected' | 'ended'>(isIncoming ? 'ringing' : 'calling')
   const [remoteUserJoined, setRemoteUserJoined] = useState(false) // 跟踪远程用户是否已加入
@@ -115,6 +117,7 @@ export function VideoCallDialog({
   const incomingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const outgoingInviteStartedRef = useRef(false)
   const callSessionIdRef = useRef<string>(normalizeCallSessionId(callSessionId) || fallbackCallSessionId(callMessageId))
+  const { language } = useSettings()
 
   const normalizeMessageId = (value: unknown): string | undefined => {
     if (value === null || value === undefined) return undefined
@@ -2351,7 +2354,8 @@ export function VideoCallDialog({
     setCallDuration(0)
     setIsMuted(false)
     setIsVideoOn(true)
-    setIsScreenSharing(false)
+    setIsSpeakerOn(true)
+    setPrefersFrontCamera(true)
     setRemoteUserJoined(false)
     setHasRemoteVideo(false)
     setHasConnectedLocalVideo(false)
@@ -2422,6 +2426,42 @@ export function VideoCallDialog({
     }
   }
 
+  const handleToggleSpeaker = async () => {
+    const newSpeakerOn = !isSpeakerOn
+    setIsSpeakerOn(newSpeakerOn)
+
+    if (!agoraClientRef.current) return
+    try {
+      await agoraClientRef.current.setRemoteAudioEnabled(newSpeakerOn)
+    } catch (error) {
+      console.error('Failed to toggle remote audio:', error)
+    }
+  }
+
+  const handleSwitchCamera = async () => {
+    if (!agoraClientRef.current || callStatus !== 'connected' || !isVideoOn) return
+
+    const nextPrefersFrontCamera = !prefersFrontCamera
+    try {
+      const switched = await agoraClientRef.current.switchCamera(nextPrefersFrontCamera)
+      if (!switched) {
+        console.warn('No additional camera is available for switching.')
+        return
+      }
+
+      setPrefersFrontCamera(nextPrefersFrontCamera)
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (!playLocalPreview()) {
+            console.warn('Local preview not ready yet after switching camera.')
+          }
+        }, 80)
+      })
+    } catch (error) {
+      console.error('Failed to switch camera:', error)
+    }
+  }
+
   // 确保 recipient 始终是对话中的另一个用户（不是当前用户）
   // 如果 recipient 是当前用户，说明传参有问题，记录警告
   const actualRecipient = recipient.id === currentUser.id 
@@ -2434,6 +2474,9 @@ export function VideoCallDialog({
         isIncoming
       }), recipient)
     : recipient
+
+  const isZh = language === 'zh'
+  const tr = (zh: string, en: string) => (isZh ? zh : en)
   
   // 记录 recipient 信息用于调试
   useEffect(() => {
@@ -2451,17 +2494,26 @@ export function VideoCallDialog({
   }, [open, actualRecipient.id, currentUser.id, conversationId, isIncoming])
   
   const displayName = isGroup
-    ? groupName || 'Group call'
-    : actualRecipient.full_name || actualRecipient.username || actualRecipient.email || 'User'
+    ? groupName || tr('群组通话', 'Group call')
+    : actualRecipient.full_name || actualRecipient.username || actualRecipient.email || tr('用户', 'User')
   const displayMembers = isGroup ? groupMembers : [actualRecipient]
 
   const getStatusText = () => {
     if (callStatus === 'connected') {
-      return remoteUserJoined ? (callDuration > 0 ? formatDuration(callDuration) : 'Call started') : 'Waiting for other user...'
+      return remoteUserJoined ? (callDuration > 0 ? formatDuration(callDuration) : tr('通话已开始', 'Call started')) : tr('等待对方加入...', 'Waiting for other user...')
     }
-    if (callStatus === 'ringing') return isIncoming ? 'Incoming call...' : 'Connecting...'
-    if (callStatus === 'calling') return 'Calling...'
-    return 'Call ended'
+    if (callStatus === 'ringing') return isIncoming ? tr('视频来电...', 'Incoming call...') : tr('正在连接...', 'Connecting...')
+    if (callStatus === 'calling') return tr('呼叫中...', 'Calling...')
+    return tr('通话结束', 'Call ended')
+  }
+
+  const getBadgeText = () => {
+    if (callStatus === 'connected') {
+      return remoteUserJoined ? tr('通话中', 'In Call') : tr('连接中', 'Connecting')
+    }
+    if (callStatus === 'ringing') return tr('来电', 'Incoming')
+    if (callStatus === 'calling') return tr('呼出', 'Outgoing')
+    return tr('已结束', 'Ended')
   }
 
   const statusBadgeClass = cn(
@@ -2490,16 +2542,16 @@ export function VideoCallDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="h-[670px] overflow-hidden border-0 p-0 shadow-none sm:max-w-5xl"
+        className="border-0 bg-transparent p-0 shadow-none sm:max-w-md"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogHeader className="sr-only">
           <DialogTitle>
-            {isGroup ? `Group video call with ${groupName || 'group'}` : `Video call with ${displayName}`}
+            {isGroup ? tr(('群组视频通话 ' + (groupName || '')).trim(), 'Group video call with ' + (groupName || 'group')) : tr('与 ' + displayName + ' 视频通话', 'Video call with ' + displayName)}
           </DialogTitle>
         </DialogHeader>
-        <div className="relative h-full overflow-hidden rounded-[28px] border border-white/10 bg-[#050b16] text-white shadow-[0_28px_72px_rgba(2,8,23,0.78)]">
+        <div className="relative mx-auto h-[min(720px,88vh)] w-full max-w-[360px] overflow-hidden rounded-[32px] border border-white/10 bg-[#050b16] text-white shadow-[0_28px_72px_rgba(2,8,23,0.78)]">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_100%_0%,rgba(59,130,246,0.22),transparent_62%),radial-gradient(95%_75%_at_0%_100%,rgba(16,185,129,0.14),transparent_64%)]" />
           <div className="pointer-events-none absolute inset-0 opacity-30 [background:linear-gradient(125deg,rgba(255,255,255,0.08)_0%,transparent_30%,transparent_70%,rgba(255,255,255,0.06)_100%)]" />
 
@@ -2508,17 +2560,9 @@ export function VideoCallDialog({
               <div className="rounded-2xl border border-white/20 bg-black/35 px-4 py-2 backdrop-blur-md">
                 <div className="flex items-center gap-2">
                   <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-white/80">
-                    Video
+                    {tr('视频', 'VIDEO')}
                   </span>
-                  <span className={statusBadgeClass}>
-                    {callStatus === 'connected'
-                      ? (remoteUserJoined ? 'In Call' : 'Connecting')
-                      : callStatus === 'ringing'
-                        ? 'Incoming'
-                        : callStatus === 'calling'
-                          ? 'Outgoing'
-                          : 'Ended'}
-                  </span>
+                  <span className={statusBadgeClass}>{getBadgeText()}</span>
                 </div>
                 <div className="mt-2 text-sm font-semibold">{displayName}</div>
                 <div className="text-xs text-white/70">{getStatusText()}</div>
@@ -2526,25 +2570,22 @@ export function VideoCallDialog({
 
               {isGroup && (
                 <div className="rounded-2xl border border-white/20 bg-black/35 px-3 py-2 text-xs text-white/80 backdrop-blur-md">
-                  {displayMembers.length} participants
+                  {tr(String(displayMembers.length) + ' 位成员', String(displayMembers.length) + ' participants')}
                 </div>
               )}
             </div>
 
-            {/* Main video area – unified layout for all states (calling / ringing / connected) */}
             <div className="relative h-full w-full">
-              {/* Remote video feed */}
               <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-gradient-to-br from-[#092346] via-[#12345c] to-[#1f1b4b]">
                 <div
                   ref={remoteVideoRef}
                   className="h-full w-full"
                   style={{ minHeight: '100%' }}
                 />
-                {/* 如果没有远程视频，显示B的头像（覆盖在 video 容器上方，但不阻止底部按钮点击） */}
                 {!hasRemoteVideo && (
                   <div className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center bg-gradient-to-br from-[#0F2A4A]/90 via-[#1D355A]/80 to-[#2B1A4F]/90 text-center text-white backdrop-blur-sm">
-                    <div className="pointer-events-auto">
-                      <Avatar className="mx-auto mb-4 h-32 w-32 border-4 border-white/20 shadow-2xl shadow-black/45">
+                    <div className="pointer-events-auto px-6">
+                      <Avatar className="mx-auto mb-4 h-28 w-28 border-4 border-white/20 shadow-2xl shadow-black/45">
                         <AvatarImage src={actualRecipient.avatar_url || undefined} />
                         <AvatarFallback
                           className="bg-gradient-to-br from-sky-500 to-indigo-600 text-3xl"
@@ -2560,23 +2601,22 @@ export function VideoCallDialog({
                       <h3 className="text-xl font-semibold">{displayName}</h3>
                       <p className="mt-2 text-sm text-gray-200">
                         {remoteUserJoined
-                          ? 'Video off'
+                          ? tr('对方已关闭摄像头', 'Video off')
                           : callStatus === 'connected'
-                            ? 'Waiting for other user...'
+                            ? tr('等待对方画面...', 'Waiting for other user...')
                             : callStatus === 'ringing'
-                              ? 'Ringing...'
-                              : 'Calling...'}
+                              ? tr('响铃中...', 'Ringing...')
+                              : tr('呼叫中...', 'Calling...')}
                       </p>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Self view (local video) */}
               {showLocalTile && (
-                <div className="absolute right-4 top-4 z-20 h-40 w-56 overflow-hidden rounded-2xl border border-white/20 bg-slate-900/75 shadow-2xl shadow-black/50 backdrop-blur-xl">
+                <div className="absolute right-4 top-6 z-20 h-32 w-24 overflow-hidden rounded-2xl border border-white/20 bg-slate-900/75 shadow-2xl shadow-black/50 backdrop-blur-xl">
                   <div className="absolute left-2 top-2 z-10 rounded-md bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
-                    Local video
+                    {tr('我的画面', 'You')}
                   </div>
                   <video
                     ref={localPreviewVideoRef}
@@ -2596,9 +2636,9 @@ export function VideoCallDialog({
                     )}
                   />
                   {showLocalPlaceholder && (
-                    <div className="absolute inset-0 flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-700 to-slate-900">
-                      <span className="text-sm text-white/90">
-                        {!isVideoOn ? 'Video Off' : (callStatus === 'calling' ? 'Opening camera...' : 'Camera unavailable')}
+                    <div className="absolute inset-0 flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-700 to-slate-900 px-3 text-center">
+                      <span className="text-xs text-white/90">
+                        {!isVideoOn ? tr('视频已关闭', 'Video off') : (callStatus === 'calling' ? tr('正在打开摄像头...', 'Opening camera...') : tr('摄像头不可用', 'Camera unavailable'))}
                       </span>
                     </div>
                   )}
@@ -2607,7 +2647,7 @@ export function VideoCallDialog({
             </div>
 
             {callStatus !== 'ended' && (
-              <div className="absolute bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-black/85 via-black/45 to-transparent p-5 sm:p-6">
+              <div className="absolute bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-slate-900 via-slate-900/90 to-transparent px-6 pb-8 pt-12">
                 {callStatus === 'ringing' && isIncoming ? (
                   <div className="flex items-center justify-center gap-8">
                     <div className="flex flex-col items-center gap-2">
@@ -2618,73 +2658,111 @@ export function VideoCallDialog({
                         onClick={() => {
                           void handleRejectCall()
                         }}
+                        aria-label={tr('拒绝视频通话', 'Decline video call')}
                       >
                         <Phone className="h-6 w-6 rotate-90" />
                       </Button>
-                      <span className="text-xs text-white/70">Decline</span>
+                      <span className="text-xs text-white/70">{tr('拒绝', 'Decline')}</span>
                     </div>
                     <div className="flex flex-col items-center gap-2">
                       <Button
                         size="icon"
                         variant="default"
-                        className="h-16 w-16 rounded-full border border-emerald-200/40 bg-emerald-500 hover:bg-emerald-600 shadow-[0_14px_26px_rgba(16,185,129,0.45)]"
+                        className="h-16 w-16 rounded-full border border-emerald-200/40 bg-emerald-500 text-white hover:bg-emerald-600 shadow-[0_14px_26px_rgba(16,185,129,0.45)]"
                         onClick={handleAnswerCall}
+                        aria-label={tr('接听视频通话', 'Answer video call')}
                       >
                         <Phone className="h-6 w-6" />
                       </Button>
-                      <span className="text-xs text-white/80">Answer</span>
+                      <span className="text-xs text-white/80">{tr('接听', 'Answer')}</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="mx-auto flex max-w-[430px] items-center justify-center gap-4 rounded-2xl border border-white/15 bg-white/[0.1] px-5 py-4 backdrop-blur-xl">
-                    {callStatus === 'connected' && (
-                      <>
+                  <div className="space-y-6">
+                    <div className="flex justify-center gap-12">
+                      <div className="flex flex-col items-center gap-2">
                         <Button
                           size="icon"
-                          variant={isMuted ? 'destructive' : 'secondary'}
+                          variant="secondary"
                           className={cn(
-                            'h-14 w-14 rounded-full border border-white/25 bg-white/10 text-white hover:bg-white/20',
-                            isMuted && 'shadow-[0_10px_20px_rgba(239,68,68,0.35)]',
+                            'h-12 w-12 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/18',
+                            callStatus !== 'connected' || !isVideoOn ? 'bg-white/5 text-white/45' : '',
                           )}
-                          onClick={handleToggleMute}
+                          onClick={handleSwitchCamera}
+                          disabled={callStatus !== 'connected' || !isVideoOn}
+                          aria-label={tr('翻转镜头', 'Flip camera')}
                         >
-                          {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                          <SwitchCamera className="h-5 w-5" />
                         </Button>
+                        <span className="text-xs text-white/70">{tr('翻转镜头', 'Flip')}</span>
+                      </div>
 
+                      <div className="flex flex-col items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="secondary"
+                          className={cn(
+                            'h-12 w-12 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/18',
+                            !isSpeakerOn && 'bg-white/5 text-white/65',
+                          )}
+                          onClick={handleToggleSpeaker}
+                          disabled={callStatus !== 'connected'}
+                          aria-label={tr('切换扬声器', 'Toggle speaker')}
+                        >
+                          {isSpeakerOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+                        </Button>
+                        <span className="text-xs text-white/70">{tr('扬声器', 'Speaker')}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-end justify-between gap-3 px-2">
+                      <div className="flex flex-col items-center gap-2">
                         <Button
                           size="icon"
                           variant={isVideoOn ? 'secondary' : 'destructive'}
                           className={cn(
-                            'h-14 w-14 rounded-full border border-white/25 bg-white/10 text-white hover:bg-white/20',
+                            'h-14 w-14 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/18',
                             !isVideoOn && 'shadow-[0_10px_20px_rgba(239,68,68,0.35)]',
                           )}
                           onClick={handleToggleVideo}
+                          disabled={callStatus !== 'connected'}
+                          aria-label={isVideoOn ? tr('关闭视频', 'Turn off video') : tr('打开视频', 'Turn on video')}
                         >
                           {isVideoOn ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
                         </Button>
+                        <span className="text-xs text-white/70">{isVideoOn ? tr('视频', 'Video') : tr('视频关闭', 'Video off')}</span>
+                      </div>
 
+                      <div className="flex flex-col items-center gap-2">
                         <Button
                           size="icon"
-                          variant={isScreenSharing ? 'default' : 'secondary'}
-                          className={cn(
-                            'h-14 w-14 rounded-full border border-white/25 bg-white/10 text-white hover:bg-white/20',
-                            isScreenSharing && 'border-sky-300/40 bg-sky-500/30',
-                          )}
-                          onClick={() => setIsScreenSharing(!isScreenSharing)}
+                          variant="destructive"
+                          className="h-16 w-16 rounded-full shadow-[0_16px_28px_rgba(239,68,68,0.45)]"
+                          onClick={handleEndCall}
+                          aria-label={tr('挂断视频通话', 'End video call')}
                         >
-                          <Monitor className="h-6 w-6" />
+                          <Phone className="h-6 w-6 rotate-[135deg]" />
                         </Button>
-                      </>
-                    )}
+                        <span className="text-xs text-white/82">{tr('挂断', 'Hang up')}</span>
+                      </div>
 
-                    <Button
-                      size="icon"
-                      variant="destructive"
-                      className="h-16 w-16 rounded-full shadow-[0_14px_26px_rgba(239,68,68,0.45)]"
-                      onClick={handleEndCall}
-                    >
-                      <Phone className="h-6 w-6 rotate-[135deg]" />
-                    </Button>
+                      <div className="flex flex-col items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant={isMuted ? 'destructive' : 'secondary'}
+                          className={cn(
+                            'h-14 w-14 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/18',
+                            isMuted && 'shadow-[0_10px_20px_rgba(239,68,68,0.35)]',
+                          )}
+                          onClick={handleToggleMute}
+                          disabled={callStatus !== 'connected'}
+                          aria-label={isMuted ? tr('取消静音', 'Unmute') : tr('静音麦克风', 'Mute microphone')}
+                        >
+                          {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                        </Button>
+                        <span className="text-xs text-white/70">{isMuted ? tr('取消静音', 'Unmute') : tr('麦克风', 'Mic')}</span>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
