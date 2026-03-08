@@ -342,7 +342,6 @@ function ChatPageContent() {
   // CRITICAL: Track the conversation that user has explicitly selected (clicked)
   // This is used to "weld" (焊死) the unread_count to 0 - no matter what happens,
   // if a conversation is in this set, its unread_count MUST be 0
-  const selectedConversationIdsRef = useRef<Set<string>>(new Set())
 
   const conversationsRef = useRef<ConversationWithDetails[]>([])
   const messagesByConversationRef = useRef<Map<string, MessageWithSender[]>>(new Map())
@@ -478,12 +477,6 @@ function ChatPageContent() {
   useEffect(() => {
 
     selectedConversationIdRef.current = selectedConversationId
-    // CRITICAL: When conversation is selected, add it to the "welded" set
-    // This ensures unread_count stays at 0 no matter what
-    if (selectedConversationId) {
-      selectedConversationIdsRef.current.add(selectedConversationId)
-      console.log('🔒 Welded conversation unread_count to 0:', selectedConversationId)
-    }
   }, [selectedConversationId])
 
   useEffect(() => {
@@ -1629,9 +1622,7 @@ function ChatPageContent() {
       const workspace = currentWorkspaceRef.current
       
       if (conversationId === currentSelectedId && user && workspace) {
-        // CRITICAL: Ensure this conversation is in the "welded" set
-        selectedConversationIdsRef.current.add(conversationId)
-        console.log('🔒 Welded conversation unread_count to 0 (loadMessages complete):', conversationId)
+        console.log('🔒 Keeping selected conversation unread_count at 0 (loadMessages complete):', conversationId)
         
         setConversations(prev => {
           const updated = prev.map(conv =>
@@ -2232,15 +2223,10 @@ function ChatPageContent() {
 
           
 
-          // CRITICAL: Preserve optimistic unread_count = 0 for currently selected conversation
-          // This prevents the red dot from flickering (disappearing → appearing → disappearing)
-          // If a conversation is in the "welded" set (user clicked it), ALWAYS set its unread_count to 0
-          // This "welds" (焊死) the unread_count to 0 - no matter what happens
+          // Preserve unread_count = 0 for the currently selected conversation.
           const enrichedWithPreservedRead = enrichedConversations.map(conv => {
-            // CRITICAL: If this conversation is in the "welded" set, ALWAYS set unread_count to 0
-            // This ensures that even if loadConversations runs after loadMessages, the unread_count stays at 0
-            if (selectedConversationIdsRef.current.has(conv.id)) {
-              console.log('🔒 Keeping welded conversation unread_count at 0:', conv.id)
+            if (selectedConversationIdRef.current === conv.id) {
+              console.log('🔒 Keeping selected conversation unread_count at 0:', conv.id)
               return { ...conv, unread_count: 0 }
             }
             return conv
@@ -2827,11 +2813,8 @@ function ChatPageContent() {
             const updatedExisting = prev.map(prevConv => {
               const newData = existingConversations.find(c => c.id === prevConv.id)
               if (newData) {
-                // CRITICAL: If this conversation is in the "welded" set (user clicked it),
-                // ALWAYS set unread_count to 0, no matter what the API returns
-                // This "welds" (焊死) the unread_count to 0
-                if (selectedConversationIdsRef.current.has(prevConv.id)) {
-                  console.log('🔒 Keeping welded conversation unread_count at 0:', prevConv.id)
+                if (selectedConversationIdRef.current === prevConv.id) {
+                  console.log('🔒 Keeping selected conversation unread_count at 0:', prevConv.id)
                   return {
                     ...newData,
                     unread_count: 0
@@ -2856,15 +2839,10 @@ function ChatPageContent() {
             const mergedWithPending = mergePendingConversations(mergedWithRestored, prev)
             const enrichedList = applyPinnedOrdering(mergedWithPending.map(enrichConversation))
 
-            // CRITICAL: Preserve optimistic unread_count = 0 for currently selected conversation
-            // This prevents the red dot from flickering (disappearing → appearing → disappearing)
-            // If a conversation is in the "welded" set (user clicked it), ALWAYS set its unread_count to 0
-            // This "welds" (焊死) the unread_count to 0 - no matter what happens
+            // Preserve unread_count = 0 for the currently selected conversation.
             const enrichedWithPreservedRead = enrichedList.map(conv => {
-              // CRITICAL: If this conversation is in the "welded" set, ALWAYS set unread_count to 0
-              // This ensures that even if loadConversations runs after loadMessages, the unread_count stays at 0
-              if (selectedConversationIdsRef.current.has(conv.id)) {
-                console.log('🔒 Keeping welded conversation unread_count at 0:', conv.id)
+              if (selectedConversationIdRef.current === conv.id) {
+                console.log('🔒 Keeping selected conversation unread_count at 0:', conv.id)
                 return { ...conv, unread_count: 0 }
               }
               return conv
@@ -4261,10 +4239,10 @@ function ChatPageContent() {
   useEffect(() => {
 
     if (!selectedConversationId || !currentWorkspace || !currentUser) return
-    if (!IS_DOMESTIC_VERSION) return
 
-    // Realtime is the primary source of truth. Keep polling as a slow fallback.
-    const POLL_INTERVAL = 30000
+    // Realtime is the primary source of truth, but WebView foreground/background
+    // transitions can still miss events. Keep polling enabled for all deployments.
+    const POLL_INTERVAL = 10000
 
     
 
@@ -4313,9 +4291,9 @@ function ChatPageContent() {
 
         
 
-        // For global deployments, realtime already covers conversation updates.
-        // Keep conversation polling only for domestic fallback mode.
-        if (IS_DOMESTIC_VERSION && !isLoadingConversationsListRef.current) {
+        // Always keep conversation polling as a fallback. This repairs missed
+        // realtime updates so unread badges and current-thread messages stay fresh.
+        if (!isLoadingConversationsListRef.current) {
 
           try {
 
@@ -4594,6 +4572,37 @@ function ChatPageContent() {
     return () => clearInterval(interval)
 
   }, [selectedConversationId, currentUser, currentWorkspace, loadMessages])
+
+  useEffect(() => {
+    if (!currentUser || !currentWorkspace) return
+
+    const refreshVisibleChat = () => {
+      if (typeof document !== 'undefined' && document.hidden) return
+
+      const currentConversationId = selectedConversationIdRef.current
+      if (currentConversationId && !loadingMessagesRef.current.has(currentConversationId)) {
+        void loadMessages(currentConversationId, { silent: true })
+      }
+
+      void loadConversations(currentUser.id, currentWorkspace.id, true).catch((error) => {
+        console.error('Failed to refresh chat state on foreground:', error)
+      })
+    }
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        refreshVisibleChat()
+      }
+    }
+
+    window.addEventListener('focus', refreshVisibleChat)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('focus', refreshVisibleChat)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [currentUser, currentWorkspace, loadConversations, loadMessages])
 
   // Listen for contact deletion events to refresh conversations
   useEffect(() => {
@@ -7642,23 +7651,20 @@ function ChatPageContent() {
 
             
 
-            // Update the conversation
-            // CRITICAL: Preserve optimistic unread_count = 0 for currently selected conversation
-            // If conversation is in the "welded" set (user clicked it), ALWAYS keep unread_count at 0
+            // Update the conversation.
+            // Preserve unread_count = 0 for the currently selected conversation.
             const updated = prev.map(conv => {
 
               if (conv.id === conversationId) {
-                // CRITICAL: If this conversation is in the "welded" set, ALWAYS keep unread_count at 0
-                // This "welds" (焊死) the unread_count to 0 - no matter what happens
-                const isWelded = selectedConversationIdsRef.current.has(conversationId)
+                const isSelectedConversation = selectedConversationIdRef.current === conversationId
                 
-                if (isWelded) {
-                  console.log('🔒 Keeping welded conversation unread_count at 0 (realtime message):', conversationId)
+                if (isSelectedConversation) {
+                  console.log('🔒 Keeping selected conversation unread_count at 0 (realtime message):', conversationId)
                   return {
                     ...conv,
                     last_message: lastMessage,
                     last_message_at: newMessage.created_at,
-                    unread_count: 0, // WELDED: Always 0
+                    unread_count: 0,
                   }
                 }
                 
@@ -8207,7 +8213,6 @@ function ChatPageContent() {
     setConversationMetaState('idle')
     setGroupInfoOpen(false)
     setAnnouncementDrawerOpen(false)
-    selectedConversationIdsRef.current.clear()
     messagesByConversationRef.current.clear()
     conversationDetailsRef.current.clear()
     pendingConversationMapRef.current.clear()
@@ -8390,9 +8395,7 @@ function ChatPageContent() {
               // 本地把未读数清 0（乐观），并更新缓存，保证红点点一下就消失、刷新也不回来
               // CRITICAL: Pass conversationId to persistConversationsCache so workspace-header
               // can immediately know which conversation is selected (even before URL updates)
-              // CRITICAL: Add to "welded" set to ensure unread_count stays at 0 no matter what
-              selectedConversationIdsRef.current.add(conversationId)
-              console.log('🔒 Welded conversation unread_count to 0 (onSelectConversation):', conversationId)
+              console.log('🔒 Set selected conversation unread_count to 0 (onSelectConversation):', conversationId)
 
               setConversations(prev => {
 

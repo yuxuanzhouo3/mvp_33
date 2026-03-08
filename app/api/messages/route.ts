@@ -4,6 +4,7 @@ import { getMessages, createMessage } from '@/lib/database/supabase/messages'
 import { getDatabaseClientForUser } from '@/lib/database-router'
 import { getMessages as getMessagesCN, createMessage as createMessageCN } from '@/lib/database/cloudbase/messages'
 import { grantReferralFirstUseReward } from '@/lib/market/referrals'
+import { notifyRecipientsOfNewMessage } from '@/lib/push/message-notifier'
 
 // GET /api/messages?conversationId=xxx
 export async function GET(request: NextRequest) {
@@ -209,6 +210,16 @@ export async function POST(request: NextRequest) {
         metadata,
       )
 
+      void notifyRecipientsOfNewMessage({
+        conversationId,
+        senderId: user.id,
+        messageId: String(message.id || ''),
+        content: content || '',
+        type,
+      }).catch((error) => {
+        console.error('[messages][CN] push notify skipped:', error)
+      })
+
       await grantReferralFirstUseReward({
         invitedUserId: user.id,
         toolId: 'chat',
@@ -300,6 +311,16 @@ export async function POST(request: NextRequest) {
       type,
       metadata
     )
+
+    void notifyRecipientsOfNewMessage({
+      conversationId,
+      senderId: user.id,
+      messageId: String(message.id || ''),
+      content,
+      type,
+    }).catch((error) => {
+      console.error('[messages][INTL] push notify failed:', error)
+    })
 
     await grantReferralFirstUseReward({
       invitedUserId: user.id,

@@ -9,6 +9,10 @@ export interface ClientDeviceInfoPayload {
   deviceFingerprint?: string
   clientType?: ClientDeviceType
   deviceCategory?: ClientDeviceCategory
+  pushProvider?: string
+  pushToken?: string
+  appPackage?: string
+  appFlavor?: string
 }
 
 const WEB_FINGERPRINT_KEY = 'chat_app_device_fingerprint_v1'
@@ -17,6 +21,21 @@ function normalizeText(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : undefined
+}
+
+function readBridgeString(target: any, methodNames: string[]): string | undefined {
+  if (!target) return undefined
+  for (const methodName of methodNames) {
+    try {
+      if (typeof target[methodName] === 'function') {
+        const value = normalizeText(target[methodName]())
+        if (value) return value
+      }
+    } catch {
+      // Ignore bridge failures and keep trying other method names.
+    }
+  }
+  return undefined
 }
 
 function detectDeviceCategory(userAgent: string): ClientDeviceCategory {
@@ -62,26 +81,35 @@ export async function collectClientDeviceInfo(): Promise<ClientDeviceInfoPayload
   let deviceModel: string | undefined
   let deviceBrand: string | undefined
   let deviceFingerprint: string | undefined
+  let pushProvider: string | undefined
+  let pushToken: string | undefined
+  let appPackage: string | undefined
+  let appFlavor: string | undefined
 
   const androidBridge = (window as any).Android
+  const nativePushBridge = (window as any).NativePushBridge
   if (androidBridge) {
     clientType = 'android_app'
     try {
-      if (typeof androidBridge.getDeviceModel === 'function') {
-        deviceModel = normalizeText(androidBridge.getDeviceModel())
-      }
-      if (typeof androidBridge.getDeviceBrand === 'function') {
-        deviceBrand = normalizeText(androidBridge.getDeviceBrand())
-      }
-      if (typeof androidBridge.getInstallationId === 'function') {
-        const installationId = normalizeText(androidBridge.getInstallationId())
-        if (installationId) {
-          deviceFingerprint = `android_${installationId}`
-        }
+      deviceModel = readBridgeString(androidBridge, ['getDeviceModel'])
+      deviceBrand = readBridgeString(androidBridge, ['getDeviceBrand'])
+      const installationId = readBridgeString(androidBridge, ['getInstallationId'])
+      if (installationId) {
+        deviceFingerprint = `android_${installationId}`
       }
     } catch {
       // Ignore bridge errors and fallback below
     }
+
+    pushToken = readBridgeString(nativePushBridge, ['getPushToken', 'getTpnsToken'])
+      || readBridgeString(androidBridge, ['getPushToken', 'getTpnsToken'])
+    pushProvider = readBridgeString(nativePushBridge, ['getPushProvider'])
+      || readBridgeString(androidBridge, ['getPushProvider'])
+      || (pushToken ? 'tpns' : undefined)
+    appPackage = readBridgeString(nativePushBridge, ['getAppPackage', 'getPackageName'])
+      || readBridgeString(androidBridge, ['getAppPackage', 'getPackageName'])
+    appFlavor = readBridgeString(nativePushBridge, ['getAppFlavor'])
+      || readBridgeString(androidBridge, ['getAppFlavor'])
   } else if ((window as any).webkit?.messageHandlers?.deviceInfo) {
     clientType = 'ios_app'
     try {
@@ -109,5 +137,9 @@ export async function collectClientDeviceInfo(): Promise<ClientDeviceInfoPayload
     deviceFingerprint,
     clientType,
     deviceCategory,
+    pushProvider,
+    pushToken,
+    appPackage,
+    appFlavor,
   }
 }

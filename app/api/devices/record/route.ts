@@ -70,6 +70,10 @@ export async function POST(request: NextRequest) {
     const clientType = typeof body?.clientType === 'string' ? body.clientType : undefined
     const deviceCategory = typeof body?.deviceCategory === 'string' ? body.deviceCategory : undefined
     const explicitFingerprint = typeof body?.deviceFingerprint === 'string' ? body.deviceFingerprint : undefined
+    const pushProvider = typeof body?.pushProvider === 'string' ? body.pushProvider : undefined
+    const pushToken = typeof body?.pushToken === 'string' ? body.pushToken : undefined
+    const appPackage = typeof body?.appPackage === 'string' ? body.appPackage : undefined
+    const appFlavor = typeof body?.appFlavor === 'string' ? body.appFlavor : undefined
 
     console.log('[DEVICE RECORD] Device model from app:', deviceModel, deviceBrand)
     const deviceInfo = parseDeviceInfo(
@@ -112,6 +116,10 @@ export async function POST(request: NextRequest) {
       ip_address: ip,
       location: location,
       session_token: sessionToken,
+      push_provider: pushProvider,
+      push_token: pushToken,
+      app_package: appPackage,
+      app_flavor: appFlavor,
     }
     console.log('[DEVICE RECORD] Device data to record:', JSON.stringify(deviceData, null, 2))
 

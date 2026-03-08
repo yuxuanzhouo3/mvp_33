@@ -20,6 +20,10 @@ export interface DeviceData {
   ip_address?: string
   location?: string
   session_token: string
+  push_provider?: string | null
+  push_token?: string | null
+  app_package?: string | null
+  app_flavor?: string | null
 }
 
 export interface Device extends DeviceData {
@@ -48,6 +52,46 @@ function normalizeLocationValue(value?: string | null): string | undefined {
 
 function normalizeDeviceFingerprint(value?: string | null): string {
   return (value || '').trim()
+}
+
+function normalizeOptionalText(value?: string | null): string | undefined {
+  const text = (value || '').trim()
+  return text.length > 0 ? text : undefined
+}
+
+function applyOptionalPushFields(payload: Record<string, any>, input: DeviceData): Record<string, any> {
+  const nextPayload = { ...payload }
+  const pushProvider = normalizeOptionalText(input.push_provider)
+  const pushToken = normalizeOptionalText(input.push_token)
+  const appPackage = normalizeOptionalText(input.app_package)
+  const appFlavor = normalizeOptionalText(input.app_flavor)
+
+  if (pushProvider) nextPayload.push_provider = pushProvider
+  if (pushToken) {
+    nextPayload.push_token = pushToken
+    nextPayload.push_token_updated_at = new Date().toISOString()
+  }
+  if (appPackage) nextPayload.app_package = appPackage
+  if (appFlavor) nextPayload.app_flavor = appFlavor
+
+  return nextPayload
+}
+
+function isMissingPushColumnError(error: any): boolean {
+  const message = String(error?.message || '').toLowerCase()
+  const details = String(error?.details || '').toLowerCase()
+  return (
+    message.includes('column') ||
+    details.includes('column') ||
+    message.includes('schema cache')
+  ) && (
+    message.includes('push_') ||
+    details.includes('push_') ||
+    message.includes('app_package') ||
+    message.includes('app_flavor') ||
+    details.includes('app_package') ||
+    details.includes('app_flavor')
+  )
 }
 
 function toTimestamp(value?: string | null): number {
@@ -104,6 +148,10 @@ function normalizeDevice(raw: any): Device {
     ip_address: raw.ip_address || undefined,
     location: normalizeLocationValue(raw.location),
     session_token: raw.session_token || '',
+    push_provider: raw.push_provider || undefined,
+    push_token: raw.push_token || undefined,
+    app_package: raw.app_package || undefined,
+    app_flavor: raw.app_flavor || undefined,
     last_active_at: raw.last_active_at || raw.updated_at || raw.created_at || new Date(0).toISOString(),
     created_at: raw.created_at || raw.last_active_at || new Date(0).toISOString(),
   }
@@ -156,7 +204,7 @@ async function recordSupabaseDevice(input: DeviceData): Promise<Device> {
   const now = new Date().toISOString()
   const fingerprint = ensureFingerprint(input)
 
-  const payload = {
+  const basePayload = {
     user_id: input.user_id,
     device_name: input.device_name,
     device_type: input.device_type,
@@ -172,6 +220,7 @@ async function recordSupabaseDevice(input: DeviceData): Promise<Device> {
     session_token: input.session_token,
     last_active_at: now,
   }
+  const payload = applyOptionalPushFields(basePayload, input)
 
   const { data: existingByFingerprint, error: existingError } = await supabase
     .from('user_devices')
@@ -195,22 +244,43 @@ async function recordSupabaseDevice(input: DeviceData): Promise<Device> {
       }
     }
 
-    const { data: updated, error: updateError } = await supabase
+    let { data: updated, error: updateError } = await supabase
       .from('user_devices')
       .update(payload)
       .eq('id', existingByFingerprint.id)
       .select()
       .single()
 
+    if (updateError && isMissingPushColumnError(updateError)) {
+      const retryResult = await supabase
+        .from('user_devices')
+        .update(basePayload)
+        .eq('id', existingByFingerprint.id)
+        .select()
+        .single()
+      updated = retryResult.data
+      updateError = retryResult.error
+    }
+
     if (updateError) throw updateError
     return normalizeDevice(updated)
   }
 
-  const { data: inserted, error: insertError } = await supabase
+  let { data: inserted, error: insertError } = await supabase
     .from('user_devices')
     .insert(payload)
     .select()
     .single()
+
+  if (insertError && isMissingPushColumnError(insertError)) {
+    const retryResult = await supabase
+      .from('user_devices')
+      .insert(basePayload)
+      .select()
+      .single()
+    inserted = retryResult.data
+    insertError = retryResult.error
+  }
 
   if (insertError) throw insertError
   return normalizeDevice(inserted)
@@ -302,6 +372,8 @@ async function recordCloudBaseDevice(input: DeviceData): Promise<Device> {
     last_active_at: now,
   }
 
+  const payloadWithPush = applyOptionalPushFields(payload, input)
+
   const existing = await db
     .collection('user_devices')
     .where({ user_id: input.user_id, device_fingerprint: fingerprint })
@@ -317,11 +389,11 @@ async function recordCloudBaseDevice(input: DeviceData): Promise<Device> {
       await revokeCloudBaseSessionToken(oldToken, input.user_id, 'replaced_session')
     }
 
-    await db.collection('user_devices').doc(doc._id).update(payload)
+    await db.collection('user_devices').doc(doc._id).update(payloadWithPush)
 
     return normalizeDevice({
       ...doc,
-      ...payload,
+      ...payloadWithPush,
       _id: doc._id,
       created_at: doc.created_at || now,
     })
@@ -329,12 +401,12 @@ async function recordCloudBaseDevice(input: DeviceData): Promise<Device> {
 
   const createdAt = now
   const insertRes = await db.collection('user_devices').add({
-    ...payload,
+    ...payloadWithPush,
     created_at: createdAt,
   })
 
   return normalizeDevice({
-    ...payload,
+    ...payloadWithPush,
     _id: insertRes.id || insertRes._id,
     created_at: createdAt,
   })
