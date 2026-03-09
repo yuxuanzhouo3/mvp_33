@@ -1,4 +1,4 @@
-import crypto from 'crypto'
+﻿import crypto from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserById } from './database'
 import { getCloudBaseDB } from './db'
@@ -210,7 +210,11 @@ export async function getCloudBaseAuthFromRequest(
   try {
     const cookieToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
     const headerToken = request.headers.get('x-cloudbase-session')
-    const token = cookieToken || headerToken
+    const authHeader = request.headers.get('authorization') || ''
+    const bearerToken = authHeader.toLowerCase().startsWith('bearer ')
+      ? authHeader.slice(7).trim()
+      : ''
+    const token = cookieToken || headerToken || bearerToken
     if (!token) {
       return null
     }
@@ -265,7 +269,11 @@ export function clearCloudBaseSessionCookie(response: NextResponse) {
 export function getCloudBaseSessionToken(request: NextRequest): string | null {
   const cookieToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
   const headerToken = request.headers.get('x-cloudbase-session')
-  return cookieToken || headerToken || null
+  const authHeader = request.headers.get('authorization') || ''
+  const bearerToken = authHeader.toLowerCase().startsWith('bearer ')
+    ? authHeader.slice(7).trim()
+    : ''
+  return cookieToken || headerToken || bearerToken || null
 }
 
 export async function verifyCloudBaseSession(request: NextRequest): Promise<User | null> {
@@ -279,4 +287,5 @@ export async function verifyCloudBaseSession(request: NextRequest): Promise<User
 export async function getCloudBaseUser(request: NextRequest): Promise<User | null> {
   return await verifyCloudBaseSession(request)
 }
+
 

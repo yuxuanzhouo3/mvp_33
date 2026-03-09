@@ -16,12 +16,11 @@ export function SessionValidator() {
   const deviceSyncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
-    // Skip for domestic version (CloudBase)
+    // Skip Supabase session validation for domestic version (CloudBase).
     if (IS_DOMESTIC_VERSION) return
 
     const supabase = createClient()
 
-    // Listen to auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('[SESSION VALIDATOR] Auth state changed:', event)
 
@@ -31,7 +30,6 @@ export function SessionValidator() {
       }
     })
 
-    // Periodic session validation (backup mechanism)
     checkIntervalRef.current = setInterval(async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession()
@@ -43,7 +41,7 @@ export function SessionValidator() {
       } catch (error) {
         console.error('[SESSION VALIDATOR] Session check error:', error)
       }
-    }, 30000) // Check every 30 seconds
+    }, 30000)
 
     return () => {
       subscription.unsubscribe()
@@ -84,12 +82,19 @@ export function SessionValidator() {
           return
         }
 
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        }
+
+        if (IS_DOMESTIC_VERSION) {
+          headers['x-cloudbase-session'] = authToken
+        } else {
+          headers.Authorization = `Bearer ${authToken}`
+        }
+
         const response = await fetch('/api/devices/record', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${authToken}`,
-          },
+          headers,
           body: JSON.stringify(deviceInfo),
         })
 
@@ -123,14 +128,12 @@ export function SessionValidator() {
   }, [])
 
   const handleLogout = () => {
-    // Clear local storage
     if (typeof window !== 'undefined') {
       localStorage.removeItem('chat_app_current_user')
       localStorage.removeItem('chat_app_token')
       localStorage.removeItem('chat_app_workspace')
     }
 
-    // Redirect to login
     router.push('/login?session_expired=true')
   }
 

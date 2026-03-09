@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { verifyCloudBaseSession } from '@/lib/cloudbase/auth'
 import { recordDevice } from '@/lib/database/devices'
@@ -25,10 +25,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
       userId = user.id
-      // Get CloudBase session token from cookie or header
+      // Get CloudBase session token from cookie, custom header, or Bearer auth.
       const cookieToken = request.cookies.get('cb_session')?.value
       const headerToken = request.headers.get('x-cloudbase-session')
-      sessionToken = cookieToken || headerToken || ''
+      const authHeader = request.headers.get('authorization') || ''
+      const bearerToken = authHeader.toLowerCase().startsWith('bearer ')
+        ? authHeader.slice(7).trim()
+        : ''
+      sessionToken = cookieToken || headerToken || bearerToken || ''
     } else {
       const supabase = await createClient()
       let { data: { user } } = await supabase.auth.getUser()
@@ -145,3 +149,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
