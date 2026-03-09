@@ -220,7 +220,7 @@ export async function POST(request: NextRequest) {
         metadata,
       )
 
-      void notifyRecipientsOfNewMessage({
+      await notifyRecipientsOfNewMessage({
         conversationId,
         senderId: user.id,
         messageId: String(message.id || ''),
@@ -322,7 +322,7 @@ export async function POST(request: NextRequest) {
       metadata
     )
 
-    void notifyRecipientsOfNewMessage({
+    await notifyRecipientsOfNewMessage({
       conversationId,
       senderId: user.id,
       messageId: String(message.id || ''),
@@ -358,4 +358,6 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+
 
