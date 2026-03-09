@@ -1122,7 +1122,7 @@ export function MessageList({
                               'relative group break-words',
                               isMobile
                                 ? (message.type === 'text' || message.type === 'system'
-                                  ? 'w-fit max-w-[16rem] min-w-[4.75rem] px-3 py-2 rounded-[14px]'
+                                  ? 'w-fit max-w-[16rem] px-3 py-2 rounded-[14px]'
                                   : (isImageMessage
                                     ? 'max-w-[min(70vw,17rem)] min-w-[7.5rem] rounded-[14px] p-1.5'
                                     : 'max-w-[16rem] rounded-[14px] p-2'))

@@ -6,6 +6,14 @@ import { getMessages as getMessagesCN, createMessage as createMessageCN } from '
 import { grantReferralFirstUseReward } from '@/lib/market/referrals'
 import { notifyRecipientsOfNewMessage } from '@/lib/push/message-notifier'
 
+const ZERO_WIDTH_CHARACTERS_REGEX = /[\u200B-\u200D\uFEFF]/g
+
+function normalizeTextContent(value: unknown): string {
+  return String(value ?? '')
+    .replace(ZERO_WIDTH_CHARACTERS_REGEX, '')
+    .trim()
+}
+
 // GET /api/messages?conversationId=xxx
 export async function GET(request: NextRequest) {
   try {
@@ -118,11 +126,13 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { conversationId, content, type = 'text', metadata } = body
+    const normalizedTextContent = normalizeTextContent(content)
+    const contentForStorage = type === 'text' ? normalizedTextContent : String(content || '')
 
     // Allow empty content for file/image/video/code messages (content can be empty if metadata has file info or code info)
     const hasFileMetadata = metadata && (metadata.file_url || metadata.file_name)
     const hasCodeMetadata = metadata && (metadata.code_content || metadata.code_language)
-    if (!conversationId || (!content && !hasFileMetadata && !hasCodeMetadata && type === 'text')) {
+    if (!conversationId || (!contentForStorage && !hasFileMetadata && !hasCodeMetadata && type === 'text')) {
       return NextResponse.json(
         { error: 'conversationId and content are required' },
         { status: 400 }
@@ -205,7 +215,7 @@ export async function POST(request: NextRequest) {
       const message = await createMessageCN(
         conversationId,
         user.id,
-        content || '',
+        contentForStorage,
         type,
         metadata,
       )
@@ -214,7 +224,7 @@ export async function POST(request: NextRequest) {
         conversationId,
         senderId: user.id,
         messageId: String(message.id || ''),
-        content: content || '',
+        content: contentForStorage,
         type,
       }).catch((error) => {
         console.error('[messages][CN] push notify skipped:', error)
@@ -297,7 +307,7 @@ export async function POST(request: NextRequest) {
 
     console.log('📥 API: Creating message:', {
       type,
-      contentLength: content?.length || 0,
+      contentLength: contentForStorage?.length || 0,
       hasMetadata: !!metadata,
       metadataKeys: metadata ? Object.keys(metadata) : [],
       code_content: metadata?.code_content?.substring(0, 50),
@@ -307,7 +317,7 @@ export async function POST(request: NextRequest) {
     const message = await createMessage(
       conversationId,
       user.id,
-      content,
+      contentForStorage,
       type,
       metadata
     )
@@ -316,7 +326,7 @@ export async function POST(request: NextRequest) {
       conversationId,
       senderId: user.id,
       messageId: String(message.id || ''),
-      content,
+      content: contentForStorage,
       type,
     }).catch((error) => {
       console.error('[messages][INTL] push notify failed:', error)

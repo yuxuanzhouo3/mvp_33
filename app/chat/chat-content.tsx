@@ -102,6 +102,7 @@ const MOBILE_UPLOAD_GATEWAY_SAFE_LIMIT_BYTES = Math.floor(4.5 * 1024 * 1024)
 const IMAGE_AUTO_COMPRESS_THRESHOLD_BYTES = Math.floor(4.2 * 1024 * 1024)
 const IMAGE_AUTO_COMPRESS_TARGET_BYTES = Math.floor(3.8 * 1024 * 1024)
 const IMAGE_AUTO_COMPRESS_MAX_EDGE = 1920
+const ZERO_WIDTH_CHARACTERS_REGEX = /[\u200B-\u200D\uFEFF]/g
 
 type ConversationMetaState = 'idle' | 'loading' | 'ready' | 'failed'
 
@@ -179,6 +180,11 @@ const tryCompressImageForUpload = async (file: File): Promise<File> => {
 
 const isPayloadTooLargeText = (text: string): boolean =>
   /request entity too large|payload too large|entity too large|request too large/i.test(text)
+
+const normalizePlainTextMessage = (value: string): string =>
+  String(value || '')
+    .replace(ZERO_WIDTH_CHARACTERS_REGEX, '')
+    .trim()
 
 const parseUploadResponse = async (response: Response, language: 'zh' | 'en'): Promise<any> => {
   const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
@@ -4238,15 +4244,16 @@ function ChatPageContent() {
 
   useEffect(() => {
 
-    if (!selectedConversationId || !currentWorkspace || !currentUser) return
+    if (!currentWorkspace || !currentUser) return
 
     // Realtime is the primary source of truth, but WebView foreground/background
     // transitions can still miss events. Keep polling enabled for all deployments.
-    const POLL_INTERVAL = 10000
+    const POLL_INTERVAL = IS_DOMESTIC_VERSION ? 2000 : 10000
 
     
 
     const interval = setInterval(async () => {
+      if (typeof document !== 'undefined' && document.hidden) return
 
       // Prevent concurrent polling
 
@@ -4258,14 +4265,12 @@ function ChatPageContent() {
 
       const currentConvId = pollingConversationRef.current
 
-      if (!currentConvId) return
-
       
 
         const now = Date.now()
 
         // Keep a small guard against duplicated timers.
-        if (now - lastPollTimeRef.current < 10000) return
+        if (now - lastPollTimeRef.current < POLL_INTERVAL) return
 
         // Skip polling if message was sent recently (within 3 seconds)
         if (now - lastMessageSendTimeRef.current < 3000) return
@@ -4283,7 +4288,7 @@ function ChatPageContent() {
         // Reload messages for current conversation (only if not already loading)
         // IMPORTANT: Use silent mode so we don't反复切 isLoadingMessages，避免右侧一直显示 "Loading messages..."
 
-        if (!loadingMessagesRef.current.has(currentConvId)) {
+        if (currentConvId && !loadingMessagesRef.current.has(currentConvId)) {
 
           loadMessages(currentConvId, { silent: true })
 
@@ -4571,7 +4576,7 @@ function ChatPageContent() {
 
     return () => clearInterval(interval)
 
-  }, [selectedConversationId, currentUser, currentWorkspace, loadMessages])
+  }, [currentUser, currentWorkspace, loadMessages])
 
   useEffect(() => {
     if (!currentUser || !currentWorkspace) return
@@ -5174,9 +5179,11 @@ function ChatPageContent() {
 
     if (!selectedConversationId || !currentUser) return
 
+    const normalizedTextContent = normalizePlainTextMessage(content)
+
     // Allow sending if there's content OR a file
 
-    if (!content.trim() && !file) return
+    if (!normalizedTextContent && !file) return
 
     // Record send time
     lastMessageSendTimeRef.current = Date.now()
@@ -5219,7 +5226,7 @@ function ChatPageContent() {
       return
     }
 
-    const hasText = content.trim().length > 0
+    const hasText = normalizedTextContent.length > 0
 
     const hasFile = !!fileForSend
 
@@ -5233,7 +5240,7 @@ function ChatPageContent() {
 
       // Then, send the text message separately
 
-      await handleSendMessage(content, 'text', undefined, undefined)
+      await handleSendMessage(normalizedTextContent, 'text', undefined, undefined)
 
       return
 
@@ -5259,7 +5266,7 @@ function ChatPageContent() {
 
       sender: currentUser,
 
-      content: hasFile ? '' : (type === 'code' ? (metadata?.code_content || content) : content), // For code messages, use code_content from metadata
+      content: hasFile ? '' : (type === 'code' ? (metadata?.code_content || content) : normalizedTextContent), // For code messages, use code_content from metadata
 
       type: type as any,
 
@@ -5315,7 +5322,7 @@ function ChatPageContent() {
 
           // Format content for display in conversation list
 
-          let displayContent = content
+          let displayContent = normalizedTextContent
 
           if (hasFile) {
 
@@ -5482,7 +5489,7 @@ function ChatPageContent() {
 
           ? metadata.code_content 
 
-          : content.trim())
+          : normalizedTextContent)
 
       
 

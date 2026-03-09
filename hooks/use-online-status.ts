@@ -5,8 +5,9 @@ import { IS_DOMESTIC_VERSION } from '@/config'
 
 const ONLINE_WINDOW_MS = 60 * 1000
 const ONLINE_POLL_INTERVAL_MS = 15 * 1000
-const ONLINE_STATUS_CACHE_TTL_MS = 2 * 60 * 1000
-const ONLINE_STATUS_ERROR_TTL_MS = 60 * 1000
+const ONLINE_STATUS_CACHE_TTL_MS = 30 * 1000
+const OFFLINE_STATUS_CACHE_TTL_MS = 5 * 1000
+const ONLINE_STATUS_ERROR_TTL_MS = 10 * 1000
 const PLACEHOLDER_USER_ID_PREFIX = '00000000-0000-0000-0000-'
 
 const onlineStatusCache = new Map<string, { isOnline: boolean; updatedAt: number }>()
@@ -27,7 +28,8 @@ function getCachedOnlineStatus(userId?: string): boolean | undefined {
   const cached = onlineStatusCache.get(userId)
   if (!cached) return undefined
 
-  if (Date.now() - cached.updatedAt > ONLINE_STATUS_CACHE_TTL_MS) {
+  const ttl = cached.isOnline ? ONLINE_STATUS_CACHE_TTL_MS : OFFLINE_STATUS_CACHE_TTL_MS
+  if (Date.now() - cached.updatedAt > ttl) {
     onlineStatusCache.delete(userId)
     return undefined
   }
@@ -81,10 +83,17 @@ async function fetchOnlineStatus(userId: string): Promise<boolean | undefined> {
       }
 
       const { user } = await res.json()
+      const normalizedStatus = String(user?.status || '').toLowerCase()
+      const statusSaysOnline =
+        normalizedStatus === 'online' ||
+        normalizedStatus === 'away' ||
+        normalizedStatus === 'busy'
+
       const hasLastSeen = Boolean(user?.last_seen_at)
-      const nextIsOnline = hasLastSeen
+      const onlineByLastSeen = hasLastSeen
         ? Date.now() - new Date(user.last_seen_at).getTime() < ONLINE_WINDOW_MS
         : false
+      const nextIsOnline = statusSaysOnline || onlineByLastSeen
 
       setCachedOnlineStatus(userId, nextIsOnline)
       onlineStatusErrorCache.delete(userId)

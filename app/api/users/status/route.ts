@@ -72,14 +72,20 @@ async function updateUserStatus(request: NextRequest) {
     const dbClient = await getDatabaseClientForUser(request)
     const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
 
+    const now = new Date().toISOString()
+    const updatePayload: Record<string, any> = {
+      status,
+      updated_at: now,
+    }
+    if (status !== 'offline') {
+      updatePayload.last_seen_at = now
+    }
+
     if (dbClient.type === 'supabase' && userRegion === 'global') {
       // Update Supabase users table
       const { data: updatedUser, error: updateError } = await supabase
         .from('users')
-        .update({ 
-          status, 
-          updated_at: new Date().toISOString() 
-        })
+        .update(updatePayload)
         .eq('id', currentUser.id)
         .select()
         .single()
@@ -101,7 +107,7 @@ async function updateUserStatus(request: NextRequest) {
       // For CloudBase users, update status in CloudBase
       try {
         const { updateUser: updateCloudBaseUser } = await import('@/lib/cloudbase/database')
-        const updatedUser = await updateCloudBaseUser(currentUser.id, { status })
+        const updatedUser = await updateCloudBaseUser(currentUser.id, updatePayload)
         console.log(`[USER_STATUS] Successfully updated CloudBase user status to ${status} for user ${currentUser.id}`)
         return NextResponse.json({
           success: true,
