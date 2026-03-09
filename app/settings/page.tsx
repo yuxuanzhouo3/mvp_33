@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { useSubscription } from '@/hooks/use-subscription'
 import { SubscriptionBadge } from '@/components/subscription/subscription-badge'
-import { ArrowRight, ArrowLeft } from 'lucide-react'
+import { ArrowRight, ArrowLeft, Bell } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AppNavigation } from '@/components/layout/app-navigation'
@@ -123,6 +123,17 @@ export default function SettingsPage() {
           <CardDescription>Manage your devices and security settings</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
+          <Button
+            onClick={() => router.push('/settings/preferences#notification-settings')}
+            variant="outline"
+            className="w-full justify-between"
+          >
+            <span className="inline-flex items-center gap-2">
+              <Bell className="h-4 w-4" />
+              Message Notifications
+            </span>
+            <ArrowRight className="h-4 w-4" />
+          </Button>
           <Button
             onClick={() => router.push('/settings/preferences')}
             variant="outline"
