@@ -30,17 +30,125 @@ type NativeNotificationBridge = {
   openNotificationSettings?: () => void
   openNotificationChannelSettings?: () => void
   ensureNotificationPermission?: () => boolean
+  capabilities?: {
+    hasStatus: boolean
+    canOpenPush: boolean
+    canOpenChannel: boolean
+  }
+}
+
+type RawNativePushBridge = {
+  getNotificationSettingsStatus?: () => string
+  openPushSettings?: () => void
+  openSoundVibrationSettings?: () => void
+  openNotificationSettings?: () => void
+  openNotificationChannelSettings?: () => void
+  ensureNotificationPermission?: () => boolean
+  hasNotificationPermission?: () => boolean
 }
 
 declare global {
   interface Window {
     OrbitChatNotificationBridge?: NativeNotificationBridge
+    NativePushBridge?: RawNativePushBridge
   }
 }
 
 function getNativeNotificationBridge(): NativeNotificationBridge | null {
   if (typeof window === 'undefined') return null
-  return window.OrbitChatNotificationBridge ?? null
+
+  if (window.OrbitChatNotificationBridge) {
+    const orbit = window.OrbitChatNotificationBridge
+    return {
+      ...orbit,
+      capabilities: {
+        hasStatus: typeof orbit.getStatus === 'function',
+        canOpenPush:
+          typeof orbit.openPushSettings === 'function' ||
+          typeof orbit.openNotificationSettings === 'function',
+        canOpenChannel:
+          typeof orbit.openSoundVibrationSettings === 'function' ||
+          typeof orbit.openNotificationChannelSettings === 'function',
+      },
+    }
+  }
+
+  const raw = window.NativePushBridge
+  if (!raw) return null
+
+  const canOpenPush =
+    typeof raw.openPushSettings === 'function' ||
+    typeof raw.openNotificationSettings === 'function'
+  const canOpenChannel =
+    typeof raw.openSoundVibrationSettings === 'function' ||
+    typeof raw.openNotificationChannelSettings === 'function'
+  const hasStatus =
+    typeof raw.getNotificationSettingsStatus === 'function' ||
+    typeof raw.hasNotificationPermission === 'function'
+
+  return {
+    getStatus: () => {
+      if (typeof raw.getNotificationSettingsStatus === 'function') {
+        try {
+          const parsed = JSON.parse(raw.getNotificationSettingsStatus() || '{}')
+          return typeof parsed === 'object' && parsed ? parsed : {}
+        } catch (_error) {
+          // fall through to legacy fallback below
+        }
+      }
+      const pushEnabled = typeof raw.hasNotificationPermission === 'function'
+        ? !!raw.hasNotificationPermission()
+        : false
+      return {
+        pushEnabled,
+        soundEnabled: pushEnabled,
+        vibrationEnabled: pushEnabled,
+      }
+    },
+    openPushSettings: () => {
+      if (typeof raw.openPushSettings === 'function') {
+        raw.openPushSettings()
+        return
+      }
+      if (typeof raw.openNotificationSettings === 'function') {
+        raw.openNotificationSettings()
+        return
+      }
+      throw new Error('open push settings method not available')
+    },
+    openSoundVibrationSettings: () => {
+      if (typeof raw.openSoundVibrationSettings === 'function') {
+        raw.openSoundVibrationSettings()
+        return
+      }
+      if (typeof raw.openNotificationChannelSettings === 'function') {
+        raw.openNotificationChannelSettings()
+        return
+      }
+      throw new Error('open sound/vibration settings method not available')
+    },
+    openNotificationSettings: () => {
+      if (typeof raw.openNotificationSettings === 'function') {
+        raw.openNotificationSettings()
+      }
+    },
+    openNotificationChannelSettings: () => {
+      if (typeof raw.openNotificationChannelSettings === 'function') {
+        raw.openNotificationChannelSettings()
+      }
+    },
+    ensureNotificationPermission: () => {
+      if (typeof raw.ensureNotificationPermission === 'function') {
+        return !!raw.ensureNotificationPermission()
+      }
+      return false
+    },
+    capabilities: {
+      hasStatus,
+      canOpenPush,
+      canOpenChannel,
+    },
+  }
 }
 
 function NotificationRow({
@@ -84,14 +192,21 @@ export default function PreferencesPage() {
   const isMobile = useIsMobile()
   const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
   const [nativeBridgeAvailable, setNativeBridgeAvailable] = useState(false)
+  const [bridgeCompatibilityIssue, setBridgeCompatibilityIssue] = useState<string | null>(null)
+  const [bridgeDiagnostic, setBridgeDiagnostic] = useState<string | null>(null)
   const [pushEnabled, setPushEnabled] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(false)
   const [vibrationEnabled, setVibrationEnabled] = useState(false)
 
   const refreshNotificationStatus = useCallback(() => {
+    const hasOrbit = typeof window !== 'undefined' && !!window.OrbitChatNotificationBridge
+    const hasRaw = typeof window !== 'undefined' && !!window.NativePushBridge
+
     const bridge = getNativeNotificationBridge()
-    if (!bridge || typeof bridge.getStatus !== 'function') {
+    if (!bridge || !bridge.capabilities?.hasStatus || typeof bridge.getStatus !== 'function') {
       setNativeBridgeAvailable(false)
+      setBridgeCompatibilityIssue(null)
+      setBridgeDiagnostic(`OrbitBridge=${hasOrbit ? 'yes' : 'no'}, NativePushBridge=${hasRaw ? 'yes' : 'no'}`)
       setPushEnabled(false)
       setSoundEnabled(false)
       setVibrationEnabled(false)
@@ -100,10 +215,16 @@ export default function PreferencesPage() {
 
     const status = bridge.getStatus() || {}
     setNativeBridgeAvailable(true)
+    setBridgeCompatibilityIssue(
+      bridge.capabilities.canOpenPush && bridge.capabilities.canOpenChannel
+        ? null
+        : tr('当前 APK 原生桥接版本过旧，请安装最新构建包。', 'Current APK native bridge is outdated. Please install the latest build.')
+    )
+    setBridgeDiagnostic(`OrbitBridge=${hasOrbit ? 'yes' : 'no'}, NativePushBridge=${hasRaw ? 'yes' : 'no'}`)
     setPushEnabled(!!status.pushEnabled)
     setSoundEnabled(!!status.soundEnabled)
     setVibrationEnabled(!!status.vibrationEnabled)
-  }, [])
+  }, [tr])
 
   useEffect(() => {
     refreshNotificationStatus()
@@ -129,6 +250,9 @@ export default function PreferencesPage() {
     }
 
     try {
+      if (bridge.capabilities && !bridge.capabilities.canOpenPush) {
+        throw new Error('open push settings not supported by current native bridge')
+      }
       if (typeof bridge.openPushSettings === 'function') {
         bridge.openPushSettings()
       } else if (typeof bridge.openNotificationSettings === 'function') {
@@ -151,6 +275,9 @@ export default function PreferencesPage() {
     }
 
     try {
+      if (bridge.capabilities && !bridge.capabilities.canOpenChannel) {
+        throw new Error('open channel settings not supported by current native bridge')
+      }
       if (typeof bridge.openSoundVibrationSettings === 'function') {
         bridge.openSoundVibrationSettings()
       } else if (typeof bridge.openNotificationChannelSettings === 'function') {
@@ -230,6 +357,13 @@ export default function PreferencesPage() {
               {language === 'zh'
                 ? '当前环境未检测到 Android 原生桥接，请在 APK 客户端内打开本页面。'
                 : 'Native Android bridge not detected. Open this page inside the APK app.'}
+              {bridgeDiagnostic && <div className="mt-2 text-[11px] opacity-80">{bridgeDiagnostic}</div>}
+            </div>
+          )}
+          {nativeBridgeAvailable && bridgeCompatibilityIssue && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+              {bridgeCompatibilityIssue}
+              {bridgeDiagnostic && <div className="mt-2 text-[11px] opacity-80">{bridgeDiagnostic}</div>}
             </div>
           )}
         </CardContent>
