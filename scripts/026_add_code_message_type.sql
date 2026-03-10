@@ -6,7 +6,8 @@ ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_type_check;
 
 -- Add the new constraint with 'code' type included
 ALTER TABLE messages ADD CONSTRAINT messages_type_check 
-  CHECK (type IN ('text', 'image', 'file', 'video', 'audio', 'system', 'code'));
+  CHECK (type IN ('text', 'image', 'file', 'video', 'audio', 'voice', 'system', 'code'));
+
 
 
 

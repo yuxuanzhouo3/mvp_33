@@ -84,6 +84,7 @@ function ConversationItem({
       case 'video':
         return t('messageTypeVideo')
       case 'audio':
+      case 'voice':
         return t('messageTypeAudio')
       case 'file':
         return `${t('messageTypeFile')} ${lastMessage.metadata?.file_name || ''}`
@@ -710,3 +711,4 @@ export function Sidebar({
     </div>
   )
 }
+

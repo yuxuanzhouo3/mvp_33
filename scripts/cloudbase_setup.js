@@ -245,13 +245,13 @@ async function initDatabase() {
   // 6. messages 集合
   // 包含字段: id, conversation_id, sender_id, content, type, metadata, reply_to, 
   //           reactions, is_edited, is_deleted, created_at, updated_at, is_recalled (新增)
-  // type 包含: 'text', 'image', 'file', 'video', 'audio', 'system', 'code' (新增)
+  // type 包含: 'text', 'image', 'file', 'video', 'audio', 'voice', 'system', 'code' (新增)
   const messagesSample = {
     _id: generateUUID(),
     conversation_id: generateUUID(),
     sender_id: generateUUID(),
     content: '测试消息',
-    type: 'text', // 'text', 'image', 'file', 'video', 'audio', 'system', 'code'
+    type: 'text', // 'text', 'image', 'file', 'video', 'audio', 'voice', 'system', 'code'
     metadata: null,
     reply_to: null,
     reactions: [],
@@ -459,3 +459,4 @@ initDatabase()
     console.error('\n初始化失败:', error);
     process.exit(1);
   });
+

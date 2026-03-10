@@ -164,7 +164,7 @@ const tableDefinitions = {
       conversation_id ${convertUUID()},
       sender_id ${convertUUID()},
       content TEXT NOT NULL,
-      type VARCHAR(20) DEFAULT 'text' CHECK (type IN ('text', 'image', 'file', 'video', 'audio', 'system', 'code')),
+      type VARCHAR(20) DEFAULT 'text' CHECK (type IN ('text', 'image', 'file', 'video', 'audio', 'voice', 'system', 'code')),
       metadata ${convertJSONB()},
       reply_to ${convertUUID()},
       reactions ${convertJSONB()} DEFAULT ('[]'),
@@ -324,6 +324,7 @@ initDatabase()
     console.error('\n初始化失败:', error);
     process.exit(1);
   });
+
 
 
 

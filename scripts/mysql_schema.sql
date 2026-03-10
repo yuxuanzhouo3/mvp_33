@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS messages (
     conversation_id CHAR(36),
     sender_id CHAR(36),
     content TEXT NOT NULL,
-    type VARCHAR(20) DEFAULT 'text' CHECK (type IN ('text', 'image', 'file', 'video', 'audio', 'system', 'code')),
+    type VARCHAR(20) DEFAULT 'text' CHECK (type IN ('text', 'image', 'file', 'video', 'audio', 'voice', 'system', 'code')),
     metadata JSON,
     reply_to CHAR(36),
     reactions JSON DEFAULT ('[]'),
@@ -183,6 +183,7 @@ CREATE INDEX IF NOT EXISTS idx_conversations_deleted_at ON conversations(deleted
 CREATE INDEX IF NOT EXISTS idx_conversation_members_hidden ON conversation_members(user_id, is_hidden);
 CREATE INDEX IF NOT EXISTS idx_conversation_members_pinned ON conversation_members(user_id, pinned_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_is_recalled ON messages(is_recalled);
+
 
 
 

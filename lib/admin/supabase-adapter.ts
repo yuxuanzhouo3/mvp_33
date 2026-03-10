@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Supabase 数据库适配器
  *
  * 实现 PostgreSQL 数据库的管理后台操作
@@ -40,6 +40,17 @@ import type {
   AppRelease,
   CreateReleaseData,
   StorageFile,
+  AiProjectAnalysis,
+  AiAnalysisFilters,
+  CreateAiProjectAnalysisData,
+  AiCreativeBrief,
+  CreateAiCreativeBriefData,
+  AiGenerationJob,
+  CreateAiGenerationJobData,
+  UpdateAiGenerationJobData,
+  AiJobFilters,
+  AiAsset,
+  CreateAiAssetData,
 } from "./types";
 import { handleDatabaseError, toISOString } from "./database";
 
@@ -1651,6 +1662,187 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
     return this.updateRelease(id, { is_active: isActive });
   }
 
+  // ==================== AI 创意中心操作 ====================
+
+  async createAiProjectAnalysis(data: CreateAiProjectAnalysisData): Promise<AiProjectAnalysis> {
+    const now = toISOString(new Date());
+    const payload = {
+      ...data,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const result = await this.supabase
+      .from("ai_project_analyses")
+      .insert(payload)
+      .select()
+      .single();
+
+    return this.handleQueryResult(result, "创建 AI 项目分析失败") as AiProjectAnalysis;
+  }
+
+  async getAiProjectAnalysisById(id: string): Promise<AiProjectAnalysis | null> {
+    const result = await this.supabase
+      .from("ai_project_analyses")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (result.error) {
+      if (result.error.code === "PGRST116") {
+        return null;
+      }
+      throw handleDatabaseError({ code: result.error.code, message: result.error.message });
+    }
+
+    return result.data as AiProjectAnalysis;
+  }
+
+  async listAiProjectAnalyses(filters?: AiAnalysisFilters): Promise<AiProjectAnalysis[]> {
+    const limit = filters?.limit ?? 20;
+    const offset = filters?.offset ?? 0;
+    let query = this.supabase
+      .from("ai_project_analyses")
+      .select("*")
+      .order("updated_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (filters?.region) query = query.eq("region", filters.region);
+    if (filters?.language) query = query.eq("language", filters.language);
+    if (filters?.created_by) query = query.eq("created_by", filters.created_by);
+
+    const result = await query;
+    return (this.handleQueryResult(result, "获取 AI 项目分析列表失败") ?? []) as AiProjectAnalysis[];
+  }
+
+  async createAiCreativeBrief(data: CreateAiCreativeBriefData): Promise<AiCreativeBrief> {
+    const now = toISOString(new Date());
+    const payload = {
+      ...data,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const result = await this.supabase
+      .from("ai_creative_briefs")
+      .insert(payload)
+      .select()
+      .single();
+
+    return this.handleQueryResult(result, "创建 AI 创意简报失败") as AiCreativeBrief;
+  }
+
+  async getAiCreativeBriefById(id: string): Promise<AiCreativeBrief | null> {
+    const result = await this.supabase
+      .from("ai_creative_briefs")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (result.error) {
+      if (result.error.code === "PGRST116") {
+        return null;
+      }
+      throw handleDatabaseError({ code: result.error.code, message: result.error.message });
+    }
+
+    return result.data as AiCreativeBrief;
+  }
+
+  async createAiGenerationJob(data: CreateAiGenerationJobData): Promise<AiGenerationJob> {
+    const now = toISOString(new Date());
+    const payload = {
+      ...data,
+      status: data.status ?? "queued",
+      progress: data.progress ?? 0,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const result = await this.supabase
+      .from("ai_generation_jobs")
+      .insert(payload)
+      .select()
+      .single();
+
+    return this.handleQueryResult(result, "创建 AI 生成任务失败") as AiGenerationJob;
+  }
+
+  async updateAiGenerationJob(id: string, data: UpdateAiGenerationJobData): Promise<AiGenerationJob> {
+    const result = await this.supabase
+      .from("ai_generation_jobs")
+      .update({
+        ...data,
+        updated_at: toISOString(new Date()),
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    return this.handleQueryResult(result, "更新 AI 生成任务失败") as AiGenerationJob;
+  }
+
+  async getAiGenerationJobById(id: string): Promise<AiGenerationJob | null> {
+    const result = await this.supabase
+      .from("ai_generation_jobs")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (result.error) {
+      if (result.error.code === "PGRST116") {
+        return null;
+      }
+      throw handleDatabaseError({ code: result.error.code, message: result.error.message });
+    }
+
+    return result.data as AiGenerationJob;
+  }
+
+  async listAiGenerationJobs(filters?: AiJobFilters): Promise<AiGenerationJob[]> {
+    const limit = filters?.limit ?? 50;
+    const offset = filters?.offset ?? 0;
+    let query = this.supabase
+      .from("ai_generation_jobs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (filters?.status) query = query.eq("status", filters.status);
+    if (filters?.job_type) query = query.eq("job_type", filters.job_type);
+    if (filters?.region) query = query.eq("region", filters.region);
+    if (filters?.language) query = query.eq("language", filters.language);
+
+    const result = await query;
+    return (this.handleQueryResult(result, "获取 AI 任务列表失败") ?? []) as AiGenerationJob[];
+  }
+
+  async createAiAsset(data: CreateAiAssetData): Promise<AiAsset> {
+    const now = toISOString(new Date());
+    const payload = {
+      ...data,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const result = await this.supabase
+      .from("ai_assets")
+      .insert(payload)
+      .select()
+      .single();
+
+    return this.handleQueryResult(result, "创建 AI 资产失败") as AiAsset;
+  }
+
+  async listAiAssetsByJobId(jobId: string): Promise<AiAsset[]> {
+    const result = await this.supabase
+      .from("ai_assets")
+      .select("*")
+      .eq("job_id", jobId)
+      .order("created_at", { ascending: true });
+
+    return (this.handleQueryResult(result, "获取 AI 资产列表失败") ?? []) as AiAsset[];
+  }
   // ==================== 健康检查 ====================
 
   /**
@@ -1765,3 +1957,5 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
     };
   }
 }
+
+

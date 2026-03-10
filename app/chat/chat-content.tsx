@@ -5283,6 +5283,7 @@ function ChatPageContent() {
       reply_to: replyingToMessageId || undefined,
 
       metadata: fileForSend ? {
+        ...(metadata || {}),
 
         file_name: fileForSend.name,
 
@@ -5332,11 +5333,15 @@ function ChatPageContent() {
 
             } else if (type === 'file') {
 
-              displayContent = `📎 ${fileForSend?.name || 'File'}`
+              displayContent = '📎 ' + (fileForSend?.name || 'File')
 
             } else if (type === 'video') {
 
               displayContent = '🎥 Video'
+
+            } else if (type === 'voice' || type === 'audio') {
+
+              displayContent = '🎙️ Voice'
 
             } else {
 
@@ -5349,8 +5354,6 @@ function ChatPageContent() {
             displayContent = '💻 Code'
 
           }
-
-          
 
           const optimisticLastMessage: Message = {
 
@@ -5446,6 +5449,7 @@ function ChatPageContent() {
           // We'll update it once when the API returns the real message
 
           fileMetadata = {
+            ...(metadata || {}),
 
             file_name: uploadData.file_name,
 
@@ -5829,19 +5833,21 @@ function ChatPageContent() {
 
               } else if (data.message.type === 'file') {
 
-                displayContent = `📎 ${data.message.metadata?.file_name || 'File'}`
+                displayContent = '📎 ' + (data.message.metadata?.file_name || 'File')
 
               } else if (data.message.type === 'video') {
 
                 displayContent = '🎥 Video'
+
+              } else if (data.message.type === 'voice' || data.message.type === 'audio') {
+
+                displayContent = '🎙️ Voice'
 
               } else if (data.message.type === 'code') {
 
                 displayContent = '💻 Code'
 
               }
-
-              
 
               const { sender: _sender, ...messageWithoutSender } = data.message
 
@@ -7609,11 +7615,15 @@ function ChatPageContent() {
 
             } else if (newMessage.type === 'file') {
 
-              displayContent = `📎 ${newMessage.metadata?.file_name || 'File'}`
+              displayContent = '📎 ' + (newMessage.metadata?.file_name || 'File')
 
             } else if (newMessage.type === 'video') {
 
               displayContent = '🎥 Video'
+
+            } else if (newMessage.type === 'voice' || newMessage.type === 'audio') {
+
+              displayContent = '🎙️ Voice'
 
             } else if (newMessage.type === 'code') {
 
@@ -7624,7 +7634,6 @@ function ChatPageContent() {
               displayContent = newMessage.metadata.call_type === 'video' ? '📹 Video Call' : '📞 Voice Call'
             }
 
-            
 
             // Note: We removed the deduplication check here because it was too aggressive
             // The realtime subscription should process all messages normally
@@ -8835,4 +8844,13 @@ function ChatPageContent() {
 }
 
 export default ChatPageContent
+
+
+
+
+
+
+
+
+
 

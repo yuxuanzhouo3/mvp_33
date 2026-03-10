@@ -49,6 +49,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 
 import { CodeBlock } from './code-block'
+import { VoiceMessageItem } from './voice-message-item'
 import { useToast } from '@/components/ui/use-toast'
 import { MessageSkeleton } from './message-skeleton'
 
@@ -938,9 +939,14 @@ export function MessageList({
 
             const canCopyText = !!(copyableText && copyableText.trim() && !message.is_deleted)
 
-            const canCopyImage = message.type === 'image' && !!message.metadata?.file_url && !message.is_deleted
             const isImageMessage = message.type === 'image' && !!message.metadata?.file_url
-            const isMediaLikeMessage = isImageMessage || message.type === 'file' || message.type === 'video'
+            const isVoiceMessage = message.type === 'voice' || message.type === 'audio'
+            const isMediaLikeMessage = isImageMessage || isVoiceMessage || message.type === 'file' || message.type === 'video'
+            const isBubblelessMessage = isImageMessage || isVoiceMessage
+
+            const canCopyImage = message.type === 'image' && !!message.metadata?.file_url && !message.is_deleted
+            const canCopyAudio = isVoiceMessage && !!message.metadata?.file_url && !message.is_deleted
+
 
 
             // Use a stable key that doesn't change when message ID changes from temp to real
@@ -1123,25 +1129,25 @@ export function MessageList({
                               isMobile
                                 ? (message.type === 'text' || message.type === 'system'
                                   ? 'w-fit max-w-[16rem] px-3 py-2 rounded-[14px]'
-                                  : (isImageMessage
+                                  : (isBubblelessMessage
                                     ? 'max-w-[min(70vw,17rem)] min-w-[7.5rem] rounded-[14px] p-1.5'
                                     : 'max-w-[16rem] rounded-[14px] p-2'))
-                                : (isImageMessage ? 'max-w-[22rem] rounded-xl p-1.5' : 'px-4 py-2.5 max-w-xl'),
+                                : (isBubblelessMessage ? 'max-w-[22rem] rounded-xl p-1.5' : 'px-4 py-2.5 max-w-xl'),
                               isOwn
 
                                 ? (isMobile
-                                  ? (isImageMessage
+                                  ? (isBubblelessMessage
                                     ? 'bg-transparent text-foreground shadow-none border-0'
                                     : 'mobile-chat-bubble-own text-white shadow-[0_1px_1px_rgba(0,0,0,0.08)]')
                                   : 'bg-[#E8F3FF] text-gray-900 rounded-lg')
 
                                 : (isMobile
-                                  ? (isImageMessage
+                                  ? (isBubblelessMessage
                                     ? 'bg-transparent text-foreground shadow-none border-0'
                                     : 'mobile-chat-bubble-peer text-[#111827] border border-[#E6ECF2] shadow-[0_1px_1px_rgba(0,0,0,0.05)]')
                                   : 'bg-white text-gray-900 rounded-lg shadow-sm border border-gray-200'),
 
-                              message.type !== 'text' && !isImageMessage && 'p-2'
+                              message.type !== 'text' && !isBubblelessMessage && 'p-2'
 
                             )}
 
@@ -1373,6 +1379,38 @@ export function MessageList({
                             <p className="text-sm px-2">{message.content}</p>
                           )}
                         </div>
+                      )}
+
+
+
+                      {isVoiceMessage && message.metadata?.file_url && (
+
+
+
+                        <VoiceMessageItem
+
+
+
+                          url={getFileUrl(message)}
+
+
+
+                          durationSeconds={Number(message.metadata?.duration_seconds ?? message.metadata?.duration ?? 0)}
+
+
+
+                          isOwn={isOwn}
+
+
+
+                          isMobile={isMobile}
+
+
+
+                        />
+
+
+
                       )}
 
 
@@ -1650,7 +1688,7 @@ export function MessageList({
 
                           )}
 
-                          {(canCopyText || canCopyImage) && (
+                          {(canCopyText || canCopyImage || canCopyAudio) && (
 
                             <>
 
@@ -1659,17 +1697,17 @@ export function MessageList({
                               <ContextMenuItem
 
                                 onClick={() => {
-
                                   if (canCopyImage) {
-
                                     copyImageToClipboard(message)
-
+                                  } else if (canCopyAudio) {
+                                    const fileUrl = getFileUrl(message)
+                                    if (fileUrl) {
+                                      navigator.clipboard.writeText(fileUrl)
+                                      toast({ description: tr('链接已复制', 'Link copied') })
+                                    }
                                   } else if (canCopyText) {
-
                                     copyTextToClipboard(copyableText)
-
                                   }
-
                                 }}
 
                               >
@@ -2039,3 +2077,11 @@ export function MessageList({
   )
 
 }
+
+
+
+
+
+
+
+

@@ -1,4 +1,4 @@
-﻿import { getDeploymentRegion } from '@/config'
+import { getDeploymentRegion } from '@/config'
 import { getCloudBaseDb } from '@/lib/cloudbase/client'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendTpnsAndroidNotification } from '@/lib/push/tpns'
@@ -30,7 +30,7 @@ type PushSenderRecord = {
 function formatNotificationContent(region: PushRegion, type: string, content: string, metadata?: any): string {
   if (type === 'image') return region === 'CN' ? '图片' : 'Image'
   if (type === 'video') return region === 'CN' ? '视频' : 'Video'
-  if (type === 'audio') return region === 'CN' ? '语音消息' : 'Voice message'
+  if (type === 'audio' || type === 'voice') return region === 'CN' ? '语音消息' : 'Voice message'
   if (type === 'code') return region === 'CN' ? '代码消息' : 'Code'
   if (type === 'file') return metadata?.file_name || (region === 'CN' ? '文件' : 'File')
 
@@ -249,3 +249,4 @@ export async function notifyRecipientsOfNewMessage(input: NotifyNewMessageInput)
 
   await notifyIntlRecipients(input)
 }
+

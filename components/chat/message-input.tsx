@@ -219,8 +219,9 @@ export function MessageInput({
   }
 
   const handleSendVoiceMessage = (audioBlob: Blob, duration: number) => {
-    const audioFile = new File([audioBlob], `voice-${Date.now()}.webm`, { type: 'audio/webm' })
-    onSendMessage(`Voice message (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`, 'file', audioFile)
+    const safeDuration = Math.max(1, Math.round(duration || 0))
+    const audioFile = new File([audioBlob], `voice-${Date.now()}.webm`, { type: audioBlob.type || 'audio/webm' })
+    onSendMessage('', 'voice', audioFile, { duration_seconds: safeDuration })
   }
 
   const handleSendCode = (code: string, language: string) => {
@@ -503,3 +504,4 @@ export function MessageInput({
     </>
   )
 }
+

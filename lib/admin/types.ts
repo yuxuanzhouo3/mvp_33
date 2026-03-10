@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 管理后台系统类型定义
  *
  * 统一定义管理员用户、会话、日志、配置等核心数据结构
@@ -108,6 +108,9 @@ export type LogResourceType =
   | "social_link"
   | "file"
   | "release"
+  | "ai_job"
+  | "ai_asset"
+  | "ai_brief"
   | "config"
   | "system";
 
@@ -145,6 +148,11 @@ export type LogAction =
   | "release.create"
   | "release.update"
   | "release.rollback"
+  | "ai.analysis.create"
+  | "ai.poster.create"
+  | "ai.poster.regenerate"
+  | "ai.video.create"
+  | "ai.asset.delete"
   // 系统操作
   | "config.update"
   | "system.backup"
@@ -231,6 +239,250 @@ export interface UpdateConfigData {
   value: any;
   description?: string;
   category: ConfigCategory;
+}
+
+// ==================== AI 创意中心 ====================
+
+export type AiRegion = "CN" | "INTL";
+export type AiLanguage = "zh-CN" | "en-US";
+export type AiJobType = "repo_analysis" | "poster" | "video";
+export type AiProvider =
+  | "aliyun-bailian"
+  | "aliyun-wanx-image"
+  | "aliyun-wanx-video"
+  | "gemini"
+  | "openai";
+export type AiJobStatus =
+  | "queued"
+  | "in_progress"
+  | "completed"
+  | "failed"
+  | "blocked";
+export type AiAssetType =
+  | "analysis"
+  | "image"
+  | "video"
+  | "script"
+  | "subtitle"
+  | "cover";
+export type AiStorageProvider = "cloudbase" | "supabase";
+
+export interface AiAnalysisPayload {
+  product_name: string;
+  product_summary: string;
+  core_features: string[];
+  target_users: string[];
+  technical_stack: string[];
+  deployment_topology: string[];
+  region_differences: string[];
+  marketing_angles: string[];
+  module_topology?: Array<{
+    name: string;
+    purpose: string;
+    paths: string[];
+  }>;
+  repo_digest?: string;
+}
+
+export interface AiProjectAnalysis {
+  id: string;
+  region: AiRegion;
+  language: AiLanguage;
+  repo_scope: string[];
+  repo_digest: string;
+  analysis_payload: AiAnalysisPayload;
+  summary_text: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiCreativeBrief {
+  id: string;
+  analysis_id?: string;
+  region: AiRegion;
+  language: AiLanguage;
+  audience: string;
+  core_selling_points: string[];
+  brand_tone: string;
+  must_include: string[];
+  must_avoid: string[];
+  cta: string;
+  poster_goal?: string;
+  style_preset?: string;
+  extra_notes?: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiGenerationJob {
+  id: string;
+  analysis_id?: string;
+  brief_id?: string;
+  region: AiRegion;
+  language: AiLanguage;
+  job_type: AiJobType;
+  provider: AiProvider;
+  provider_model: string;
+  status: AiJobStatus;
+  progress: number;
+  input_payload: Record<string, any>;
+  output_payload?: Record<string, any>;
+  error_message?: string;
+  external_task_id?: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+}
+
+export interface AiAsset {
+  id: string;
+  job_id: string;
+  asset_type: AiAssetType;
+  storage_provider: AiStorageProvider;
+  storage_path: string;
+  public_url: string;
+  mime_type: string;
+  size: number;
+  metadata?: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateAiProjectAnalysisData {
+  region: AiRegion;
+  language: AiLanguage;
+  repo_scope: string[];
+  repo_digest: string;
+  analysis_payload: AiAnalysisPayload;
+  summary_text: string;
+  created_by: string;
+}
+
+export interface CreateAiCreativeBriefData {
+  analysis_id?: string;
+  region: AiRegion;
+  language: AiLanguage;
+  audience: string;
+  core_selling_points: string[];
+  brand_tone: string;
+  must_include: string[];
+  must_avoid: string[];
+  cta: string;
+  poster_goal?: string;
+  style_preset?: string;
+  extra_notes?: string;
+  created_by: string;
+}
+
+export interface CreateAiGenerationJobData {
+  analysis_id?: string;
+  brief_id?: string;
+  region: AiRegion;
+  language: AiLanguage;
+  job_type: AiJobType;
+  provider: AiProvider;
+  provider_model: string;
+  status?: AiJobStatus;
+  progress?: number;
+  input_payload: Record<string, any>;
+  output_payload?: Record<string, any>;
+  error_message?: string;
+  external_task_id?: string;
+  created_by: string;
+  completed_at?: string;
+}
+
+export interface UpdateAiGenerationJobData {
+  status?: AiJobStatus;
+  progress?: number;
+  provider?: AiProvider;
+  provider_model?: string;
+  output_payload?: Record<string, any>;
+  error_message?: string;
+  external_task_id?: string;
+  completed_at?: string;
+}
+
+export interface CreateAiAssetData {
+  job_id: string;
+  asset_type: AiAssetType;
+  storage_provider: AiStorageProvider;
+  storage_path: string;
+  public_url: string;
+  mime_type: string;
+  size: number;
+  metadata?: Record<string, any>;
+}
+
+export interface AiJobFilters {
+  status?: AiJobStatus;
+  job_type?: AiJobType;
+  region?: AiRegion;
+  language?: AiLanguage;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AiAnalysisFilters {
+  region?: AiRegion;
+  language?: AiLanguage;
+  created_by?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AiCreativeBriefPayload {
+  audience: string;
+  core_selling_points: string[];
+  brand_tone: string;
+  must_include: string[];
+  must_avoid: string[];
+  cta: string;
+  poster_goal?: string;
+  style_preset?: string;
+  extra_notes?: string;
+}
+
+export interface RepoAnalysisRequest {
+  repo_scope?: string[];
+  language: AiLanguage;
+}
+
+export interface PosterGenerationRequest {
+  analysis_id?: string;
+  brief_id?: string;
+  brief?: AiCreativeBriefPayload;
+  poster_goal: string;
+  audience: string;
+  style: string;
+  aspect_ratio: "1:1" | "4:5" | "16:9" | "9:16";
+  title: string;
+  subtitle?: string;
+  cta: string;
+  extra_prompt?: string;
+  negative_prompt?: string;
+  reference_image_url?: string;
+}
+
+export interface VideoGenerationRequest {
+  analysis_id?: string;
+  brief_id?: string;
+  brief?: AiCreativeBriefPayload;
+  aspect_ratio: "16:9" | "9:16";
+  duration_seconds: number;
+  headline: string;
+  script_override?: string;
+  scene_count?: number;
+  cover_asset_id?: string;
+  extra_prompt?: string;
+}
+
+export interface AssetRegenerateRequest {
+  asset_id: string;
+  supplemental_prompt: string;
 }
 
 // ==================== 数据库适配器 ====================
@@ -496,6 +748,19 @@ export interface AdminDatabaseAdapter {
    * 下载存储文件
    */
   downloadStorageFile(fileName: string, fileId?: string): Promise<{ data: string; contentType: string; fileName: string }>;
+
+  // ==================== AI 创意中心操作 ====================
+  createAiProjectAnalysis(data: CreateAiProjectAnalysisData): Promise<AiProjectAnalysis>;
+  getAiProjectAnalysisById(id: string): Promise<AiProjectAnalysis | null>;
+  listAiProjectAnalyses(filters?: AiAnalysisFilters): Promise<AiProjectAnalysis[]>;
+  createAiCreativeBrief(data: CreateAiCreativeBriefData): Promise<AiCreativeBrief>;
+  getAiCreativeBriefById(id: string): Promise<AiCreativeBrief | null>;
+  createAiGenerationJob(data: CreateAiGenerationJobData): Promise<AiGenerationJob>;
+  updateAiGenerationJob(id: string, data: UpdateAiGenerationJobData): Promise<AiGenerationJob>;
+  getAiGenerationJobById(id: string): Promise<AiGenerationJob | null>;
+  listAiGenerationJobs(filters?: AiJobFilters): Promise<AiGenerationJob[]>;
+  createAiAsset(data: CreateAiAssetData): Promise<AiAsset>;
+  listAiAssetsByJobId(jobId: string): Promise<AiAsset[]>;
 
   // ==================== 配置操作 ====================
   /**
@@ -1071,3 +1336,5 @@ export interface ReleaseFile extends StorageFile {
 export interface SocialLinkFile extends StorageFile {
   linkId?: string;
 }
+
+

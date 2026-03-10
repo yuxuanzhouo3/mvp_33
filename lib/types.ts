@@ -89,7 +89,7 @@ export interface Message {
   conversation_id: string
   sender_id: string
   content: string
-  type: 'text' | 'image' | 'file' | 'video' | 'audio' | 'system' | 'code'
+  type: 'text' | 'image' | 'file' | 'video' | 'audio' | 'voice' | 'system' | 'code'
   metadata?: MessageMetadata
   reply_to?: string
   reactions: MessageReaction[]
@@ -110,6 +110,7 @@ export interface MessageMetadata {
   _real_thumbnail_url?: string
   mime_type?: string
   file_type?: string
+  duration_seconds?: number
   thumbnail_url?: string
   mentions?: string[]
   code_language?: string
@@ -236,3 +237,4 @@ export interface BlindZoneMessageDisplay {
   created_at: string
   updated_at: string
 }
+

@@ -40,6 +40,17 @@ import type {
   ReleaseFilters,
   CreateReleaseData,
   UpdateReleaseData,
+  AiProjectAnalysis,
+  AiAnalysisFilters,
+  CreateAiProjectAnalysisData,
+  AiCreativeBrief,
+  CreateAiCreativeBriefData,
+  AiGenerationJob,
+  CreateAiGenerationJobData,
+  UpdateAiGenerationJobData,
+  AiJobFilters,
+  AiAsset,
+  CreateAiAssetData,
 } from "./types";
 import { handleDatabaseError, toISOString } from "./database";
 
@@ -52,6 +63,7 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
   private db: any;
   private connector: CloudBaseConnector;
   private initialized: boolean = false;
+  private aiCollectionsReady: boolean = false;
 
   constructor() {
     this.connector = new CloudBaseConnector();
@@ -66,6 +78,51 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
       this.db = this.connector.getClient();
       this.initialized = true;
     }
+  }
+
+  private async ensureAiCollections(): Promise<void> {
+    if (this.aiCollectionsReady) return;
+    await this.ensureInitialized();
+    const collections = [
+      "ai_project_analyses",
+      "ai_creative_briefs",
+      "ai_generation_jobs",
+      "ai_assets",
+    ];
+
+    for (const name of collections) {
+      try {
+        await this.db.collection(name).limit(1).get();
+      } catch (error: any) {
+        const message = String(error?.message || "");
+        const code = String(error?.code || "");
+        const missing =
+          message.includes("Db or Table not exist") ||
+          message.includes("DATABASE_COLLECTION_NOT_EXIST") ||
+          code.includes("DATABASE_COLLECTION_NOT_EXIST");
+
+        if (!missing) {
+          console.warn(`[CloudBaseAdapter] ensure AI collection failed: ${name}`, {
+            code: error?.code,
+            message: error?.message,
+          });
+          throw handleDatabaseError(error);
+        }
+
+        try {
+          await this.db.createCollection(name);
+          console.log(`[CloudBaseAdapter] ensured AI collection: ${name}`);
+        } catch (createError: any) {
+          console.warn(`[CloudBaseAdapter] create AI collection failed: ${name}`, {
+            code: createError?.code,
+            message: createError?.message,
+          });
+          throw handleDatabaseError(createError);
+        }
+      }
+    }
+
+    this.aiCollectionsReady = true;
   }
 
   /**
@@ -1814,6 +1871,239 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
     };
   }
 
+  private getCloudBaseInsertedId(result: any): string {
+    if (result?.id) {
+      return result.id;
+    }
+    if (Array.isArray(result?.ids) && result.ids.length > 0) {
+      return result.ids[0];
+    }
+    throw new Error("CloudBase 插入成功但未返回文档 ID");
+  }
+
+  private dbToAiProjectAnalysis(doc: any): AiProjectAnalysis {
+    return {
+      id: doc._id || doc.id,
+      region: doc.region,
+      language: doc.language,
+      repo_scope: doc.repo_scope || [],
+      repo_digest: doc.repo_digest,
+      analysis_payload: doc.analysis_payload,
+      summary_text: doc.summary_text,
+      created_by: doc.created_by,
+      created_at: doc.created_at,
+      updated_at: doc.updated_at,
+    };
+  }
+
+  private dbToAiCreativeBrief(doc: any): AiCreativeBrief {
+    return {
+      id: doc._id || doc.id,
+      analysis_id: doc.analysis_id,
+      region: doc.region,
+      language: doc.language,
+      audience: doc.audience,
+      core_selling_points: doc.core_selling_points || [],
+      brand_tone: doc.brand_tone,
+      must_include: doc.must_include || [],
+      must_avoid: doc.must_avoid || [],
+      cta: doc.cta,
+      poster_goal: doc.poster_goal,
+      style_preset: doc.style_preset,
+      extra_notes: doc.extra_notes,
+      created_by: doc.created_by,
+      created_at: doc.created_at,
+      updated_at: doc.updated_at,
+    };
+  }
+
+  private dbToAiGenerationJob(doc: any): AiGenerationJob {
+    return {
+      id: doc._id || doc.id,
+      analysis_id: doc.analysis_id,
+      brief_id: doc.brief_id,
+      region: doc.region,
+      language: doc.language,
+      job_type: doc.job_type,
+      provider: doc.provider,
+      provider_model: doc.provider_model,
+      status: doc.status,
+      progress: doc.progress ?? 0,
+      input_payload: doc.input_payload || {},
+      output_payload: doc.output_payload,
+      error_message: doc.error_message,
+      external_task_id: doc.external_task_id,
+      created_by: doc.created_by,
+      created_at: doc.created_at,
+      updated_at: doc.updated_at,
+      completed_at: doc.completed_at,
+    };
+  }
+
+  private dbToAiAsset(doc: any): AiAsset {
+    return {
+      id: doc._id || doc.id,
+      job_id: doc.job_id,
+      asset_type: doc.asset_type,
+      storage_provider: doc.storage_provider,
+      storage_path: doc.storage_path,
+      public_url: doc.public_url,
+      mime_type: doc.mime_type,
+      size: doc.size ?? 0,
+      metadata: doc.metadata,
+      created_at: doc.created_at,
+      updated_at: doc.updated_at,
+    };
+  }
+
+  // ==================== AI 创意中心操作 ====================
+
+  async createAiProjectAnalysis(data: CreateAiProjectAnalysisData): Promise<AiProjectAnalysis> {
+    await this.ensureAiCollections();
+    const now = toISOString(new Date());
+    const doc = {
+      ...data,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const result = await this.db.collection("ai_project_analyses").add(doc);
+    return this.dbToAiProjectAnalysis({ _id: this.getCloudBaseInsertedId(result), ...doc });
+  }
+
+  async getAiProjectAnalysisById(id: string): Promise<AiProjectAnalysis | null> {
+    await this.ensureAiCollections();
+    const result = await this.db.collection("ai_project_analyses").doc(id).get();
+    if (!result.data || result.data.length === 0) {
+      return null;
+    }
+    return this.dbToAiProjectAnalysis(result.data[0]);
+  }
+
+  async listAiProjectAnalyses(filters?: AiAnalysisFilters): Promise<AiProjectAnalysis[]> {
+    await this.ensureAiCollections();
+    const where: any = {};
+    if (filters?.region) where.region = filters.region;
+    if (filters?.language) where.language = filters.language;
+    if (filters?.created_by) where.created_by = filters.created_by;
+
+    let query = this.db.collection("ai_project_analyses");
+    if (Object.keys(where).length > 0) {
+      query = query.where(where);
+    }
+
+    query = query.orderBy("updated_at", "desc");
+    if (filters?.offset) query = query.skip(filters.offset);
+    if (filters?.limit) query = query.limit(filters.limit);
+
+    const result = await query.get();
+    return (result.data || []).map((doc: any) => this.dbToAiProjectAnalysis(doc));
+  }
+
+  async createAiCreativeBrief(data: CreateAiCreativeBriefData): Promise<AiCreativeBrief> {
+    await this.ensureAiCollections();
+    const now = toISOString(new Date());
+    const doc = {
+      ...data,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const result = await this.db.collection("ai_creative_briefs").add(doc);
+    return this.dbToAiCreativeBrief({ _id: this.getCloudBaseInsertedId(result), ...doc });
+  }
+
+  async getAiCreativeBriefById(id: string): Promise<AiCreativeBrief | null> {
+    await this.ensureAiCollections();
+    const result = await this.db.collection("ai_creative_briefs").doc(id).get();
+    if (!result.data || result.data.length === 0) {
+      return null;
+    }
+    return this.dbToAiCreativeBrief(result.data[0]);
+  }
+
+  async createAiGenerationJob(data: CreateAiGenerationJobData): Promise<AiGenerationJob> {
+    await this.ensureAiCollections();
+    const now = toISOString(new Date());
+    const doc = {
+      ...data,
+      status: data.status ?? "queued",
+      progress: data.progress ?? 0,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const result = await this.db.collection("ai_generation_jobs").add(doc);
+    return this.dbToAiGenerationJob({ _id: this.getCloudBaseInsertedId(result), ...doc });
+  }
+
+  async updateAiGenerationJob(id: string, data: UpdateAiGenerationJobData): Promise<AiGenerationJob> {
+    await this.ensureAiCollections();
+    await this.db.collection("ai_generation_jobs").doc(id).update({
+      ...data,
+      updated_at: toISOString(new Date()),
+    });
+
+    const updated = await this.getAiGenerationJobById(id);
+    if (!updated) {
+      throw new Error(`AI 任务不存在: ${id}`);
+    }
+    return updated;
+  }
+
+  async getAiGenerationJobById(id: string): Promise<AiGenerationJob | null> {
+    await this.ensureAiCollections();
+    const result = await this.db.collection("ai_generation_jobs").doc(id).get();
+    if (!result.data || result.data.length === 0) {
+      return null;
+    }
+    return this.dbToAiGenerationJob(result.data[0]);
+  }
+
+  async listAiGenerationJobs(filters?: AiJobFilters): Promise<AiGenerationJob[]> {
+    await this.ensureAiCollections();
+    const where: any = {};
+    if (filters?.status) where.status = filters.status;
+    if (filters?.job_type) where.job_type = filters.job_type;
+    if (filters?.region) where.region = filters.region;
+    if (filters?.language) where.language = filters.language;
+
+    let query = this.db.collection("ai_generation_jobs");
+    if (Object.keys(where).length > 0) {
+      query = query.where(where);
+    }
+
+    query = query.orderBy("created_at", "desc");
+    if (filters?.offset) query = query.skip(filters.offset);
+    if (filters?.limit) query = query.limit(filters.limit);
+
+    const result = await query.get();
+    return (result.data || []).map((doc: any) => this.dbToAiGenerationJob(doc));
+  }
+
+  async createAiAsset(data: CreateAiAssetData): Promise<AiAsset> {
+    await this.ensureAiCollections();
+    const now = toISOString(new Date());
+    const doc = {
+      ...data,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const result = await this.db.collection("ai_assets").add(doc);
+    return this.dbToAiAsset({ _id: this.getCloudBaseInsertedId(result), ...doc });
+  }
+
+  async listAiAssetsByJobId(jobId: string): Promise<AiAsset[]> {
+    await this.ensureAiCollections();
+    const result = await this.db
+      .collection("ai_assets")
+      .where({ job_id: jobId })
+      .orderBy("created_at", "asc")
+      .get();
+
+    return (result.data || []).map((doc: any) => this.dbToAiAsset(doc));
+  }
   // ==================== 健康检查 ====================
 
   /**
@@ -1983,3 +2273,10 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
     }
   }
 }
+
+
+
+
+
+
+

@@ -147,7 +147,7 @@ export async function notifyNewMessage(
     messageBody = '🎥 Video'
   } else if (message.type === 'code') {
     messageBody = '💻 Code'
-  } else if (message.type === 'audio') {
+  } else if (message.type === 'audio' || message.type === 'voice') {
     messageBody = '🎤 Voice message'
   }
 
@@ -197,4 +197,5 @@ export async function notifyNewMessage(
     requireInteraction: false,
   })
 }
+
 

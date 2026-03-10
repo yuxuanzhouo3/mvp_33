@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS messages (
     conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
     sender_id UUID REFERENCES users(id) ON DELETE SET NULL,
     content TEXT NOT NULL,
-    type VARCHAR(20) DEFAULT 'text' CHECK (type IN ('text', 'image', 'file', 'video', 'audio', 'system')),
+    type VARCHAR(20) DEFAULT 'text' CHECK (type IN ('text', 'image', 'file', 'video', 'audio', 'voice', 'system')),
     metadata JSONB,
     reply_to UUID REFERENCES messages(id) ON DELETE SET NULL,
     reactions JSONB DEFAULT '[]',
@@ -145,3 +145,4 @@ CREATE TRIGGER update_conversations_updated_at BEFORE UPDATE ON conversations
 
 CREATE TRIGGER update_messages_updated_at BEFORE UPDATE ON messages
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+

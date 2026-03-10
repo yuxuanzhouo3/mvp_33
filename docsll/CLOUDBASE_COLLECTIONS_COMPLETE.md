@@ -70,7 +70,7 @@
   - `conversation_id` (String): 会话 ID
   - `sender_id` (String): 发送者 ID
   - `content` (String): 消息内容
-  - `type` (String): 消息类型 ('text', 'image', 'file', 'video', 'audio', 'system', 'code')
+  - `type` (String): 消息类型 ('text', 'image', 'file', 'video', 'audio', 'voice', 'system', 'code')
   - `metadata` (Object, nullable): 元数据（文件信息等）
   - `is_recalled` (Boolean): 是否撤回
   - `created_at` (Date): 创建时间
@@ -231,6 +231,7 @@ node scripts/test-cloudbase-data.js
 - 检查环境变量配置
 - 列出所有已创建的集合
 - 查询 `users` 集合的示例数据
+
 
 
 

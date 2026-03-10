@@ -190,7 +190,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         // Message types
         messageTypeImage: '📷 Image',
         messageTypeVideo: '🎥 Video',
-        messageTypeAudio: '🎙️ Audio',
+        messageTypeAudio: '🎙️ Voice',
         messageTypeFile: '📎 File',
         messageTypeCode: '💻 Code',
         // Message status
@@ -338,7 +338,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         // Message types
         messageTypeImage: '📷 图片',
         messageTypeVideo: '🎥 视频',
-        messageTypeAudio: '🎙️ 音频',
+        messageTypeAudio: '🎙️ 语音',
         messageTypeFile: '📎 文件',
         messageTypeCode: '💻 代码',
         // Message status
@@ -400,3 +400,4 @@ export function useSettings() {
   }
   return context
 }
+

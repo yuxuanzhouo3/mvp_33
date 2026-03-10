@@ -156,7 +156,7 @@ export const translations = {
     // Message types
     messageTypeImage: '📷 Image',
     messageTypeVideo: '🎥 Video',
-    messageTypeAudio: '🎙️ Audio',
+    messageTypeAudio: '🎙️ Voice',
     messageTypeFile: '📎 File',
     messageTypeCode: '💻 Code',
     
@@ -362,7 +362,7 @@ export const translations = {
     // Message types
     messageTypeImage: '📷 图片',
     messageTypeVideo: '🎥 视频',
-    messageTypeAudio: '🎙️ 音频',
+    messageTypeAudio: '🎙️ 语音',
     messageTypeFile: '📎 文件',
     messageTypeCode: '💻 代码',
     messageDeleted: '消息已删除',
@@ -624,3 +624,4 @@ export function getTranslation(language: Language, key: keyof typeof translation
   const current = translations[language] as Record<string, string>
   return current[key] || translations.en[key]
 }
+

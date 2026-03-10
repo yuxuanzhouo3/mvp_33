@@ -54,7 +54,7 @@ CloudBase 使用 NoSQL 数据库（类似 MongoDB），而 Supabase 使用 Postg
 - `deleted_at` (Date, nullable): 用户删除时间
 
 ### messages 表
-- `type` 字段新增 'code' 类型：`'text', 'image', 'file', 'video', 'audio', 'system', 'code'`
+- `type` 字段新增 'code' 类型：`'text', 'image', 'file', 'video', 'audio', 'voice', 'system', 'code'`
 - `is_recalled` (Boolean, default: false): 是否撤回消息
 
 ### 新增表
@@ -246,4 +246,5 @@ CloudBase 的索引需要在控制台手动创建。建议创建以下索引：
 
 - [CloudBase 数据库文档](https://cloud.tencent.com/document/product/876/19369)
 - [Supabase 数据库结构](../scripts/003_supabase_setup.sql)
+
 

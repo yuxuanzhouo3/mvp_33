@@ -24,6 +24,8 @@ export function VoiceMessageRecorder({ open, onOpenChange, onSend }: VoiceMessag
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
+  const durationRef = useRef(0)
+  const recordingStartRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (open && !isRecording) {
@@ -39,11 +41,38 @@ export function VoiceMessageRecorder({ open, onOpenChange, onSend }: VoiceMessag
   useEffect(() => {
     if (isRecording) {
       const interval = setInterval(() => {
-        setDuration(prev => prev + 1)
+        setDuration(prev => {
+          const next = prev + 1
+          durationRef.current = next
+          return next
+        })
       }, 1000)
       return () => clearInterval(interval)
     }
   }, [isRecording])
+
+  const updateDuration = (next: number) => {
+    const safeValue = Math.max(0, Math.round(next))
+    durationRef.current = safeValue
+    setDuration(safeValue)
+  }
+
+  const computeAudioDuration = async (blob: Blob): Promise<number> => {
+    if (typeof window === 'undefined') return durationRef.current
+    try {
+      const arrayBuffer = await blob.arrayBuffer()
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+      if (!AudioCtx) return durationRef.current
+      const audioContext = new AudioCtx()
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0))
+      const seconds = Math.max(1, Math.round(audioBuffer.duration || 0))
+      await audioContext.close()
+      return seconds
+    } catch (error) {
+      console.warn('Failed to decode audio duration, using fallback:', error)
+      return durationRef.current
+    }
+  }
 
   const startRecording = async () => {
     try {
@@ -51,6 +80,7 @@ export function VoiceMessageRecorder({ open, onOpenChange, onSend }: VoiceMessag
       const mediaRecorder = new MediaRecorder(stream)
       mediaRecorderRef.current = mediaRecorder
       chunksRef.current = []
+      recordingStartRef.current = Date.now()
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -62,11 +92,21 @@ export function VoiceMessageRecorder({ open, onOpenChange, onSend }: VoiceMessag
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
         setAudioBlob(blob)
         stream.getTracks().forEach(track => track.stop())
+
+        const recordedMs = recordingStartRef.current
+          ? Math.max(0, Date.now() - recordingStartRef.current)
+          : 0
+        updateDuration(recordedMs > 0 ? recordedMs / 1000 : durationRef.current)
+        recordingStartRef.current = null
+
+        void computeAudioDuration(blob).then((seconds) => {
+          updateDuration(seconds)
+        })
       }
 
       mediaRecorder.start()
       setIsRecording(true)
-      setDuration(0)
+      updateDuration(0)
     } catch (error) {
       console.error('Error accessing microphone:', error)
       alert('Unable to access microphone. Please check permissions.')
@@ -83,7 +123,7 @@ export function VoiceMessageRecorder({ open, onOpenChange, onSend }: VoiceMessag
 
   const handleSend = () => {
     if (audioBlob) {
-      onSend(audioBlob, duration)
+      onSend(audioBlob, durationRef.current)
       handleCancel()
     }
   }
@@ -93,7 +133,7 @@ export function VoiceMessageRecorder({ open, onOpenChange, onSend }: VoiceMessag
       stopRecording()
     }
     setAudioBlob(null)
-    setDuration(0)
+    updateDuration(0)
     onOpenChange(false)
   }
 
