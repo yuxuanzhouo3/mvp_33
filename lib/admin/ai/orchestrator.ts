@@ -135,7 +135,22 @@ function normalizeModuleTopology(value: unknown): Array<{ name: string; purpose:
     return { name, purpose, paths }
   }).filter((item) => item.name || item.purpose || item.paths.length > 0)
   return normalized.length > 0 ? normalized : undefined
-}function normalizeBriefPayload(language: AiLanguage, input?: Partial<AiCreativeBriefPayload>): AiCreativeBriefPayload {
+}
+
+function normalizeAnalysisPayload(input: any): AiProjectAnalysis["analysis_payload"] {
+  return {
+    product_name: toStringValue(input?.product_name, "Unknown product"),
+    product_summary: toStringValue(input?.product_summary, ""),
+    core_features: toStringArray(input?.core_features),
+    target_users: toStringArray(input?.target_users),
+    technical_stack: toStringArray(input?.technical_stack),
+    deployment_topology: toStringArray(input?.deployment_topology),
+    region_differences: toStringArray(input?.region_differences),
+    marketing_angles: toStringArray(input?.marketing_angles),
+    module_topology: normalizeModuleTopology(input?.module_topology),
+  }
+}
+function normalizeBriefPayload(language: AiLanguage, input?: Partial<AiCreativeBriefPayload>): AiCreativeBriefPayload {
   return {
     audience: input?.audience || (isChineseLanguage(language) ? '企业客户、团队管理员、业务负责人' : 'team admins, enterprise buyers, and product leads'),
     core_selling_points: input?.core_selling_points || [],
