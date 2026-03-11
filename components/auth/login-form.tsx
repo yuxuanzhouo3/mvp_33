@@ -1,13 +1,13 @@
-'use client'
+﻿'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { mockAuth } from '@/lib/mock-auth'
-import { Loader2, Mail, CheckCircle } from 'lucide-react'
+import { Loader2, Mail, CheckCircle, Phone } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
 import { IS_DOMESTIC_VERSION } from '@/config'
 import { collectClientDeviceInfo } from '@/lib/utils/device-client'
@@ -42,20 +42,70 @@ function GoogleIcon({ className }: { className?: string }) {
 export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMessage }: LoginFormProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [phone, setPhone] = useState('')
+  const [smsCode, setSmsCode] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isSendingCode, setIsSendingCode] = useState(false)
+  const [countdown, setCountdown] = useState(0)
   const [error, setError] = useState('')
+  const [isMiniProgram, setIsMiniProgram] = useState(false)
+  const [loginMode, setLoginMode] = useState<'email' | 'sms'>('email')
   const { language } = useSettings()
 
-  // 显示重置成功的提示
+  const isDomestic = IS_DOMESTIC_VERSION
+  const showSmsForm = isDomestic && !isMiniProgram && loginMode === 'sms'
+
+  const detectWeChatMiniProgram = () => {
+    if (typeof window === 'undefined') return false
+    const envFlag = (window as any).__wxjs_environment
+    if (typeof envFlag === 'string' && envFlag.toLowerCase() === 'miniprogram') {
+      return true
+    }
+    const ua = (window.navigator?.userAgent || '').toLowerCase()
+    if (ua.includes('miniprogram')) {
+      return true
+    }
+    const wx = (window as any).wx
+    if (wx && typeof wx === 'object' && wx.miniProgram) {
+      return true
+    }
+    return false
+  }
+
+  useEffect(() => {
+    if (!IS_DOMESTIC_VERSION) return
+    setIsMiniProgram(detectWeChatMiniProgram())
+  }, [])
+
+  useEffect(() => {
+    if (countdown <= 0) return
+    const timer = window.setInterval(() => {
+      setCountdown((prev) => (prev <= 1 ? 0 : prev - 1))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [countdown])
+
   const t = (key: string) => {
     const translations: Record<string, Record<string, string>> = {
       en: {
         signIn: 'Sign In',
         signInWith: 'Sign in with',
+        smsLogin: 'Phone Code Login',
+        emailLogin: 'Email Login',
         wechat: 'WeChat',
         google: 'Google',
         email: 'Email',
         password: 'Password',
+        phone: 'Phone Number',
+        phonePlaceholder: '11-digit phone number',
+        smsCode: 'Verification Code',
+        smsCodePlaceholder: 'Enter 6-digit code',
+        smsCodeInvalid: 'Please enter the 6-digit code',
+        getCode: 'Get Code',
+        sendingCode: 'Sending...',
+        invalidPhone: 'Please enter a valid phone number',
+        codeFailed: 'Failed to send code',
+        loginFailed: 'Login failed',
         emailPlaceholder: 'you@company.com',
         enterCredentials: 'Enter your credentials to access your workspace',
         quickDemo: 'Quick Demo Login',
@@ -70,10 +120,22 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
       zh: {
         signIn: '登录',
         signInWith: '使用 {method} 登录',
+        smsLogin: '手机验证码登录',
+        emailLogin: '邮箱登录',
         wechat: '微信',
         google: '谷歌',
         email: '邮箱',
         password: '密码',
+        phone: '手机号',
+        phonePlaceholder: '请输入手机号',
+        smsCode: '验证码',
+        smsCodePlaceholder: '输入6位验证码',
+        smsCodeInvalid: '请输入6位验证码',
+        getCode: '获取验证码',
+        sendingCode: '发送中...',
+        invalidPhone: '请输入有效手机号',
+        codeFailed: '验证码发送失败',
+        loginFailed: '登录失败',
         emailPlaceholder: 'you@company.com',
         enterCredentials: '输入您的凭据以访问工作区',
         quickDemo: '快速演示登录',
@@ -89,6 +151,9 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
     return translations[language]?.[key] || translations.en[key]
   }
 
+  const normalizePhone = (value: string) => value.replace(/\D/g, '')
+  const isValidPhone = (value: string) => /^1\d{10}$/.test(value)
+
   const parseLoginResponse = async (response: Response): Promise<{ data: any; rawBody: string }> => {
     const rawBody = await response.text()
     if (!rawBody.trim()) {
@@ -102,6 +167,96 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
       ;(parseError as any).status = response.status
       ;(parseError as any).statusText = response.statusText
       throw parseError
+    }
+  }
+
+  const handleSendSmsCode = async () => {
+    const normalized = normalizePhone(phone)
+    if (!isValidPhone(normalized)) {
+      setError(t('invalidPhone'))
+      return
+    }
+
+    setIsSendingCode(true)
+    setError('')
+
+    try {
+      const response = await fetch('/api/auth/sms/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ phone: normalized }),
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(data?.error || t('codeFailed'))
+      }
+
+      setCountdown(60)
+    } catch (err) {
+      console.error('[SMS] Send code error:', err)
+      const errorMessage = err instanceof Error ? err.message : t('codeFailed')
+      setError(errorMessage)
+    } finally {
+      setIsSendingCode(false)
+    }
+  }
+
+  const handleSmsLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    const normalized = normalizePhone(phone)
+    if (!isValidPhone(normalized)) {
+      setError(t('invalidPhone'))
+      return
+    }
+
+    if (!smsCode || smsCode.length !== 6) {
+      setError(t('smsCodeInvalid'))
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      const deviceInfo = await collectClientDeviceInfo()
+      const response = await fetch('/api/auth/sms/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phone: normalized,
+          code: smsCode,
+          ...deviceInfo,
+        }),
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(data?.error || t('loginFailed'))
+      }
+
+      if (data?.success && data?.user && data?.token) {
+        if (typeof window !== 'undefined') {
+          mockAuth.setCurrentUser(data.user)
+          localStorage.setItem('chat_app_token', data.token)
+        }
+        onSuccess()
+        return
+      }
+
+      throw new Error(t('loginFailed'))
+    } catch (err) {
+      console.error('[SMS] Login error:', err)
+      setError(err instanceof Error ? err.message : t('loginFailed'))
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -315,6 +470,178 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
     }
   }
 
+  const divider = (
+    <div className="relative">
+      <div className="absolute inset-0 flex items-center">
+        <span className="w-full border-t border-border/40" />
+      </div>
+      <div className="relative flex justify-center text-xs uppercase">
+        <span className="bg-background px-2 text-muted-foreground">
+          {t('or')}
+        </span>
+      </div>
+    </div>
+  )
+
+  const footerActions = (
+    <div className="pt-2 space-y-3">
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t border-border/40" />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 text-center">
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-auto py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          onClick={onForgotPassword || (() => alert(t('forgotPassword')))}
+        >
+          {t('forgotPassword')}
+        </Button>
+        <div className="text-sm">
+          <span className="text-muted-foreground">{t('noAccount')} </span>
+          <Button
+            type="button"
+            variant="link"
+            className="h-auto p-0 text-sm font-medium underline-offset-4 hover:underline"
+            onClick={onRegister || (() => alert(t('createAccount')))}
+          >
+            {t('createAccount')}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+
+  const emailForm = (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="email">{t('email')}</Label>
+        <Input
+          id="email"
+          type="email"
+          placeholder={t('emailPlaceholder')}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          disabled={isLoading}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="password">{t('password')}</Label>
+        <Input
+          id="password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          disabled={isLoading}
+        />
+      </div>
+      {error && (
+        <p className="text-sm text-destructive">{error}</p>
+      )}
+      <Button type="submit" className="w-full" disabled={isLoading}>
+        {isLoading ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            {t('signingIn')}
+          </>
+        ) : (
+          <>
+            <Mail className="mr-2 h-4 w-4" />
+            {t('signIn')}
+          </>
+        )}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        onClick={handleQuickLogin}
+        disabled={isLoading}
+      >
+        {t('quickDemo')}
+      </Button>
+      {footerActions}
+    </form>
+  )
+
+  const smsForm = (
+    <form onSubmit={handleSmsLogin} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="phone">{t('phone')}</Label>
+        <Input
+          id="phone"
+          type="tel"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={11}
+          placeholder={t('phonePlaceholder')}
+          value={phone}
+          onChange={(e) => setPhone(normalizePhone(e.target.value))}
+          required
+          disabled={isLoading}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="smsCode">{t('smsCode')}</Label>
+        <div className="flex gap-2">
+          <Input
+            id="smsCode"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={6}
+            placeholder={t('smsCodePlaceholder')}
+            value={smsCode}
+            onChange={(e) => setSmsCode(e.target.value.replace(/\D/g, ''))}
+            required
+            disabled={isLoading}
+            className="flex-1"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleSendSmsCode}
+            disabled={isSendingCode || countdown > 0 || isLoading}
+            className="whitespace-nowrap"
+          >
+            {isSendingCode ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {t('sendingCode')}
+              </>
+            ) : countdown > 0 ? (
+              `${countdown}s`
+            ) : (
+              t('getCode')
+            )}
+          </Button>
+        </div>
+      </div>
+      {error && (
+        <p className="text-sm text-destructive">{error}</p>
+      )}
+      <Button type="submit" className="w-full" disabled={isLoading}>
+        {isLoading ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            {t('signingIn')}
+          </>
+        ) : (
+          <>
+            <Phone className="mr-2 h-4 w-4" />
+            {t('signIn')}
+          </>
+        )}
+      </Button>
+      {footerActions}
+    </form>
+  )
+
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="space-y-1">
@@ -334,20 +661,34 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
 
         {/* OAuth Login Buttons - Dynamic based on region */}
         <div className="grid grid-cols-1 gap-3">
-          {IS_DOMESTIC_VERSION ? (
-            // 国内版：显示微信登录
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOAuthLogin('wechat')}
-              disabled={isLoading}
-              className="w-full"
-            >
-              <WeChatIcon className="mr-2 h-5 w-5" />
-              {t('wechat')}
-            </Button>
+          {isDomestic ? (
+            isMiniProgram ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleOAuthLogin('wechat')}
+                disabled={isLoading}
+                className="w-full"
+              >
+                <WeChatIcon className="mr-2 h-5 w-5" />
+                {t('wechat')}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setLoginMode((prev) => (prev === 'sms' ? 'email' : 'sms'))
+                  setError('')
+                }}
+                disabled={isLoading}
+                className="w-full"
+              >
+                <Phone className="mr-2 h-5 w-5" />
+                {loginMode === 'sms' ? t('emailLogin') : t('smsLogin')}
+              </Button>
+            )
           ) : (
-            // 国际版：显示 Google 登录
             <Button
               type="button"
               variant="outline"
@@ -361,99 +702,23 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
           )}
         </div>
 
-        {/* Divider */}
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-border/40" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-2 text-muted-foreground">
-              {t('or')}
-            </span>
-          </div>
-        </div>
+        {divider}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">{t('email')}</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder={t('emailPlaceholder')}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">{t('password')}</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </div>
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {t('signingIn')}
-              </>
-            ) : (
-              <>
-                <Mail className="mr-2 h-4 w-4" />
-                {t('signIn')}
-              </>
-            )}
-          </Button>
-          <Button 
-            type="button" 
-            variant="outline" 
-            className="w-full" 
-            onClick={handleQuickLogin}
-            disabled={isLoading}
-          >
-            {t('quickDemo')}
-          </Button>
-          
-          <div className="pt-2 space-y-3">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border/40" />
-              </div>
-            </div>
-            
-            <div className="flex flex-col gap-3 text-center">
-              <Button 
-                type="button" 
-                variant="ghost" 
-                className="h-auto py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                onClick={onForgotPassword || (() => alert(t('forgotPassword')))}
-              >
-                {t('forgotPassword')}
-              </Button>
-              <div className="text-sm">
-                <span className="text-muted-foreground">{t('noAccount')} </span>
-                <Button 
-                  type="button" 
-                  variant="link" 
-                  className="h-auto p-0 text-sm font-medium underline-offset-4 hover:underline"
-                  onClick={onRegister || (() => alert(t('createAccount')))}
-                >
-                  {t('createAccount')}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </form>
+        {isDomestic ? (showSmsForm ? smsForm : emailForm) : emailForm}
       </CardContent>
     </Card>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+

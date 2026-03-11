@@ -448,13 +448,49 @@ async function processPosterJob(job: AiGenerationJob): Promise<AiGenerationJob> 
   })
 
   if (poll.status === 'pending') {
+    const nowIso = new Date().toISOString()
+    const pendingSinceRaw = outputPayload?.pending_since
+    const pendingSinceMs = typeof pendingSinceRaw === 'string' ? Date.parse(pendingSinceRaw) : NaN
+    const effectiveSinceMs = Number.isFinite(pendingSinceMs) ? pendingSinceMs : Date.now()
+    const elapsedMs = Date.now() - effectiveSinceMs
+    const timeoutMs = 8 * 60 * 1000
+
+    if (!pendingSinceRaw || !Number.isFinite(pendingSinceMs)) {
+      return adapter.updateAiGenerationJob(job.id, {
+        status: 'in_progress',
+        progress: 85,
+        output_payload: mergePayload(outputPayload, {
+          prompt_bundle: promptBundle,
+          pending_since: nowIso,
+          provider_poll: poll.raw,
+        }),
+      })
+    }
+
+    if (elapsedMs > timeoutMs) {
+      const providerStatus = poll.raw?.output?.task_status || poll.raw?.task_status || 'PENDING'
+      return adapter.updateAiGenerationJob(job.id, {
+        status: 'failed',
+        progress: 100,
+        error_message: `Poster generation timed out after ${Math.round(elapsedMs / 60000)} minutes. Provider status: ${providerStatus}`,
+        output_payload: mergePayload(outputPayload, {
+          prompt_bundle: promptBundle,
+          pending_since: pendingSinceRaw,
+          provider_poll: poll.raw,
+        }),
+      })
+    }
+
     return adapter.updateAiGenerationJob(job.id, {
       status: 'in_progress',
       progress: 85,
-      output_payload: mergePayload(outputPayload, { prompt_bundle: promptBundle }),
+      output_payload: mergePayload(outputPayload, {
+        prompt_bundle: promptBundle,
+        pending_since: pendingSinceRaw,
+        provider_poll: poll.raw,
+      }),
     })
   }
-
   if (poll.status === 'failed') {
     return adapter.updateAiGenerationJob(job.id, {
       status: 'failed',
@@ -532,9 +568,49 @@ async function ensureCoverAsset(job: AiGenerationJob, prompt: string, aspectRati
   })
 
   if (poll.status === 'pending') {
-    return { outputPayload, pending: true }
-  }
+    const nowIso = new Date().toISOString()
+    const pendingSinceRaw = outputPayload?.pending_since
+    const pendingSinceMs = typeof pendingSinceRaw === 'string' ? Date.parse(pendingSinceRaw) : NaN
+    const effectiveSinceMs = Number.isFinite(pendingSinceMs) ? pendingSinceMs : Date.now()
+    const elapsedMs = Date.now() - effectiveSinceMs
+    const timeoutMs = 8 * 60 * 1000
 
+    if (!pendingSinceRaw || !Number.isFinite(pendingSinceMs)) {
+      return adapter.updateAiGenerationJob(job.id, {
+        status: 'in_progress',
+        progress: 85,
+        output_payload: mergePayload(outputPayload, {
+          prompt_bundle: promptBundle,
+          pending_since: nowIso,
+          provider_poll: poll.raw,
+        }),
+      })
+    }
+
+    if (elapsedMs > timeoutMs) {
+      const providerStatus = poll.raw?.output?.task_status || poll.raw?.task_status || 'PENDING'
+      return adapter.updateAiGenerationJob(job.id, {
+        status: 'failed',
+        progress: 100,
+        error_message: `Poster generation timed out after ${Math.round(elapsedMs / 60000)} minutes. Provider status: ${providerStatus}`,
+        output_payload: mergePayload(outputPayload, {
+          prompt_bundle: promptBundle,
+          pending_since: pendingSinceRaw,
+          provider_poll: poll.raw,
+        }),
+      })
+    }
+
+    return adapter.updateAiGenerationJob(job.id, {
+      status: 'in_progress',
+      progress: 85,
+      output_payload: mergePayload(outputPayload, {
+        prompt_bundle: promptBundle,
+        pending_since: pendingSinceRaw,
+        provider_poll: poll.raw,
+      }),
+    })
+  }
   if (poll.status === 'failed') {
     throw new Error(poll.errorMessage || 'Video cover generation failed')
   }
@@ -701,13 +777,49 @@ async function processVideoJob(job: AiGenerationJob): Promise<AiGenerationJob> {
   })
 
   if (poll.status === 'pending') {
+    const nowIso = new Date().toISOString()
+    const pendingSinceRaw = outputPayload?.pending_since
+    const pendingSinceMs = typeof pendingSinceRaw === 'string' ? Date.parse(pendingSinceRaw) : NaN
+    const effectiveSinceMs = Number.isFinite(pendingSinceMs) ? pendingSinceMs : Date.now()
+    const elapsedMs = Date.now() - effectiveSinceMs
+    const timeoutMs = 8 * 60 * 1000
+
+    if (!pendingSinceRaw || !Number.isFinite(pendingSinceMs)) {
+      return adapter.updateAiGenerationJob(job.id, {
+        status: 'in_progress',
+        progress: 85,
+        output_payload: mergePayload(outputPayload, {
+          prompt_bundle: promptBundle,
+          pending_since: nowIso,
+          provider_poll: poll.raw,
+        }),
+      })
+    }
+
+    if (elapsedMs > timeoutMs) {
+      const providerStatus = poll.raw?.output?.task_status || poll.raw?.task_status || 'PENDING'
+      return adapter.updateAiGenerationJob(job.id, {
+        status: 'failed',
+        progress: 100,
+        error_message: `Poster generation timed out after ${Math.round(elapsedMs / 60000)} minutes. Provider status: ${providerStatus}`,
+        output_payload: mergePayload(outputPayload, {
+          prompt_bundle: promptBundle,
+          pending_since: pendingSinceRaw,
+          provider_poll: poll.raw,
+        }),
+      })
+    }
+
     return adapter.updateAiGenerationJob(job.id, {
       status: 'in_progress',
       progress: 85,
-      output_payload: mergePayload(outputPayload, { video_poll: poll.raw }),
+      output_payload: mergePayload(outputPayload, {
+        prompt_bundle: promptBundle,
+        pending_since: pendingSinceRaw,
+        provider_poll: poll.raw,
+      }),
     })
   }
-
   if (poll.status === 'failed') {
     return adapter.updateAiGenerationJob(job.id, {
       status: 'failed',
