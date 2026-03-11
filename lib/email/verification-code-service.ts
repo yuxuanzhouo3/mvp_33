@@ -306,7 +306,23 @@ export class SmsVerificationCodeService {
       }
 
       return { allowed: true };
-    } catch (error) {
+    } catch (error: any) {
+      const message = typeof error?.message === 'string' ? error.message : '';
+      const code = typeof error?.code === 'string' ? error.code : '';
+      const collectionMissing =
+        message.includes('not exist') ||
+        message.includes('COLLECTION_NOT_EXIST') ||
+        message.includes('Db or Table not exist') ||
+        code === 'DATABASE_COLLECTION_NOT_EXIST';
+
+      if (collectionMissing) {
+        console.warn('[SmsVerificationCodeService] Collection missing, allow first send:', {
+          message,
+          code,
+        });
+        return { allowed: true };
+      }
+
       console.error('[SmsVerificationCodeService] 检查频率限制失败:', error);
       return { allowed: false, error: '检查频率限制失败' };
     }
@@ -314,4 +330,6 @@ export class SmsVerificationCodeService {
 }
 
 export const smsVerificationCodeService = new SmsVerificationCodeService();
+
+
 
