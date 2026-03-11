@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -63,10 +63,6 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
     }
     const ua = (window.navigator?.userAgent || '').toLowerCase()
     if (ua.includes('miniprogram')) {
-      return true
-    }
-    const wx = (window as any).wx
-    if (wx && typeof wx === 'object' && wx.miniProgram) {
       return true
     }
     return false
@@ -739,6 +735,8 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
     </Card>
   )
 }
+
+
 
 
 
