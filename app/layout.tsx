@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import "./globals.css";
 import { SettingsProvider } from '@/lib/settings-context';
 import { RegionProvider } from '@/lib/region-context';
@@ -20,6 +20,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang={DEFAULT_LANGUAGE}>
+      <head>
+        <script
+          type="text/javascript"
+          src="https://res.wx.qq.com/open/js/jweixin-1.6.0.js"
+        ></script>
+      </head>
       <body className="font-sans antialiased">
         <RegionProvider>
           <SettingsProvider>
@@ -33,4 +39,5 @@ export default function RootLayout({
     </html>
   );
 }
+
 
