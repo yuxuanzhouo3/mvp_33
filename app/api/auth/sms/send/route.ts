@@ -18,6 +18,57 @@ function isSmsConfigured(): boolean {
   );
 }
 
+function isRealSmsEnabled(): boolean {
+  return (process.env.ENABLE_REAL_SMS || '').toLowerCase() === 'true';
+}
+
+async function sendTencentSms(phone: string, code: string) {
+  const secretId = process.env.TENCENT_SMS_SECRET_ID || '';
+  const secretKey = process.env.TENCENT_SMS_SECRET_KEY || '';
+  const smsSdkAppId = process.env.TENCENT_SMS_APP_ID || '';
+  const signName = process.env.TENCENT_SMS_SIGN_NAME || '';
+  const templateId = process.env.TENCENT_SMS_TEMPLATE_ID || '';
+
+  const tencentcloud: any = await import('tencentcloud-sdk-nodejs');
+  const SmsClient = tencentcloud.sms.v20210111.Client;
+
+  const client = new SmsClient({
+    credential: {
+      secretId,
+      secretKey,
+    },
+    region: 'ap-guangzhou',
+    profile: {
+      httpProfile: {
+        endpoint: 'sms.tencentcloudapi.com',
+      },
+    },
+  });
+
+  const params = {
+    PhoneNumberSet: [`+86${phone}`],
+    SmsSdkAppId: smsSdkAppId,
+    SignName: signName,
+    TemplateId: templateId,
+    TemplateParamSet: [code],
+  };
+
+  const response = await client.SendSms(params);
+  console.log('[SMS] Tencent SendSms response:', JSON.stringify(response));
+
+  const status = response?.SendStatusSet?.[0];
+  if (!status || status.Code !== 'Ok') {
+    console.error('[SMS] Tencent SendSms failed:', JSON.stringify({
+      Code: status?.Code,
+      Message: status?.Message,
+      Response: response,
+    }));
+    throw new Error(status?.Message || '短信发送失败');
+  }
+
+  return response;
+}
+
 export async function POST(request: NextRequest) {
   try {
     if (!IS_DOMESTIC_VERSION || !isChinaRegion()) {
@@ -43,9 +94,11 @@ export async function POST(request: NextRequest) {
     }
 
     const code = result.code || '';
-    const isDev = process.env.NODE_ENV !== 'production';
-    if (isDev) {
-      console.log(`[SMS] Dev mock code for ${phone}: ${code}`);
+    const enableRealSms = isRealSmsEnabled();
+
+    // MOCK MODE (for testing only). Remove this block when real SMS is fully enabled.
+    if (!enableRealSms) {
+      console.log(`[SMS] Mock code for ${phone}: ${code}`);
       return NextResponse.json({ message: '验证码已发送' });
     }
 
@@ -54,10 +107,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '短信服务未配置' }, { status: 500 });
     }
 
-    // TODO: integrate Tencent SMS
-    console.warn('[SMS] Tencent SMS integration placeholder - not implemented yet');
-
-    return NextResponse.json({ message: '验证码已发送' });
+    try {
+      await sendTencentSms(phone, code);
+      return NextResponse.json({ message: '验证码已发送' });
+    } catch (error: any) {
+      console.error('[SMS] Tencent SendSms error:', JSON.stringify({
+        Code: error?.code,
+        Message: error?.message,
+        Response: error?.response,
+        Error: error,
+      }));
+      return NextResponse.json({ error: '短信发送失败' }, { status: 500 });
+    }
   } catch (error) {
     console.error('[sms-send] error:', error);
     return NextResponse.json({ error: '服务器内部错误' }, { status: 500 });
