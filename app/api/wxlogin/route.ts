@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { isChinaRegion } from '@/lib/config/region'
 import { getCloudBaseDb } from '@/lib/cloudbase/client'
@@ -85,11 +85,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const response = await fetch(
+    const wxResponse = await fetch(
       `https://api.weixin.qq.com/sns/jscode2session?appid=${appId}&secret=${appSecret}&js_code=${code}&grant_type=authorization_code`
     )
 
-    const data = await response.json()
+    const data = await wxResponse.json()
 
     if (data.errcode) {
       return NextResponse.json(
@@ -220,7 +220,7 @@ export async function POST(request: NextRequest) {
 
     const expiresIn = getSessionExpiresInSeconds()
 
-    const response = NextResponse.json({
+    const nextResponse = NextResponse.json({
       success: true,
       token,
       openid,
@@ -234,8 +234,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    setCloudBaseSessionCookie(response, token)
-    return response
+    setCloudBaseSessionCookie(nextResponse, token)
+    return nextResponse
   } catch (error: any) {
     console.error('WeChat mini program login error:', error)
     return NextResponse.json(
@@ -249,3 +249,5 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+
