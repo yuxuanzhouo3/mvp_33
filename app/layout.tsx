@@ -5,6 +5,7 @@ import { RegionProvider } from '@/lib/region-context';
 import { Toaster } from '@/components/ui/toaster';
 import { DEFAULT_LANGUAGE } from '@/config';
 import { ClientErrorLogger } from '@/components/debug/client-error-logger';
+import { MpLoginBridge } from '@/components/auth/mp-login-bridge';
 
 export const metadata: Metadata = {
   title: "Enterprise Chat - Company Communication Platform",
@@ -23,6 +24,7 @@ export default function RootLayout({
         <RegionProvider>
           <SettingsProvider>
             <ClientErrorLogger />
+            <MpLoginBridge />
             {children}
             <Toaster />
           </SettingsProvider>
@@ -31,3 +33,4 @@ export default function RootLayout({
     </html>
   );
 }
+

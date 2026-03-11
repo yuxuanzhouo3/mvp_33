@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -49,7 +49,7 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
   const [countdown, setCountdown] = useState(0)
   const [error, setError] = useState('')
   const [isMiniProgram, setIsMiniProgram] = useState(false)
-  const [loginMode, setLoginMode] = useState<'email' | 'sms'>('email')
+  const [loginMode, setLoginMode] = useState<'email' | 'sms'>(() => (IS_DOMESTIC_VERSION ? 'sms' : 'email'))
   const { language } = useSettings()
 
   const isDomestic = IS_DOMESTIC_VERSION
@@ -74,7 +74,11 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
 
   useEffect(() => {
     if (!IS_DOMESTIC_VERSION) return
-    setIsMiniProgram(detectWeChatMiniProgram())
+    const miniProgram = detectWeChatMiniProgram()
+    setIsMiniProgram(miniProgram)
+    if (!miniProgram) {
+      setLoginMode('sms')
+    }
   }, [])
 
   useEffect(() => {
@@ -399,6 +403,32 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
     }
   }
 
+  const handleMiniProgramLogin = () => {
+    setError('')
+    if (typeof window === 'undefined') return
+
+    const returnUrl = window.location.href
+    const wx = (window as any).wx
+
+    if (wx && wx.miniProgram) {
+      if (typeof wx.miniProgram.navigateTo === 'function') {
+        wx.miniProgram.navigateTo({
+          url: '/pages/webshell/login?returnUrl=' + encodeURIComponent(returnUrl),
+        })
+        return
+      }
+
+      if (typeof wx.miniProgram.postMessage === 'function') {
+        wx.miniProgram.postMessage({
+          data: { type: 'REQUEST_WX_LOGIN', returnUrl },
+        })
+        return
+      }
+    }
+
+    setError(language === 'zh' ? '无法唤起小程序登录' : 'Failed to open mini program login')
+  }
+
   // OAuth login handler - redirects to OAuth provider
   const handleOAuthLogin = async (provider: 'wechat' | 'google') => {
     setIsLoading(true)
@@ -666,7 +696,7 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => handleOAuthLogin('wechat')}
+                onClick={handleMiniProgramLogin}
                 disabled={isLoading}
                 className="w-full"
               >
@@ -709,6 +739,8 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
     </Card>
   )
 }
+
+
 
 
 
