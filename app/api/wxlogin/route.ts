@@ -45,9 +45,26 @@ function buildSessionUser(params: {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('[wxlogin] ========== Request Start ==========')
+    console.log('[wxlogin] NEXT_PUBLIC_DEPLOYMENT_REGION:', process.env.NEXT_PUBLIC_DEPLOYMENT_REGION)
+    console.log('[wxlogin] isChinaRegion():', isChinaRegion())
+
     const body = await request.json()
+    console.log('[wxlogin] Request body:', {
+      hasCode: Boolean(body.code),
+      hasNickName: Boolean(body.nickName),
+      hasAvatarUrl: Boolean(body.avatarUrl),
+    })
+
+    const clientIP =
+      request.headers.get('x-forwarded-for') ||
+      request.headers.get('x-real-ip') ||
+      'unknown'
+    console.log('[wxlogin] Client IP:', clientIP)
+
     const validationResult = wxloginSchema.safeParse(body)
     if (!validationResult.success) {
+      console.error('[wxlogin] Validation failed:', validationResult.error.errors)
       return NextResponse.json(
         {
           success: false,
@@ -59,6 +76,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isChinaRegion()) {
+      console.error('[wxlogin] Region check failed - not China region')
       return NextResponse.json(
         {
           success: false,
@@ -68,13 +86,21 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+    console.log('[wxlogin] Region check passed')
 
     const { code, nickName, avatarUrl } = validationResult.data
+    console.log('[wxlogin] Validation passed')
 
     const appId = process.env.WECHAT_MINIPROGRAM_APPID
     const appSecret = process.env.WECHAT_MINIPROGRAM_SECRET
+    console.log('[wxlogin] Config check:', {
+      hasAppId: Boolean(appId),
+      appIdPrefix: appId ? appId.substring(0, 6) : 'none',
+      hasAppSecret: Boolean(appSecret),
+    })
 
     if (!appId || !appSecret) {
+      console.error('[wxlogin] Missing WeChat configuration')
       return NextResponse.json(
         {
           success: false,
@@ -85,13 +111,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log('[wxlogin] Calling WeChat jscode2session API...')
+
     const wxResponse = await fetch(
       `https://api.weixin.qq.com/sns/jscode2session?appid=${appId}&secret=${appSecret}&js_code=${code}&grant_type=authorization_code`
     )
 
     const data = await wxResponse.json()
 
+    console.log('[wxlogin] WeChat API response:', {
+      hasError: Boolean(data.errcode),
+      errcode: data.errcode,
+      errmsg: data.errmsg,
+      hasOpenid: Boolean(data.openid),
+    })
+
     if (data.errcode) {
+      console.error('[wxlogin] WeChat API error:', data.errcode, data.errmsg)
       return NextResponse.json(
         {
           success: false,
@@ -106,6 +142,7 @@ export async function POST(request: NextRequest) {
     const sessionKey = String(data.session_key || '')
 
     if (!openid || !sessionKey) {
+      console.error('[wxlogin] Invalid WeChat session:', { hasOpenid: Boolean(openid), hasSessionKey: Boolean(sessionKey) })
       return NextResponse.json(
         {
           success: false,
@@ -116,18 +153,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log('[wxlogin] Got openid successfully')
+
     const db = getCloudBaseDb()
     if (!db) {
+      console.error('[wxlogin] CloudBase not configured')
       return NextResponse.json(
         { success: false, error: 'SERVER_ERROR', message: 'CloudBase not configured' },
         { status: 500 }
       )
     }
-
-    const clientIP =
-      request.headers.get('x-forwarded-for') ||
-      request.headers.get('x-real-ip') ||
-      'unknown'
 
     const now = new Date().toISOString()
     const usersCollection = db.collection('users')
@@ -148,6 +183,8 @@ export async function POST(request: NextRequest) {
       email = existingUser.email || email
       displayName = nickName || existingUser.full_name || existingUser.name || existingUser.username || displayName
       finalAvatarUrl = avatarUrl || existingUser.avatar_url || existingUser.avatar || finalAvatarUrl
+
+      console.log('[wxlogin] Existing user found:', { userId, hasAvatar: Boolean(finalAvatarUrl) })
 
       const updateData: Record<string, any> = {
         wechat_session_key: sessionKey,
@@ -180,6 +217,8 @@ export async function POST(request: NextRequest) {
       userId = `wechat_mp_${openid}`
       displayName = nickName || displayName
       finalAvatarUrl = avatarUrl || null
+
+      console.log('[wxlogin] Creating new mini program user:', { userId })
 
       const newUser = {
         id: userId,
@@ -219,6 +258,8 @@ export async function POST(request: NextRequest) {
     })
 
     const expiresIn = getSessionExpiresInSeconds()
+
+    console.log('[wxlogin] Generated session token:', { userId, expiresIn })
 
     const nextResponse = NextResponse.json({
       success: true,
