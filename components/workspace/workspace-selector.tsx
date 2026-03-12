@@ -11,6 +11,7 @@ import { Building2, ChevronRight, Loader2, Plus, UserPlus, RefreshCw } from 'luc
 import { useSettings } from '@/lib/settings-context'
 import { getTranslation } from '@/lib/i18n'
 import { JoinWorkspaceDialog } from './join-workspace-dialog'
+import { IS_DOMESTIC_VERSION } from '@/config'
 
 interface WorkspaceSelectorProps {
   onSelect: (workspace: Workspace) => void
@@ -29,10 +30,27 @@ export function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) {
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
 
+  const buildAuthHeaders = (): Record<string, string> => {
+    if (typeof window === 'undefined') return {}
+    const token = window.localStorage.getItem('chat_app_token') || ''
+    if (!token) return {}
+
+    if (IS_DOMESTIC_VERSION) {
+      return {
+        'x-cloudbase-session': token,
+        Authorization: `Bearer ${token}`,
+      }
+    }
+
+    return { Authorization: `Bearer ${token}` }
+  }
+
   useEffect(() => {
     async function loadWorkspaces() {
       try {
-        const response = await fetch('/api/workspaces')
+        const response = await fetch('/api/workspaces', {
+          headers: buildAuthHeaders(),
+        })
         const data = await response.json()
 
         if (data.success && data.workspaces && data.workspaces.length > 0) {
@@ -62,7 +80,10 @@ export function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) {
 
       const response = await fetch('/api/workspace-join-requests', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildAuthHeaders(),
+        },
         body: JSON.stringify({ workspaceId, reason }),
       })
 
@@ -101,7 +122,10 @@ export function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) {
       // 调用 API 创建工作区，传递邀请码
       const response = await fetch('/api/workspaces', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildAuthHeaders(),
+        },
         body: JSON.stringify({ name: newWorkspaceName, inviteCode: newInviteCode.trim().toUpperCase() }),
       })
       const data = await response.json()
@@ -325,3 +349,4 @@ export function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) {
     </>
   )
 }
+

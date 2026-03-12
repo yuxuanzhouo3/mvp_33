@@ -221,12 +221,22 @@ export async function POST(request: NextRequest) {
     // CN version: use CloudBase
     if (dbClient.type === 'cloudbase') {
       console.log('[JoinRequest] 使用 CloudBase 数据库')
-      // 认证检查
-      const userId = request.headers.get('x-user-id')
+      // Auth check
+      let userId = request.headers.get('x-user-id')
       console.log('[JoinRequest] x-user-id header:', userId)
 
       if (!userId) {
-        console.log('[JoinRequest] 错误: 未授权 - 缺少 x-user-id')
+        try {
+          const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
+          const cloudBaseUser = await verifyCloudBaseSession(request)
+          userId = cloudBaseUser?.id || null
+        } catch (error) {
+          console.warn('[JoinRequest] failed to verify session:', error)
+        }
+      }
+
+      if (!userId) {
+        console.log('[JoinRequest] Unauthorized: missing x-user-id and no valid session')
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
 
