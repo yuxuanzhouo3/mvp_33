@@ -148,6 +148,17 @@ function mapOpenAiImageSize(aspectRatio: string): string {
   }
 }
 
+function normalizeWanVideoDuration(durationSeconds: number): number {
+  if (durationSeconds === 5 || durationSeconds === 10) {
+    return durationSeconds
+  }
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 5) {
+    return 5
+  }
+  return 10
+}
+
+
 export async function submitPosterGeneration(input: {
   region: AiRegion
   prompt: string
@@ -304,6 +315,7 @@ export async function submitVideoGeneration(input: {
   if (route.videoProvider === 'aliyun-wanx-video') {
     const key = getRequiredEnv('DASHSCOPE_API_KEY')
     const model = input.model || route.videoModel
+    const durationSeconds = normalizeWanVideoDuration(input.durationSeconds)
     const json = await fetchJson(`${getDashScopeApiBase(input.region)}/services/aigc/video-generation/video-synthesis`, {
       method: 'POST',
       headers: {
@@ -318,7 +330,7 @@ export async function submitVideoGeneration(input: {
         },
         parameters: {
           size: input.aspectRatio === '9:16' ? '720*1280' : '1280*720',
-          duration: input.durationSeconds,
+          duration: durationSeconds,
         },
       }),
     })
@@ -472,4 +484,7 @@ export async function pollVideoGeneration(input: {
     raw: json,
   }
 }
+
+
+
 

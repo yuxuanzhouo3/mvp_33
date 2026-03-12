@@ -1,4 +1,4 @@
-import { Buffer } from 'node:buffer'
+﻿import { Buffer } from 'node:buffer'
 import type {
   AiAsset,
   AiCreativeBrief,
@@ -580,7 +580,6 @@ async function ensureCoverAsset(job: AiGenerationJob, prompt: string, aspectRati
         status: 'in_progress',
         progress: 85,
         output_payload: mergePayload(outputPayload, {
-          prompt_bundle: promptBundle,
           pending_since: nowIso,
           provider_poll: poll.raw,
         }),
@@ -592,9 +591,8 @@ async function ensureCoverAsset(job: AiGenerationJob, prompt: string, aspectRati
       return adapter.updateAiGenerationJob(job.id, {
         status: 'failed',
         progress: 100,
-        error_message: `Poster generation timed out after ${Math.round(elapsedMs / 60000)} minutes. Provider status: ${providerStatus}`,
+        error_message: `Video cover generation timed out after ${Math.round(elapsedMs / 60000)} minutes. Provider status: ${providerStatus}`,
         output_payload: mergePayload(outputPayload, {
-          prompt_bundle: promptBundle,
           pending_since: pendingSinceRaw,
           provider_poll: poll.raw,
         }),
@@ -605,7 +603,6 @@ async function ensureCoverAsset(job: AiGenerationJob, prompt: string, aspectRati
       status: 'in_progress',
       progress: 85,
       output_payload: mergePayload(outputPayload, {
-        prompt_bundle: promptBundle,
         pending_since: pendingSinceRaw,
         provider_poll: poll.raw,
       }),
@@ -789,7 +786,6 @@ async function processVideoJob(job: AiGenerationJob): Promise<AiGenerationJob> {
         status: 'in_progress',
         progress: 85,
         output_payload: mergePayload(outputPayload, {
-          prompt_bundle: promptBundle,
           pending_since: nowIso,
           provider_poll: poll.raw,
         }),
@@ -801,9 +797,8 @@ async function processVideoJob(job: AiGenerationJob): Promise<AiGenerationJob> {
       return adapter.updateAiGenerationJob(job.id, {
         status: 'failed',
         progress: 100,
-        error_message: `Poster generation timed out after ${Math.round(elapsedMs / 60000)} minutes. Provider status: ${providerStatus}`,
+        error_message: `Video generation timed out after ${Math.round(elapsedMs / 60000)} minutes. Provider status: ${providerStatus}`,
         output_payload: mergePayload(outputPayload, {
-          prompt_bundle: promptBundle,
           pending_since: pendingSinceRaw,
           provider_poll: poll.raw,
         }),
@@ -814,7 +809,6 @@ async function processVideoJob(job: AiGenerationJob): Promise<AiGenerationJob> {
       status: 'in_progress',
       progress: 85,
       output_payload: mergePayload(outputPayload, {
-        prompt_bundle: promptBundle,
         pending_since: pendingSinceRaw,
         provider_poll: poll.raw,
       }),

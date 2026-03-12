@@ -1,40 +1,72 @@
+
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { BrainCircuit, Clapperboard, Download, Image as ImageIcon, Loader2, RefreshCcw, Sparkles } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Progress } from '@/components/ui/progress'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Textarea } from '@/components/ui/textarea'
-import type { AiAsset, AiLanguage, AiProjectAnalysis } from '@/lib/admin/types'
+import {
+  AlignLeft,
+  CheckCircle2,
+  CheckSquare,
+  Download,
+  Image as ImageIcon,
+  LayoutGrid,
+  Loader2,
+  Mic,
+  Palette,
+  Play,
+  Plus,
+  RefreshCcw,
+  Settings,
+  Square,
+  Terminal,
+  Video,
+  Volume2,
+  X,
+} from 'lucide-react'
+import type { AiAsset, AiGenerationJob, AiLanguage, AiProjectAnalysis } from '@/lib/admin/types'
 import type { AiProviderRoute } from '@/lib/admin/ai/provider-router'
 
+type FeatureItem = {
+  id: string
+  name: string
+  value: string
+  selected: boolean
+  source: 'analysis' | 'manual'
+}
+
 type JobEnvelope = {
-  job: any
+  job: AiGenerationJob
   assets: AiAsset[]
   analysis: AiProjectAnalysis | null
   brief: any
 }
 
-function splitLines(value: string): string[] {
-  return value.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean)
-}
+const imageStyles = [
+  '科技写实风 (Tech Realism)',
+  '极简商务风 (Minimalist)',
+  '材质光影风 (Material Light)',
+  '杂志拼贴风 (Editorial Collage)',
+]
 
-function formatDate(value?: string) {
-  return value ? new Date(value).toLocaleString() : '--'
-}
+const videoVoices = [
+  '专业沉稳男声 (商务解说)',
+  '亲切自然女声 (产品讲解)',
+  '自信清晰男声 (品牌宣传)',
+]
 
-function statusClass(status: string) {
-  if (status === 'completed') return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-  if (status === 'failed') return 'bg-rose-50 text-rose-700 border-rose-200'
-  if (status === 'in_progress') return 'bg-amber-50 text-amber-700 border-amber-200'
-  return 'bg-slate-50 text-slate-700 border-slate-200'
+const defaultImagePrompt =
+  '你是资深商业视觉设计师。请把我提供的功能价值转化为具有冲击力的品牌海报画面，画面主体明确、层级清晰，禁止出现乱码文字，突出效率提升与可信科技感。'
+
+const defaultVideoPrompt =
+  '你是一位资深品牌导演。请用专业且可信的口吻编写分镜和旁白，强调真实业务场景和产品价值，避免夸张推销语。'
+
+const defaultRepoScope = ['app', 'lib', 'actions', 'components', 'config', 'hooks', 'types', 'scripts', 'docs', 'docsll']
+
+function createId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
 async function requestJson(url: string, init?: RequestInit) {
@@ -46,404 +78,742 @@ async function requestJson(url: string, init?: RequestInit) {
   return json
 }
 
-export default function AiStudioClient({ region, language, route }: { region: 'CN' | 'INTL'; language: AiLanguage; route: AiProviderRoute }) {
-  const isChinese = region === 'CN'
-  const tr = (cn: string, en: string) => (isChinese ? cn : en)
-  const [tab, setTab] = useState('project')
-  const [jobs, setJobs] = useState<JobEnvelope[]>([])
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
-  const [selectedJob, setSelectedJob] = useState<JobEnvelope | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState<string | null>(null)
-  const [brief, setBrief] = useState({
-    audience: isChinese ? '企业客户、团队管理员、业务负责人' : 'team admins, enterprise buyers, and product leads',
-    coreSellingPoints: '',
-    brandTone: isChinese ? '专业、可信、未来感' : 'confident, modern, trustworthy',
-    mustInclude: '',
-    mustAvoid: '',
-    cta: isChinese ? '立即体验' : 'Try it now',
-    extraNotes: '',
-  })
-  const [poster, setPoster] = useState({
-    poster_goal: isChinese ? '参评宣传海报' : 'award submission poster',
-    audience: isChinese ? '企业客户、评审、合作伙伴' : 'judges, buyers, and partners',
-    style: isChinese ? '未来工作台 / 科技海报' : 'future control room / tech poster',
-    aspect_ratio: '4:5',
-    title: '',
-    subtitle: '',
-    cta: isChinese ? '立即体验' : 'Try it now',
-    extra_prompt: '',
-    negative_prompt: '',
-  })
-  const [video, setVideo] = useState({
-    headline: '',
-    aspect_ratio: region === 'CN' ? '9:16' : '16:9',
-    duration_seconds: 20,
-    script_override: '',
-    extra_prompt: '',
-    cover_asset_id: '',
-  })
+function buildFeaturesFromAnalysis(analysis: AiProjectAnalysis): FeatureItem[] {
+  const core = analysis.analysis_payload.core_features || []
+  const angles = analysis.analysis_payload.marketing_angles || []
+  const max = Math.max(core.length, angles.length)
+  const items: FeatureItem[] = []
 
-  const latestAnalysis = useMemo(() => selectedJob?.analysis || jobs.find((item) => item.analysis)?.analysis || null, [jobs, selectedJob])
-  const posterAsset = selectedJob?.assets.find((asset) => asset.asset_type === 'image') || null
-  const coverAsset = selectedJob?.assets.find((asset) => asset.asset_type === 'cover') || null
-  const videoAsset = selectedJob?.assets.find((asset) => asset.asset_type === 'video') || null
-
-  async function loadJobs(preserveSelection = true) {
-    const json = await requestJson('/api/admin/ai/jobs')
-    const nextJobs = json.jobs as JobEnvelope[]
-    setJobs(nextJobs)
-    if (preserveSelection && selectedJobId) {
-      const match = nextJobs.find((item) => item.job.id === selectedJobId)
-      if (match) {
-        setSelectedJob(match)
-        return
-      }
-    }
-    if (nextJobs[0]) {
-      setSelectedJobId(nextJobs[0].job.id)
-      setSelectedJob(nextJobs[0])
-    }
-  }
-
-  async function loadJobDetail(jobId: string) {
-    const json = await requestJson(`/api/admin/ai/jobs/${jobId}`)
-    const envelope = { job: json.job, assets: json.assets, analysis: json.analysis, brief: json.brief }
-    setSelectedJob(envelope)
-    setJobs((current) => {
-      const exists = current.some((item) => item.job.id === jobId)
-      if (!exists) return [envelope, ...current]
-      return current.map((item) => (item.job.id === jobId ? envelope : item))
+  for (let index = 0; index < max; index += 1) {
+    const name = core[index] || `核心功能 ${index + 1}`
+    const value = angles[index] || ''
+    items.push({
+      id: createId(),
+      name,
+      value,
+      selected: true,
+      source: 'analysis',
     })
   }
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        await loadJobs(false)
-      } catch (error: any) {
-        toast.error(error.message || tr('加载任务失败', 'Failed to load jobs'))
-      } finally {
-        setLoading(false)
-      }
-    })()
+  return items
+}
+
+function formatFeatureLine(feature: FeatureItem) {
+  const parts = [feature.name, feature.value].filter(Boolean)
+  return parts.join(': ')
+}
+
+export default function AiStudioClient({ region: _region, language, route: _route }: { region: 'CN' | 'INTL'; language: AiLanguage; route: AiProviderRoute }) {
+  const [projectName, setProjectName] = useState('未分析项目')
+  const [projectSummary, setProjectSummary] = useState('')
+  const [analysis, setAnalysis] = useState<AiProjectAnalysis | null>(null)
+  const [features, setFeatures] = useState<FeatureItem[]>([])
+
+  const [activeMode, setActiveMode] = useState<'image' | 'video'>('image')
+
+  const [imgStyle, setImgStyle] = useState(imageStyles[0])
+  const [imgSystemPrompt, setImgSystemPrompt] = useState(defaultImagePrompt)
+
+  const [vidVoice, setVidVoice] = useState(videoVoices[0])
+  const [vidSystemPrompt, setVidSystemPrompt] = useState(defaultVideoPrompt)
+
+  const [analysisJob, setAnalysisJob] = useState<JobEnvelope | null>(null)
+  const [posterJob, setPosterJob] = useState<JobEnvelope | null>(null)
+  const [videoJob, setVideoJob] = useState<JobEnvelope | null>(null)
+  const [submitting, setSubmitting] = useState<null | 'analysis' | 'poster' | 'video'>(null)
+
+  const pollersRef = useRef<{ analysis?: () => void; poster?: () => void; video?: () => void }>({})
+
+  const selectedFeatures = useMemo(
+    () => features.filter((feature) => feature.selected && (feature.name.trim() || feature.value.trim())),
+    [features],
+  )
+
+  const hasSelectedFeatures = selectedFeatures.length > 0
+  const allSelected = features.length > 0 && features.every((feature) => feature.selected)
+
+  const posterAsset = posterJob?.assets.find((asset) => asset.asset_type === 'image') || null
+  const videoAsset = videoJob?.assets.find((asset) => asset.asset_type === 'video') || null
+  const coverAsset = videoJob?.assets.find((asset) => asset.asset_type === 'cover') || null
+
+  useEffect(() => () => {
+    Object.values(pollersRef.current).forEach((stop) => stop?.())
   }, [])
 
   useEffect(() => {
-    if (!selectedJobId || !selectedJob || !['queued', 'in_progress'].includes(selectedJob.job.status)) return
-    const timer = window.setTimeout(() => {
-      void loadJobDetail(selectedJobId).catch((error: any) => toast.error(error.message || tr('轮询失败', 'Polling failed')))
-    }, 3500)
-    return () => window.clearTimeout(timer)
-  }, [selectedJobId, selectedJob?.job?.status, selectedJob?.job?.progress])
+    let cancelled = false
 
-  useEffect(() => {
-    if (!latestAnalysis) return
-    setPoster((current) => ({
+    const loadLatestAnalysis = async () => {
+      try {
+        const json = await requestJson('/api/admin/ai/jobs')
+        const jobs = (json.jobs || []) as JobEnvelope[]
+        const latestAnalysisJob = jobs
+          .filter((entry) => entry.job.job_type === 'repo_analysis')
+          .sort((a, b) => new Date(b.job.updated_at).getTime() - new Date(a.job.updated_at).getTime())[0]
+
+        if (!latestAnalysisJob || cancelled) return
+
+        setAnalysisJob(latestAnalysisJob)
+        if (latestAnalysisJob.analysis) {
+          applyAnalysis(latestAnalysisJob.analysis)
+        }
+
+        if (['queued', 'in_progress'].includes(latestAnalysisJob.job.status)) {
+          startPolling('analysis', latestAnalysisJob.job.id)
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          toast.error(error?.message || '加载最新分析失败')
+        }
+      }
+    }
+
+    void loadLatestAnalysis()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  function applyAnalysis(nextAnalysis: AiProjectAnalysis) {
+    setAnalysis(nextAnalysis)
+    setProjectName(nextAnalysis.analysis_payload.product_name || '未命名项目')
+    setProjectSummary(nextAnalysis.analysis_payload.product_summary || '')
+    setFeatures(buildFeaturesFromAnalysis(nextAnalysis))
+  }
+
+  function handleSelectAll() {
+    if (features.length === 0) return
+    const next = !allSelected
+    setFeatures((current) => current.map((feature) => ({ ...feature, selected: next })))
+  }
+
+  function handleAddFeature() {
+    setFeatures((current) => [
       ...current,
-      title: current.title || latestAnalysis.analysis_payload.product_name,
-      subtitle: current.subtitle || latestAnalysis.analysis_payload.product_summary,
-    }))
-    setVideo((current) => ({ ...current, headline: current.headline || latestAnalysis.analysis_payload.product_name }))
-    setBrief((current) => ({ ...current, coreSellingPoints: current.coreSellingPoints || latestAnalysis.analysis_payload.marketing_angles.join('\n') }))
-  }, [latestAnalysis])
+      { id: createId(), name: '', value: '', selected: true, source: 'manual' },
+    ])
+  }
 
-  async function createJob(url: string, payload: any, mode: string) {
-    setSubmitting(mode)
+  function handleDeleteFeature(id: string) {
+    setFeatures((current) => current.filter((feature) => feature.id !== id))
+  }
+
+  function handleTextChange(id: string, field: 'name' | 'value', value: string) {
+    setFeatures((current) =>
+      current.map((feature) => (feature.id === id ? { ...feature, [field]: value } : feature)),
+    )
+  }
+
+  function startPolling(kind: 'analysis' | 'poster' | 'video', jobId: string) {
+    pollersRef.current[kind]?.()
+    let cancelled = false
+
+    const stop = () => {
+      cancelled = true
+    }
+
+    pollersRef.current[kind] = stop
+
+    const tick = async () => {
+      if (cancelled) return
+      try {
+        const data = (await requestJson(`/api/admin/ai/jobs/${jobId}`)) as JobEnvelope
+
+        if (kind === 'analysis') {
+          setAnalysisJob(data)
+          if (data.analysis) {
+            applyAnalysis(data.analysis)
+          }
+        }
+
+        if (kind === 'poster') {
+          setPosterJob(data)
+        }
+
+        if (kind === 'video') {
+          setVideoJob(data)
+        }
+
+        if (['completed', 'failed', 'blocked'].includes(data.job.status)) {
+          setSubmitting(null)
+          return
+        }
+
+        setTimeout(tick, 3000)
+      } catch (error: any) {
+        if (!cancelled) {
+          toast.error(error?.message || '轮询失败')
+          setTimeout(tick, 4000)
+        }
+      }
+    }
+
+    void tick()
+  }
+
+  async function handleAnalyzeProject() {
+    setSubmitting('analysis')
     try {
-      const json = await requestJson(url, {
+      const json = await requestJson('/api/admin/ai/repo-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ language, repo_scope: defaultRepoScope }),
+      })
+
+      if (json.jobId) {
+        setAnalysisJob({ job: json.job, assets: [], analysis: null, brief: null })
+        startPolling('analysis', json.jobId)
+      }
+    } catch (error: any) {
+      setSubmitting(null)
+      toast.error(error?.message || '分析失败')
+    }
+  }
+
+  function buildBriefPayload(extraNotes: string) {
+    const sellingPoints = selectedFeatures.map(formatFeatureLine).filter(Boolean)
+    return {
+      audience: '企业客户、团队管理者、业务负责人',
+      core_selling_points: sellingPoints,
+      brand_tone: '专业、可信、现代',
+      must_include: [],
+      must_avoid: [],
+      cta: '立即体验',
+      extra_notes: extraNotes,
+    }
+  }
+
+  async function handleGeneratePoster() {
+    if (!hasSelectedFeatures) return
+
+    const featureContext = selectedFeatures.map((feature) => `- ${formatFeatureLine(feature)}`).join('\n')
+    const extraPrompt = [imgSystemPrompt, '业务要点:', featureContext].filter(Boolean).join('\n\n')
+
+    const payload = {
+      analysis_id: analysis?.id,
+      poster_goal: '产品宣发海报',
+      audience: '企业客户、合作伙伴、评审',
+      style: imgStyle,
+      aspect_ratio: '4:5',
+      title: analysis?.analysis_payload.product_name || projectName || '产品',
+      subtitle: analysis?.analysis_payload.product_summary || projectSummary || '',
+      cta: '立即体验',
+      extra_prompt: extraPrompt,
+      negative_prompt: '',
+      brief: buildBriefPayload(extraPrompt),
+    }
+
+    setSubmitting('poster')
+    try {
+      const json = await requestJson('/api/admin/ai/posters', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      setSelectedJobId(json.jobId)
-      toast.success(tr('任务已创建', 'Job created'))
-      await loadJobs(false)
-      await loadJobDetail(json.jobId)
+
+      if (json.jobId) {
+        setPosterJob({ job: json.job, assets: [], analysis: null, brief: null })
+        startPolling('poster', json.jobId)
+      }
     } catch (error: any) {
-      toast.error(error.message || tr('创建任务失败', 'Failed to create job'))
-    } finally {
       setSubmitting(null)
+      toast.error(error?.message || '海报生成失败')
     }
   }
 
-  function buildBriefPayload(extra: string) {
-    return {
-      audience: brief.audience,
-      core_selling_points: splitLines(brief.coreSellingPoints),
-      brand_tone: brief.brandTone,
-      must_include: splitLines(brief.mustInclude),
-      must_avoid: splitLines(brief.mustAvoid),
-      cta: brief.cta,
-      extra_notes: [brief.extraNotes, extra].filter(Boolean).join('\n'),
-    }
-  }
+  async function handleGenerateVideo() {
+    if (!hasSelectedFeatures) return
 
-  async function regeneratePoster() {
-    if (!posterAsset) {
-      toast.error(tr('没有海报结果可重绘', 'No poster result to regenerate'))
-      return
+    const featureContext = selectedFeatures.map((feature) => `- ${formatFeatureLine(feature)}`).join('\n')
+    const extraPrompt = [
+      vidSystemPrompt,
+      `配音音色: ${vidVoice}`,
+      '业务要点:',
+      featureContext,
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+
+    const payload = {
+      analysis_id: analysis?.id,
+      aspect_ratio: '9:16',
+      duration_seconds: 10,
+      headline: analysis?.analysis_payload.product_name || projectName || '产品解说',
+      script_override: '',
+      extra_prompt: extraPrompt,
+      brief: buildBriefPayload(extraPrompt),
     }
-    setSubmitting('poster-regenerate')
+
+    setSubmitting('video')
     try {
-      const json = await requestJson(`/api/admin/ai/assets/${posterAsset.id}/regenerate`, {
+      const json = await requestJson('/api/admin/ai/videos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ supplemental_prompt: poster.extra_prompt || brief.extraNotes || poster.title }),
+        body: JSON.stringify(payload),
       })
-      setSelectedJobId(json.jobId)
-      await loadJobs(false)
-      await loadJobDetail(json.jobId)
-      toast.success(tr('已创建重绘任务', 'Regeneration queued'))
+
+      if (json.jobId) {
+        setVideoJob({ job: json.job, assets: [], analysis: null, brief: null })
+        startPolling('video', json.jobId)
+      }
     } catch (error: any) {
-      toast.error(error.message || tr('重绘失败', 'Regeneration failed'))
-    } finally {
       setSubmitting(null)
+      toast.error(error?.message || '视频生成失败')
     }
   }
 
+  const posterPrompt = posterJob?.job?.output_payload?.prompt_bundle?.prompt || ''
+  const videoPlan = videoJob?.job?.output_payload?.video_plan || null
+
   return (
-    <div className="space-y-6">
-      <section className="rounded-3xl border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.18),_transparent_35%),linear-gradient(135deg,#f8fafc,_#eef2ff_45%,_#fff7ed)] p-6 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-6 flex flex-col">
+      <div className="max-w-[1400px] mx-auto w-full flex-1 flex flex-col gap-5">
+        <header className="flex flex-col gap-3 md:flex-row md:justify-between md:items-end bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-slate-500"><Sparkles className="h-4 w-4" />{tr('后台创意工作台', 'Admin Creative Workbench')}</div>
-            <h1 className="text-3xl font-semibold text-slate-900">{tr('AI 创意中心', 'AI Creative Studio')}</h1>
-            <p className="mt-1 text-sm text-slate-600">{tr('一套后台代码，同时支持国内中文物料和国际英文物料。', 'One admin surface for CN Chinese assets and INTL English assets.')}</p>
+            <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 flex items-center gap-3">
+              <LayoutGrid className="w-7 h-7 text-cyan-600" />
+              AI 创意中心
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">从项目理解到海报与视频，统一生成与交付。</p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            <Badge variant="outline" className="rounded-full bg-white/70 px-4 py-2">{tr('区域', 'Region')}: {region}</Badge>
-            <Badge variant="outline" className="rounded-full bg-white/70 px-4 py-2">{tr('语言', 'Language')}: {language}</Badge>
-            <Badge variant="outline" className="rounded-full bg-white/70 px-4 py-2">{tr('分析/海报', 'Analysis/Poster')}: {route.analysisProvider} / {route.posterProvider}</Badge>
-            <Badge variant="outline" className="rounded-full bg-white/70 px-4 py-2">{tr('视频', 'Video')}: {route.videoProvider}</Badge>
+          <div className="text-sm font-medium text-cyan-700 bg-cyan-50 px-4 py-1.5 rounded-full border border-cyan-100">
+            当前项目: {projectName}
+          </div>
+        </header>
+
+        <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+          <div className="p-4 border-b border-slate-100 bg-slate-50/60 flex flex-wrap gap-3 justify-between items-center">
+            <div>
+              <h2 className="text-base font-semibold flex items-center gap-2 text-slate-800">
+                <Settings className="w-5 h-5 text-slate-500" />
+                全局配置：AI 项目理解 + 业务功能微调
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">系统会读取 docs / docsll 中的说明文档，生成核心功能列表。</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleAnalyzeProject}
+                disabled={submitting === 'analysis'}
+                className="flex items-center gap-1.5 text-sm font-medium text-white bg-slate-900 px-3 py-1.5 rounded-md hover:bg-slate-800 transition-colors disabled:opacity-60"
+              >
+                {submitting === 'analysis' ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4" />}
+                理解项目
+              </button>
+              <button
+                onClick={handleSelectAll}
+                className="flex items-center gap-1.5 text-sm font-medium text-cyan-700 hover:text-cyan-900 transition-colors bg-cyan-50 px-3 py-1.5 rounded-md"
+                disabled={features.length === 0}
+              >
+                {allSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                {allSelected ? '取消全选' : '全选所有'}
+              </button>
+            </div>
+          </div>
+
+          <div className="px-4 pt-3 pb-2 text-xs text-slate-500 flex flex-wrap gap-3 items-center">
+            <span>分析状态: {analysisJob?.job?.status || 'idle'}</span>
+            {analysisJob?.job?.status && (
+              <span>进度 {analysisJob?.job?.progress || 0}%</span>
+            )}
+            {analysisJob?.job?.error_message && (
+              <span className="text-rose-500">{analysisJob.job.error_message}</span>
+            )}
+          </div>
+
+          {projectSummary && (
+            <div className="mx-4 mb-3 rounded-xl bg-slate-50 border border-slate-100 p-3 text-sm text-slate-600">
+              {projectSummary}
+            </div>
+          )}
+
+          <div className="max-h-[240px] overflow-y-auto p-2">
+            <div className="flex flex-col gap-1.5">
+              {features.length === 0 && (
+                <div className="p-4 text-sm text-slate-500">暂无功能列表，请先点击“理解项目”。</div>
+              )}
+              {features.map((feature) => (
+                <div
+                  key={feature.id}
+                  className={`flex items-start md:items-center gap-3 p-3 rounded-lg border transition-all duration-200 group ${
+                    feature.selected
+                      ? 'border-cyan-200 bg-cyan-50/40 shadow-sm'
+                      : 'border-slate-100 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <div className="pt-0.5 md:pt-0">
+                    <input
+                      type="checkbox"
+                      checked={feature.selected}
+                      onChange={() =>
+                        setFeatures((current) =>
+                          current.map((item) =>
+                            item.id === feature.id ? { ...item, selected: !item.selected } : item,
+                          ),
+                        )
+                      }
+                      className="w-4 h-4 text-cyan-600 rounded cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 w-full">
+                    <div className="md:col-span-3 flex items-center">
+                      <input
+                        className={`font-semibold text-sm bg-transparent border-b border-dashed focus:outline-none w-full ${
+                          feature.selected ? 'text-slate-900 border-cyan-200' : 'text-slate-600 border-slate-200'
+                        }`}
+                        value={feature.name}
+                        onChange={(event) => handleTextChange(feature.id, 'name', event.target.value)}
+                        placeholder="功能名称"
+                      />
+                    </div>
+                    <div className="md:col-span-8 flex items-center">
+                      <input
+                        className={`text-sm bg-transparent border-b border-dashed focus:outline-none w-full ${
+                          feature.selected ? 'text-slate-700 border-cyan-200' : 'text-slate-500 border-slate-200'
+                        }`}
+                        value={feature.value}
+                        onChange={(event) => handleTextChange(feature.id, 'value', event.target.value)}
+                        placeholder="一句话价值描述"
+                      />
+                    </div>
+                    <div className="md:col-span-1 flex items-center justify-end">
+                      <button
+                        onClick={() => handleDeleteFeature(feature.id)}
+                        className="text-slate-300 hover:text-rose-500 transition-colors p-1"
+                        title="删除此功能"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                onClick={handleAddFeature}
+                className="w-full mt-1 py-2.5 border-2 border-dashed border-slate-300 rounded-lg text-sm text-slate-500 hover:text-cyan-700 hover:border-cyan-300 hover:bg-cyan-50 transition-all flex items-center justify-center gap-1.5 font-medium"
+              >
+                <Plus className="w-4 h-4" /> 添加自定义业务功能
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <div className="flex justify-center mt-2 mb-1">
+          <div className="bg-slate-200/80 p-1.5 rounded-xl flex items-center gap-1 shadow-inner">
+            <button
+              onClick={() => setActiveMode('image')}
+              className={`flex items-center gap-2 px-8 py-2.5 rounded-lg font-semibold text-sm transition-all duration-300 ${
+                activeMode === 'image'
+                  ? 'bg-white text-cyan-700 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-300/50'
+              }`}
+            >
+              <ImageIcon className="w-5 h-5" /> 宣发海报工作流
+            </button>
+            <button
+              onClick={() => setActiveMode('video')}
+              className={`flex items-center gap-2 px-8 py-2.5 rounded-lg font-semibold text-sm transition-all duration-300 ${
+                activeMode === 'video'
+                  ? 'bg-slate-900 text-amber-300 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-300/50'
+              }`}
+            >
+              <Video className="w-5 h-5" /> 解说视频工作流
+            </button>
           </div>
         </div>
-      </section>
 
-      <Tabs value={tab} onValueChange={setTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 rounded-2xl bg-slate-100 p-1">
-          <TabsTrigger value="project">{tr('项目理解', 'Project Insight')}</TabsTrigger>
-          <TabsTrigger value="poster">{tr('宣传图生成', 'Poster')}</TabsTrigger>
-          <TabsTrigger value="video">{tr('解说视频', 'Video')}</TabsTrigger>
-          <TabsTrigger value="history">{tr('任务记录', 'History')}</TabsTrigger>
-        </TabsList>
+        <div className="flex-1 w-full max-w-5xl mx-auto">
+          {activeMode === 'image' && (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+              <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-cyan-50 to-white flex justify-between items-center">
+                <h2 className="text-lg font-semibold flex items-center gap-2 text-cyan-900">
+                  <ImageIcon className="w-5 h-5 text-cyan-500" /> 产品宣发海报生成
+                </h2>
+              </div>
 
-        <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
-          <div className="space-y-4">
-            <Card className="rounded-3xl">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><BrainCircuit className="h-5 w-5 text-sky-600" />{tr('项目理解底稿', 'Project Analysis Base')}</CardTitle>
-                <CardDescription>{tr('整仓扫描生成产品理解，并缓存后续海报和视频的底稿。', 'Scan the repo once and reuse it as the basis for posters and videos.')}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Button className="w-full rounded-2xl" onClick={() => createJob('/api/admin/ai/repo-analysis', { language, repo_scope: ['app', 'lib', 'actions', 'components', 'config', 'hooks', 'types', 'scripts'] }, 'analysis')} disabled={submitting === 'analysis'}>
-                  {submitting === 'analysis' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BrainCircuit className="mr-2 h-4 w-4" />}
-                  {tr('一键分析仓库', 'Analyze Repository')}
-                </Button>
-                {latestAnalysis ? (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                    <p className="font-medium text-slate-900">{latestAnalysis.analysis_payload.product_name}</p>
-                    <p className="mt-2">{latestAnalysis.analysis_payload.product_summary}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {latestAnalysis.analysis_payload.marketing_angles.map((item, index) => (
-                        <Badge key={`${index}-${String(item)}`} variant="secondary">{String(item)}</Badge>
-                      ))}
+              <div className="p-4 bg-slate-50 border-b border-slate-200 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1 flex items-center gap-1">
+                    <Palette className="w-3 h-3" /> 视觉风格
+                  </label>
+                  <select
+                    value={imgStyle}
+                    onChange={(event) => setImgStyle(event.target.value)}
+                    className="w-full p-2 text-sm border border-slate-300 rounded-md bg-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                  >
+                    {imageStyles.map((style) => (
+                      <option key={style} value={style}>
+                        {style}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="bg-white border border-cyan-100 rounded-lg overflow-hidden">
+                  <div className="p-3 bg-cyan-50/50 border-b border-cyan-100">
+                    <label className="block text-xs font-semibold text-cyan-700 mb-2 flex items-center gap-1">
+                      <Terminal className="w-3 h-3" /> 基础设定 Prompt (系统指令)
+                    </label>
+                    <textarea
+                      className="w-full text-xs text-slate-700 bg-white border border-cyan-200 rounded p-2 focus:ring-1 focus:ring-cyan-500 outline-none resize-none leading-relaxed"
+                      rows={2}
+                      value={imgSystemPrompt}
+                      onChange={(event) => setImgSystemPrompt(event.target.value)}
+                    />
+                  </div>
+                  <div className="p-3 bg-white">
+                    <label className="block text-[10px] font-semibold text-slate-400 mb-1 flex items-center gap-1 uppercase">
+                      <AlignLeft className="w-3 h-3" /> 将随指令注入的业务数据：
+                    </label>
+                    <div className="text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-100 max-h-20 overflow-y-auto">
+                      {hasSelectedFeatures ? (
+                        <ul className="list-disc list-inside space-y-1">
+                          {selectedFeatures.map((feature) => (
+                            <li key={feature.id} className="truncate">
+                              <span className="font-semibold">{feature.name}:</span> {feature.value}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span className="text-rose-400">尚未选择任何功能，生成将缺乏业务数据支撑。</span>
+                      )}
                     </div>
                   </div>
-                ) : <div className="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">{tr('还没有分析结果。', 'No analysis yet.')}</div>}
-              </CardContent>
-            </Card>
+                </div>
 
-            <Card className="rounded-3xl">
-              <CardHeader>
-                <CardTitle>{tr('营销简报', 'Creative Brief')}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="space-y-2"><Label>{tr('受众', 'Audience')}</Label><Input value={brief.audience} onChange={(e) => setBrief((current) => ({ ...current, audience: e.target.value }))} /></div>
-                <div className="space-y-2"><Label>{tr('核心卖点', 'Core Selling Points')}</Label><Textarea rows={4} value={brief.coreSellingPoints} onChange={(e) => setBrief((current) => ({ ...current, coreSellingPoints: e.target.value }))} /></div>
-                <div className="space-y-2"><Label>{tr('品牌语气', 'Brand Tone')}</Label><Input value={brief.brandTone} onChange={(e) => setBrief((current) => ({ ...current, brandTone: e.target.value }))} /></div>
-                <div className="space-y-2"><Label>{tr('必须包含', 'Must Include')}</Label><Textarea rows={3} value={brief.mustInclude} onChange={(e) => setBrief((current) => ({ ...current, mustInclude: e.target.value }))} /></div>
-                <div className="space-y-2"><Label>{tr('必须避免', 'Must Avoid')}</Label><Textarea rows={3} value={brief.mustAvoid} onChange={(e) => setBrief((current) => ({ ...current, mustAvoid: e.target.value }))} /></div>
-                <div className="space-y-2"><Label>CTA</Label><Input value={brief.cta} onChange={(e) => setBrief((current) => ({ ...current, cta: e.target.value }))} /></div>
-                <div className="space-y-2"><Label>{tr('补充说明', 'Extra Notes')}</Label><Textarea rows={3} value={brief.extraNotes} onChange={(e) => setBrief((current) => ({ ...current, extraNotes: e.target.value }))} /></div>
-              </CardContent>
-            </Card>
-          </div>
+                <button
+                  onClick={handleGeneratePoster}
+                  disabled={submitting === 'poster' || !hasSelectedFeatures}
+                  className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2.5 rounded-lg flex justify-center items-center gap-2 transition-all disabled:opacity-50"
+                >
+                  {submitting === 'poster' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
+                  生成海报
+                </button>
+              </div>
 
-          <div className="space-y-4">
-            <TabsContent value="project" className="m-0">
-              <Card className="rounded-3xl">
-                <CardHeader>
-                  <CardTitle>{tr('项目结构与卖点', 'Architecture and Angles')}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {latestAnalysis ? (
-                    <>
-                      <div className="grid gap-4 lg:grid-cols-2">
-                        <div className="rounded-2xl bg-slate-50 p-4">
-                          <p className="mb-2 text-xs uppercase tracking-wide text-slate-500">{tr('技术栈', 'Tech Stack')}</p>
-                          {latestAnalysis.analysis_payload.technical_stack.map((item, index) => (
-                            <p key={`${index}-${String(item)}`} className="text-sm text-slate-700">
-                              • {String(item)}
-                            </p>
-                          ))}
-                        </div>
-                        <div className="rounded-2xl bg-slate-50 p-4">
-                          <p className="mb-2 text-xs uppercase tracking-wide text-slate-500">{tr('区域差异', 'Region Differences')}</p>
-                          {latestAnalysis.analysis_payload.region_differences.map((item, index) => (
-                            <p key={`${index}-${String(item)}`} className="text-sm text-slate-700">
-                              • {String(item)}
-                            </p>
-                          ))}
-                        </div>
+              <div className="p-5 flex-1 min-h-[350px] bg-white">
+                {!posterJob && (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
+                    <ImageIcon className="w-12 h-12 mb-2" />
+                    <p className="text-sm">调整 Prompt 后点击生成</p>
+                  </div>
+                )}
+
+                {posterJob && posterJob.job.status !== 'completed' && (
+                  <div className="h-full flex flex-col items-center justify-center">
+                    <Loader2 className="w-10 h-10 text-cyan-500 animate-spin mb-3" />
+                    <div className="text-xs font-semibold text-cyan-900 mb-1">{posterJob.job.progress || 0}%</div>
+                    <p className="text-xs text-cyan-600">正在生成海报...</p>
+                    {posterJob.job.error_message && (
+                      <p className="mt-2 text-xs text-rose-500">{posterJob.job.error_message}</p>
+                    )}
+                  </div>
+                )}
+
+                {posterJob && posterJob.job.status === 'completed' && (
+                  <div className="space-y-4 animate-in fade-in">
+                    <div className="flex items-center justify-between gap-2 text-cyan-700 text-xs font-semibold bg-cyan-50 p-2 rounded">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" /> 成功生成
                       </div>
-                      <pre className="rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">{latestAnalysis.summary_text}</pre>
-                    </>
-                  ) : <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-slate-500">{tr('先执行分析任务。', 'Run an analysis job first.')}</div>}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="poster" className="m-0">
-              <Card className="rounded-3xl">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><ImageIcon className="h-5 w-5 text-amber-600" />{tr('海报生成控制台', 'Poster Console')}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    <div className="space-y-2"><Label>{tr('海报目标', 'Poster Goal')}</Label><Input value={poster.poster_goal} onChange={(e) => setPoster((current) => ({ ...current, poster_goal: e.target.value }))} /></div>
-                    <div className="space-y-2"><Label>{tr('受众', 'Audience')}</Label><Input value={poster.audience} onChange={(e) => setPoster((current) => ({ ...current, audience: e.target.value }))} /></div>
-                    <div className="space-y-2"><Label>{tr('风格', 'Style')}</Label><Input value={poster.style} onChange={(e) => setPoster((current) => ({ ...current, style: e.target.value }))} /></div>
-                    <div className="space-y-2"><Label>{tr('比例', 'Aspect Ratio')}</Label><Input value={poster.aspect_ratio} onChange={(e) => setPoster((current) => ({ ...current, aspect_ratio: e.target.value }))} /></div>
-                  </div>
-                  <div className="space-y-2"><Label>{tr('标题', 'Title')}</Label><Input value={poster.title} onChange={(e) => setPoster((current) => ({ ...current, title: e.target.value }))} /></div>
-                  <div className="space-y-2"><Label>{tr('副标题', 'Subtitle')}</Label><Input value={poster.subtitle} onChange={(e) => setPoster((current) => ({ ...current, subtitle: e.target.value }))} /></div>
-                  <div className="space-y-2"><Label>CTA</Label><Input value={poster.cta} onChange={(e) => setPoster((current) => ({ ...current, cta: e.target.value }))} /></div>
-                  <div className="space-y-2"><Label>{tr('额外提示词', 'Extra Prompt')}</Label><Textarea rows={4} value={poster.extra_prompt} onChange={(e) => setPoster((current) => ({ ...current, extra_prompt: e.target.value }))} /></div>
-                  <div className="space-y-2"><Label>{tr('反向提示词', 'Negative Prompt')}</Label><Textarea rows={3} value={poster.negative_prompt} onChange={(e) => setPoster((current) => ({ ...current, negative_prompt: e.target.value }))} /></div>
-                  <div className="flex flex-wrap gap-3">
-                    <Button onClick={() => createJob('/api/admin/ai/posters', { ...poster, analysis_id: latestAnalysis?.id, brief: buildBriefPayload(poster.extra_prompt) }, 'poster')} disabled={submitting === 'poster'}>
-                      {submitting === 'poster' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
-                      {tr('生成海报', 'Generate Poster')}
-                    </Button>
-                    <Button variant="outline" onClick={regeneratePoster} disabled={submitting === 'poster-regenerate'}>
-                      {submitting === 'poster-regenerate' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-2 h-4 w-4" />}
-                      {tr('基于当前结果重绘', 'Regenerate Current')}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="video" className="m-0">
-              <Card className="rounded-3xl">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Clapperboard className="h-5 w-5 text-rose-600" />{tr('视频生成控制台', 'Video Console')}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid gap-3 lg:grid-cols-3">
-                    <div className="space-y-2 lg:col-span-2"><Label>{tr('视频标题', 'Headline')}</Label><Input value={video.headline} onChange={(e) => setVideo((current) => ({ ...current, headline: e.target.value }))} /></div>
-                    <div className="space-y-2"><Label>{tr('时长（秒）', 'Duration')}</Label><Input type="number" value={video.duration_seconds} onChange={(e) => setVideo((current) => ({ ...current, duration_seconds: Number(e.target.value) || 20 }))} /></div>
-                    <div className="space-y-2"><Label>{tr('画幅', 'Aspect Ratio')}</Label><Input value={video.aspect_ratio} onChange={(e) => setVideo((current) => ({ ...current, aspect_ratio: e.target.value }))} /></div>
-                    <div className="space-y-2 lg:col-span-2"><Label>{tr('封面资源', 'Cover Asset')}</Label><Input value={video.cover_asset_id} readOnly placeholder={tr('在右侧结果区设置', 'Set from the result panel')} /></div>
-                  </div>
-                  <div className="space-y-2"><Label>{tr('脚本覆盖', 'Script Override')}</Label><Textarea rows={8} value={video.script_override} onChange={(e) => setVideo((current) => ({ ...current, script_override: e.target.value }))} /></div>
-                  <div className="space-y-2"><Label>{tr('补充提示词', 'Extra Prompt')}</Label><Textarea rows={3} value={video.extra_prompt} onChange={(e) => setVideo((current) => ({ ...current, extra_prompt: e.target.value }))} /></div>
-                  <Button onClick={() => createJob('/api/admin/ai/videos', { ...video, analysis_id: latestAnalysis?.id, brief: buildBriefPayload(video.extra_prompt) }, 'video')} disabled={submitting === 'video'}>
-                    {submitting === 'video' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clapperboard className="mr-2 h-4 w-4" />}
-                    {tr('生成视频', 'Generate Video')}
-                  </Button>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="history" className="m-0">
-              <Card className="rounded-3xl">
-                <CardHeader>
-                  <CardTitle>{tr('任务记录', 'Task History')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-hidden rounded-2xl border border-slate-200">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>{tr('类型', 'Type')}</TableHead>
-                          <TableHead>{tr('状态', 'Status')}</TableHead>
-                          <TableHead>Provider</TableHead>
-                          <TableHead>{tr('更新时间', 'Updated')}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {jobs.map((entry) => (
-                          <TableRow key={entry.job.id} className="cursor-pointer" onClick={() => { setSelectedJobId(entry.job.id); setSelectedJob(entry) }}>
-                            <TableCell>{entry.job.job_type}</TableCell>
-                            <TableCell><Badge variant="outline" className={statusClass(entry.job.status)}>{entry.job.status}</Badge></TableCell>
-                            <TableCell>{entry.job.provider}</TableCell>
-                            <TableCell>{formatDate(entry.job.updated_at)}</TableCell>
-                          </TableRow>
-                        ))}
-                        {!jobs.length && <TableRow><TableCell colSpan={4} className="text-center text-slate-500">{tr('暂无任务', 'No jobs yet')}</TableCell></TableRow>}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </div>
-
-          <div className="space-y-4">
-            <Card className="rounded-3xl">
-              <CardHeader>
-                <CardTitle>{tr('结果预览', 'Result Preview')}</CardTitle>
-                <CardDescription>{tr('轮询当前任务并展示海报、封面、视频与脚本。', 'Poll the selected job and show poster, cover, video, and script outputs.')}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {loading ? (
-                  <div className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />{tr('加载中...', 'Loading...')}</div>
-                ) : selectedJob ? (
-                  <>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-xs uppercase tracking-wide text-slate-500">{tr('当前任务', 'Current Job')}</p>
-                          <p className="font-medium text-slate-900">{selectedJob.job.job_type}</p>
-                        </div>
-                        <Badge variant="outline" className={statusClass(selectedJob.job.status)}>{selectedJob.job.status}</Badge>
-                      </div>
-                      <div className="mt-3 text-sm text-slate-600">{selectedJob.job.provider} · {selectedJob.job.provider_model}</div>
-                      <div className="mt-3">
-                        <div className="mb-2 flex items-center justify-between text-xs text-slate-500"><span>{tr('进度', 'Progress')}</span><span>{selectedJob.job.progress || 0}%</span></div>
-                        <Progress value={selectedJob.job.progress || 0} />
-                      </div>
-                      {selectedJob.job.error_message && <p className="mt-3 rounded-2xl bg-rose-50 p-3 text-sm text-rose-700">{selectedJob.job.error_message}</p>}
+                      {posterAsset && (
+                        <button
+                          onClick={() => window.open(posterAsset.public_url, '_blank', 'noopener,noreferrer')}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-700"
+                        >
+                          <Download className="w-4 h-4" /> 下载
+                        </button>
+                      )}
                     </div>
-
-                    {posterAsset && (
-                      <div className="space-y-3 rounded-2xl border border-slate-200 p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-medium text-slate-900">{tr('海报结果', 'Poster Result')}</p>
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => window.open(posterAsset.public_url, '_blank', 'noopener,noreferrer')}><Download className="mr-2 h-4 w-4" />{tr('下载', 'Download')}</Button>
-                            <Button size="sm" variant="outline" onClick={() => { setVideo((current) => ({ ...current, cover_asset_id: posterAsset.id })); toast.success(tr('已设为视频封面', 'Set as video cover')) }}>{tr('设为视频封面', 'Use as Cover')}</Button>
+                    <div className="grid grid-cols-1 gap-5">
+                      <div className="bg-slate-50 rounded-xl overflow-hidden border border-slate-200">
+                        <div className="relative aspect-video bg-slate-200">
+                          {posterAsset ? (
+                            <img src={posterAsset.public_url} alt="poster" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-slate-400 text-sm">无海报输出</div>
+                          )}
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-900/80 to-transparent p-2 pt-6 text-white">
+                            <p className="font-semibold text-sm">{analysis?.analysis_payload.product_name || projectName}</p>
                           </div>
                         </div>
-                        <img src={posterAsset.public_url} alt="poster" className="w-full rounded-2xl border border-slate-200 object-cover" />
+                        <div className="p-3 bg-white border-t border-slate-200">
+                          <span className="text-[10px] text-cyan-600 font-semibold uppercase block mb-1">
+                            AI 最终执行 Prompt
+                          </span>
+                          <p className="text-[10px] text-cyan-800 font-mono leading-relaxed bg-cyan-50 p-2 rounded border border-cyan-100 whitespace-pre-wrap">
+                            {posterPrompt || '暂无 Prompt'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeMode === 'video' && (
+            <div className="bg-slate-900 rounded-2xl shadow-xl border border-slate-800 flex flex-col overflow-hidden text-slate-100 animate-in fade-in zoom-in-95 duration-300">
+              <div className="p-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 to-slate-800 flex justify-between items-center">
+                <h2 className="text-lg font-semibold flex items-center gap-2 text-amber-300">
+                  <Video className="w-5 h-5 text-amber-400" /> 解说视频分镜引擎
+                </h2>
+              </div>
+
+              <div className="p-4 bg-slate-800/60 border-b border-slate-800 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1 flex items-center gap-1">
+                    <Mic className="w-3 h-3" /> AI 配音音色
+                  </label>
+                  <select
+                    value={vidVoice}
+                    onChange={(event) => setVidVoice(event.target.value)}
+                    className="w-full p-2 text-sm border border-slate-700 rounded-md bg-slate-900 text-white focus:ring-2 focus:ring-amber-500 outline-none"
+                  >
+                    {videoVoices.map((voice) => (
+                      <option key={voice} value={voice}>
+                        {voice}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="bg-slate-900 border border-amber-900/40 rounded-lg overflow-hidden">
+                  <div className="p-3 bg-amber-900/20 border-b border-amber-900/30">
+                    <label className="block text-xs font-semibold text-amber-300 mb-2 flex items-center gap-1">
+                      <Terminal className="w-3 h-3" /> 脚本基调 Prompt (导演指令)
+                    </label>
+                    <textarea
+                      className="w-full text-xs text-slate-300 bg-slate-800 border border-slate-700 rounded p-2 focus:ring-1 focus:ring-amber-500 outline-none resize-none leading-relaxed"
+                      rows={2}
+                      value={vidSystemPrompt}
+                      onChange={(event) => setVidSystemPrompt(event.target.value)}
+                    />
+                  </div>
+                  <div className="p-3 bg-slate-900">
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1 flex items-center gap-1 uppercase">
+                      <AlignLeft className="w-3 h-3" /> 将被改写为分镜剧本的业务数据：
+                    </label>
+                    <div className="text-xs text-slate-400 bg-slate-800 p-2 rounded border border-slate-800 max-h-20 overflow-y-auto">
+                      {hasSelectedFeatures ? (
+                        <ul className="list-disc list-inside space-y-1">
+                          {selectedFeatures.map((feature) => (
+                            <li key={feature.id} className="truncate">
+                              <span className="font-semibold text-slate-200">{feature.name}:</span> {feature.value}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span className="text-rose-300">尚未选择功能。</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleGenerateVideo}
+                  disabled={submitting === 'video' || !hasSelectedFeatures}
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold py-2.5 rounded-lg flex justify-center items-center gap-2 transition-all disabled:opacity-50"
+                >
+                  {submitting === 'video' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
+                  生成视频分镜
+                </button>
+              </div>
+
+              <div className="p-5 flex-1 min-h-[350px]">
+                {!videoJob && (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-600 opacity-60">
+                    <Video className="w-12 h-12 mb-2" />
+                    <p className="text-sm">调整 Prompt 后生成分镜</p>
+                  </div>
+                )}
+
+                {videoJob && videoJob.job.status !== 'completed' && (
+                  <div className="h-full flex flex-col items-center justify-center">
+                    <Loader2 className="w-10 h-10 text-amber-400 animate-spin mb-3" />
+                    <div className="text-xs font-semibold text-white mb-1">{videoJob.job.progress || 0}%</div>
+                    <p className="text-xs text-amber-300">正在生成视频...</p>
+                    {videoJob.job.error_message && (
+                      <p className="mt-2 text-xs text-rose-300">{videoJob.job.error_message}</p>
+                    )}
+                  </div>
+                )}
+
+                {videoJob && videoJob.job.status === 'completed' && (
+                  <div className="space-y-4 animate-in fade-in">
+                    <div className="flex items-center justify-between gap-2 text-amber-300 text-xs font-semibold bg-slate-800 p-2 rounded">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" /> 成功生成
+                      </div>
+                      {videoAsset && (
+                        <button
+                          onClick={() => window.open(videoAsset.public_url, '_blank', 'noopener,noreferrer')}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-300"
+                        >
+                          <Download className="w-4 h-4" /> 下载
+                        </button>
+                      )}
+                    </div>
+
+                    {coverAsset && (
+                      <div className="rounded-xl overflow-hidden border border-slate-800">
+                        <img src={coverAsset.public_url} alt="cover" className="w-full object-cover" />
                       </div>
                     )}
 
-                    {coverAsset && <img src={coverAsset.public_url} alt="cover" className="w-full rounded-2xl border border-slate-200 object-cover" />}
-                    {videoAsset && <video src={videoAsset.public_url} controls className="w-full rounded-2xl border border-slate-200" />}
-                    {selectedJob.analysis && <pre className="rounded-2xl bg-slate-950 p-4 text-xs text-slate-100 whitespace-pre-wrap">{selectedJob.analysis.summary_text}</pre>}
-                    {(selectedJob.job.output_payload?.prompt_bundle || selectedJob.job.output_payload?.video_plan) && <pre className="max-h-80 overflow-auto rounded-2xl bg-slate-50 p-4 text-xs text-slate-700">{JSON.stringify(selectedJob.job.output_payload?.prompt_bundle || selectedJob.job.output_payload?.video_plan, null, 2)}</pre>}
-                  </>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-slate-500">{tr('选择任务查看详情', 'Select a job to inspect')}</div>
+                    {videoAsset && (
+                      <video src={videoAsset.public_url} controls className="w-full rounded-xl border border-slate-800" />
+                    )}
+
+                    {videoPlan?.scenes && (
+                      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+                        <div className="p-3 bg-slate-800 border-b border-slate-700 font-medium text-xs text-slate-300 flex justify-between">
+                          <span>{videoPlan.headline || projectName}</span>
+                          <span className="text-amber-300 flex items-center gap-1">
+                            <Mic className="w-3 h-3" /> {vidVoice}
+                          </span>
+                        </div>
+                        <div className="p-3 space-y-3">
+                          {videoPlan.scenes.map((scene: any, index: number) => (
+                            <div key={`${scene.title || 'scene'}-${index}`} className="flex gap-3 p-2.5 bg-slate-900/80 rounded-lg border border-slate-700/50">
+                              <div className="flex-shrink-0 w-6 h-6 bg-amber-500/20 text-amber-200 rounded-full flex items-center justify-center font-semibold text-xs shadow-inner">
+                                {index + 1}
+                              </div>
+                              <div className="flex-1 space-y-2">
+                                <div>
+                                  <span className="text-[10px] font-semibold text-slate-500 mb-0.5 block uppercase">画面 (Visual)</span>
+                                  <p className="text-xs text-slate-300 bg-slate-800 p-1.5 rounded border border-slate-700">
+                                    {scene.visual_prompt || scene.visual || scene.title || ''}
+                                  </p>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] font-semibold text-emerald-300 mb-0.5 flex items-center gap-1 uppercase">
+                                    <Volume2 className="w-3 h-3" /> 台词 (Audio)
+                                  </span>
+                                  <p className="text-xs text-emerald-100 bg-emerald-900/20 border border-emerald-900/40 p-1.5 rounded">
+                                    {scene.narration || scene.audio || ''}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </div>
+          )}
         </div>
-      </Tabs>
+      </div>
     </div>
   )
 }
+
+
+
