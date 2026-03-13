@@ -89,9 +89,11 @@ export function VoiceMessageItem({
       className={cn(
         'flex items-center gap-2 rounded-full px-3 py-1.5 text-left transition-colors',
         isOwn
-          ? 'flex-row-reverse bg-[#1FB46A] text-white shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
+          ? (isMobile
+            ? 'flex-row-reverse mobile-chat-bubble-own text-white shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
+            : 'flex-row-reverse bg-[#E8F3FF] text-gray-900 border border-[#DDEBFA] shadow-[0_1px_2px_rgba(0,0,0,0.04)]')
           : 'flex-row bg-white text-gray-900 border border-[#E6ECF2] shadow-[0_1px_2px_rgba(0,0,0,0.04)]',
-        isPlaying && (isOwn ? 'ring-1 ring-white/70' : 'ring-1 ring-emerald-300/80'),
+        isPlaying && (isOwn ? 'ring-1 ring-[#1a9dff]/30' : 'ring-1 ring-emerald-300/80'),
         className
       )}
       aria-label={`Voice message ${displayDuration} seconds`}

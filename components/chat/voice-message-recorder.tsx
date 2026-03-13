@@ -1,16 +1,10 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Mic, Square, Trash2, Send } from 'lucide-react'
+import { Mic, Square, Trash2, Send, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useSettings } from '@/lib/settings-context'
 
 interface VoiceMessageRecorderProps {
   open: boolean
@@ -26,15 +20,18 @@ export function VoiceMessageRecorder({ open, onOpenChange, onSend }: VoiceMessag
   const chunksRef = useRef<Blob[]>([])
   const durationRef = useRef(0)
   const recordingStartRef = useRef<number | null>(null)
+  const { language } = useSettings()
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
 
   useEffect(() => {
-    if (open && !isRecording) {
-      startRecording()
-    }
-    return () => {
-      if (mediaRecorderRef.current && isRecording) {
-        stopRecording()
-      }
+    if (open) {
+      // Reset state when opening the recorder panel
+      setIsRecording(false)
+      setAudioBlob(null)
+      updateDuration(0)
+      recordingStartRef.current = null
+    } else {
+      cleanupRecorder()
     }
   }, [open])
 
@@ -109,7 +106,7 @@ export function VoiceMessageRecorder({ open, onOpenChange, onSend }: VoiceMessag
       updateDuration(0)
     } catch (error) {
       console.error('Error accessing microphone:', error)
-      alert('Unable to access microphone. Please check permissions.')
+      alert(tr('无法使用麦克风，请检查权限设置。', 'Unable to access microphone. Please check permissions.'))
       onOpenChange(false)
     }
   }
@@ -121,14 +118,29 @@ export function VoiceMessageRecorder({ open, onOpenChange, onSend }: VoiceMessag
     }
   }
 
+  const cleanupRecorder = () => {
+    try {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop()
+      }
+    } catch {}
+    try {
+      const tracks = (mediaRecorderRef.current as any)?.stream?.getTracks?.() || []
+      tracks.forEach((track: MediaStreamTrack) => track.stop())
+    } catch {}
+    mediaRecorderRef.current = null
+    chunksRef.current = []
+    recordingStartRef.current = null
+  }
+
   const handleSend = () => {
     if (audioBlob) {
       onSend(audioBlob, durationRef.current)
-      handleCancel()
+      handleClose()
     }
   }
 
-  const handleCancel = () => {
+  const handleClose = () => {
     if (isRecording) {
       stopRecording()
     }
@@ -137,72 +149,103 @@ export function VoiceMessageRecorder({ open, onOpenChange, onSend }: VoiceMessag
     onOpenChange(false)
   }
 
+  const handleDelete = () => {
+    if (isRecording) {
+      stopRecording()
+    }
+    setAudioBlob(null)
+    updateDuration(0)
+  }
+
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  if (!open) return null
+
+  const isIdle = !isRecording && !audioBlob
+  const isReady = !isRecording && audioBlob != null
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Voice Message</DialogTitle>
-        </DialogHeader>
+    <div className="mt-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold text-gray-700">
+          {tr('语音消息', 'Voice message')}
+        </div>
+        <button
+          type="button"
+          onClick={handleClose}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          aria-label={tr('关闭语音录制', 'Close voice recorder')}
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
 
-        <div className="flex flex-col items-center gap-6 py-8">
-          <div className={cn(
-            'h-24 w-24 rounded-full flex items-center justify-center',
-            isRecording ? 'bg-red-500 animate-pulse' : 'bg-primary'
-          )}>
-            <Mic className="h-12 w-12 text-white" />
-          </div>
+      <div className="mt-4 flex flex-col items-center gap-3">
+        <button
+          type="button"
+          onClick={isIdle ? startRecording : undefined}
+          disabled={!isIdle}
+          className={cn(
+            'h-20 w-20 rounded-full flex items-center justify-center transition',
+            isRecording ? 'bg-red-500 animate-pulse' : 'bg-[#1a9dff]',
+            isIdle ? 'cursor-pointer' : 'cursor-default opacity-70'
+          )}
+          aria-label={tr('开始录音', 'Start recording')}
+        >
+          <Mic className="h-9 w-9 text-white" />
+        </button>
 
-          <div className="text-center">
-            <div className="text-3xl font-mono font-bold">
-              {formatDuration(duration)}
-            </div>
-            <div className="text-sm text-muted-foreground mt-2">
-              {isRecording ? 'Recording...' : 'Recording stopped'}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            {isRecording ? (
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={stopRecording}
-                className="gap-2"
-              >
-                <Square className="h-5 w-5" />
-                Stop
-              </Button>
-            ) : (
-              <>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  onClick={handleCancel}
-                  className="gap-2"
-                >
-                  <Trash2 className="h-5 w-5" />
-                  Delete
-                </Button>
-                <Button
-                  size="lg"
-                  onClick={handleSend}
-                  className="gap-2"
-                  disabled={!audioBlob}
-                >
-                  <Send className="h-5 w-5" />
-                  Send
-                </Button>
-              </>
-            )}
+        <div className="text-center">
+          <div className="text-2xl font-mono font-bold">{formatDuration(duration)}</div>
+          <div className="text-xs text-gray-500 mt-1">
+            {isRecording
+              ? tr('录音中...', 'Recording...')
+              : isReady
+                ? tr('录音完成', 'Recording ready')
+                : tr('点击开始录音', 'Tap to start recording')}
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+
+        <div className="flex items-center gap-3">
+          {isRecording && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={stopRecording}
+              className="gap-1.5"
+            >
+              <Square className="h-4 w-4" />
+              {tr('停止', 'Stop')}
+            </Button>
+          )}
+          {isReady && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleDelete}
+                className="gap-1.5"
+              >
+                <Trash2 className="h-4 w-4" />
+                {tr('删除', 'Delete')}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSend}
+                className="gap-1.5 bg-[#1a9dff] hover:bg-[#128de7]"
+                disabled={!audioBlob}
+              >
+                <Send className="h-4 w-4" />
+                {tr('发送', 'Send')}
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
