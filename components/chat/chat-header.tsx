@@ -361,14 +361,15 @@ export function ChatHeader({
             >
               <Video className={cn("h-4 w-4", isMobile && "h-3.5 w-3.5")} />
             </Button>
-            {!isMobile && conversation.type === 'group' && (
+            {conversation.type === 'group' && (
               <Button
                 size="icon"
                 variant="ghost"
                 onClick={onToggleGroupInfo}
-                className="h-8 w-8"
+                aria-label={language === 'zh' ? '查看群聊信息' : 'View group info'}
+                className={cn("touch-compact h-8 w-8", isMobile && "h-7 w-7")}
               >
-                <Info className="h-4 w-4" />
+                <Info className={cn("h-4 w-4", isMobile && "h-3.5 w-3.5")} />
               </Button>
             )}
             <DropdownMenu>
@@ -439,4 +440,5 @@ export function ChatHeader({
     </>
   )
 }
+
 

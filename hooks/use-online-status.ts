@@ -90,10 +90,12 @@ async function fetchOnlineStatus(userId: string): Promise<boolean | undefined> {
         normalizedStatus === 'busy'
 
       const hasLastSeen = Boolean(user?.last_seen_at)
-      const onlineByLastSeen = hasLastSeen
-        ? Date.now() - new Date(user.last_seen_at).getTime() < ONLINE_WINDOW_MS
+      const lastSeenTs = hasLastSeen ? Date.parse(user.last_seen_at) : NaN
+      const hasValidLastSeen = Number.isFinite(lastSeenTs)
+      const onlineByLastSeen = hasValidLastSeen
+        ? Date.now() - lastSeenTs < ONLINE_WINDOW_MS
         : false
-      const nextIsOnline = statusSaysOnline || onlineByLastSeen
+      const nextIsOnline = onlineByLastSeen || (statusSaysOnline && !hasValidLastSeen)
 
       setCachedOnlineStatus(userId, nextIsOnline)
       onlineStatusErrorCache.delete(userId)

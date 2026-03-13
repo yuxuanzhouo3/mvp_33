@@ -120,6 +120,8 @@ function buildFallbackFingerprint(input: Partial<DeviceData>): string {
     input.device_model || '',
     input.browser || '',
     input.os || '',
+    input.app_package || '',
+    input.app_flavor || '',
     input.device_name || '',
   ].join('|')
   const digest = crypto.createHash('sha256').update(source || 'unknown-device').digest('hex')
@@ -166,7 +168,11 @@ function deduplicateDevices(devices: Device[]): Device[] {
   const byFingerprint = new Map<string, Device>()
 
   devices.forEach((device) => {
-    const key = normalizeDeviceFingerprint(device.device_fingerprint) || buildFallbackFingerprint(device)
+    const fingerprint = normalizeDeviceFingerprint(device.device_fingerprint)
+    const isNative = device.client_type === 'android_app' || device.client_type === 'ios_app'
+    const isInstallId = fingerprint.startsWith('android_') || fingerprint.startsWith('ios_')
+    const shouldFallback = !fingerprint || (IS_DOMESTIC_VERSION && isNative && !isInstallId)
+    const key = shouldFallback ? buildFallbackFingerprint(device) : fingerprint
     const current = byFingerprint.get(key)
     if (!current || isNewerDevice(device, current)) {
       byFingerprint.set(key, device)

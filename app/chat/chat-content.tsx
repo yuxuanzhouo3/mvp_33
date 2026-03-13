@@ -40,6 +40,7 @@ import { User, Workspace, ConversationWithDetails, MessageWithSender, Message } 
 
 import { MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
 
 import { VideoCallDialog } from '@/components/chat/video-call-dialog'
 import { VoiceCallDialog } from '@/components/chat/voice-call-dialog'
@@ -8726,27 +8727,56 @@ function ChatPageContent() {
           </div>
 
           {/* Group Info Panel */}
-          {!isMobile && displayConversation && displayConversation.type === 'group' && (
-            shouldGateGroupMeta ? (
-              <ConversationMetaSkeleton
-                variant="panel"
-                isOpen={groupInfoOpen}
-                mode={shouldShowGroupMetaFailed ? 'failed' : 'loading'}
-                onRetry={shouldShowGroupMetaFailed ? handleRetryConversationMeta : undefined}
-              />
+          {displayConversation && displayConversation.type === 'group' && (
+            isMobile ? (
+              <Sheet open={groupInfoOpen} onOpenChange={setGroupInfoOpen}>
+                <SheetContent side="right" className="w-full p-0 sm:w-[420px]">
+                  {shouldGateGroupMeta ? (
+                    <ConversationMetaSkeleton
+                      variant="sheet"
+                      isOpen={groupInfoOpen}
+                      mode={shouldShowGroupMetaFailed ? 'failed' : 'loading'}
+                      onRetry={shouldShowGroupMetaFailed ? handleRetryConversationMeta : undefined}
+                    />
+                  ) : (
+                    <GroupInfoPanel
+                      key={displayConversation.id}
+                      conversation={displayConversation}
+                      currentUser={currentUser}
+                      isOpen={groupInfoOpen}
+                      onClose={() => setGroupInfoOpen(false)}
+                      variant="sheet"
+                      onUpdate={() => {
+                        if (currentUser && currentWorkspace) {
+                          loadConversations(currentUser.id, currentWorkspace.id, true)
+                        }
+                      }}
+                    />
+                  )}
+                </SheetContent>
+              </Sheet>
             ) : (
-              <GroupInfoPanel
-                key={displayConversation.id}
-                conversation={displayConversation}
-                currentUser={currentUser}
-                isOpen={groupInfoOpen}
-                onClose={() => setGroupInfoOpen(false)}
-                onUpdate={() => {
-                  if (currentUser && currentWorkspace) {
-                    loadConversations(currentUser.id, currentWorkspace.id, true)
-                  }
-                }}
-              />
+              shouldGateGroupMeta ? (
+                <ConversationMetaSkeleton
+                  variant="panel"
+                  isOpen={groupInfoOpen}
+                  mode={shouldShowGroupMetaFailed ? 'failed' : 'loading'}
+                  onRetry={shouldShowGroupMetaFailed ? handleRetryConversationMeta : undefined}
+                />
+              ) : (
+                <GroupInfoPanel
+                  key={displayConversation.id}
+                  conversation={displayConversation}
+                  currentUser={currentUser}
+                  isOpen={groupInfoOpen}
+                  onClose={() => setGroupInfoOpen(false)}
+                  onUpdate={() => {
+                    if (currentUser && currentWorkspace) {
+                      loadConversations(currentUser.id, currentWorkspace.id, true)
+                    }
+                  }}
+                />
+              )
             )
           )}
 

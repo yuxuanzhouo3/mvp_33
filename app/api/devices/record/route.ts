@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { verifyCloudBaseSession } from '@/lib/cloudbase/auth'
 import { recordDevice } from '@/lib/database/devices'
@@ -87,6 +87,9 @@ export async function POST(request: NextRequest) {
       clientType,
       deviceCategory
     )
+    const isNativeClient = deviceInfo.clientType === 'android_app' || deviceInfo.clientType === 'ios_app'
+    const looksWebFingerprint = typeof explicitFingerprint === 'string' && explicitFingerprint.startsWith('web_')
+    const safeExplicitFingerprint = isNativeClient && looksWebFingerprint ? undefined : explicitFingerprint
     console.log('[DEVICE RECORD] Device info:', JSON.stringify(deviceInfo, null, 2))
 
     const ip = getClientIP(request)
@@ -95,7 +98,7 @@ export async function POST(request: NextRequest) {
     const location = await getLocationFromIP(ip)
     console.log('[DEVICE RECORD] Location:', location)
     const deviceFingerprint = buildDeviceFingerprint({
-      explicitFingerprint,
+      explicitFingerprint: safeExplicitFingerprint,
       userAgent,
       clientType: deviceInfo.clientType,
       deviceCategory: deviceInfo.deviceCategory,

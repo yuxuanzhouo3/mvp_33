@@ -23,6 +23,7 @@ interface GroupInfoPanelProps {
   isOpen: boolean
   onClose: () => void
   onUpdate?: () => void
+  variant?: 'panel' | 'sheet'
 }
 
 export function GroupInfoPanel({
@@ -30,10 +31,12 @@ export function GroupInfoPanel({
   currentUser,
   isOpen,
   onClose,
-  onUpdate
+  onUpdate,
+  variant = 'panel'
 }: GroupInfoPanelProps) {
   const { language } = useSettings()
   const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
+  const isSheet = variant === 'sheet'
   const [showSettings, setShowSettings] = useState(false)
   const [showAddMembers, setShowAddMembers] = useState(false)
   const [showAnnouncements, setShowAnnouncements] = useState(false)
@@ -98,8 +101,8 @@ export function GroupInfoPanel({
     <>
       <div
         className={cn(
-          'border-l bg-background transition-all duration-300 ease-out',
-          isOpen ? 'w-64' : 'w-0 overflow-hidden'
+          isSheet ? 'w-full h-full bg-background' : 'border-l bg-background transition-all duration-300 ease-out',
+          !isSheet && (isOpen ? 'w-64' : 'w-0 overflow-hidden')
         )}
       >
         {isOpen && (

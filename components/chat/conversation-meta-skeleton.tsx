@@ -9,7 +9,7 @@ import { useSettings } from '@/lib/settings-context'
 type ConversationMetaSkeletonMode = 'loading' | 'failed'
 
 interface ConversationMetaSkeletonProps {
-  variant: 'header' | 'panel'
+  variant: 'header' | 'panel' | 'sheet'
   mode?: ConversationMetaSkeletonMode
   isMobile?: boolean
   isOpen?: boolean
@@ -26,13 +26,14 @@ export function ConversationMetaSkeleton({
   const { language } = useSettings()
   const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
   const isFailed = mode === 'failed'
+  const isSheet = variant === 'sheet'
 
-  if (variant === 'panel') {
+  if (variant === 'panel' || variant === 'sheet') {
     return (
       <div
         className={cn(
-          'border-l bg-background transition-all duration-300 ease-out',
-          isOpen ? 'w-64' : 'w-0 overflow-hidden'
+          isSheet ? 'w-full h-full bg-background' : 'border-l bg-background transition-all duration-300 ease-out',
+          !isSheet && (isOpen ? 'w-64' : 'w-0 overflow-hidden')
         )}
       >
         {isOpen && (
