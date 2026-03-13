@@ -3,7 +3,7 @@
 import { useState, useRef, KeyboardEvent, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Send, Paperclip, Smile, Mic, ImageIcon, AtSign, X, FileIcon, Code2, Plus } from 'lucide-react'
+import { Send, Paperclip, Smile, Mic, ImageIcon, AtSign, X, FileIcon, Code2 } from 'lucide-react'
 import {
   Popover,
   PopoverContent,
@@ -338,16 +338,6 @@ export function MessageInput({
                   >
                     <ImageIcon className="h-3.5 w-3.5" />
                   </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    disabled={disabled}
-                    onClick={() => fileInputRef.current?.click()}
-                    className="touch-compact h-7 w-7 rounded-full text-muted-foreground"
-                    aria-label={language === 'zh' ? '发送文件' : 'Send file'}
-                  >
-                    <Paperclip className="h-3.5 w-3.5" />
-                  </Button>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
@@ -375,17 +365,6 @@ export function MessageInput({
                     </PopoverContent>
                   </Popover>
                 </div>
-
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  disabled={disabled}
-                  onClick={() => setShowCodeDialog(true)}
-                  className="touch-compact h-7 w-7 rounded-full text-muted-foreground"
-                  aria-label={language === 'zh' ? '更多功能' : 'More actions'}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
               </div>
             </div>
           ) : (
