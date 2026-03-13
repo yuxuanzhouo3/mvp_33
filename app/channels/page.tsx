@@ -11,8 +11,10 @@ import { ChatHeader } from '@/components/chat/chat-header'
 import { MessageList } from '@/components/chat/message-list'
 import { MessageInput } from '@/components/chat/message-input'
 import { ChannelInfoPanel } from '@/components/channels/channel-info-panel'
+import { GroupInfoPanel } from '@/components/chat/group-info-panel'
 import { CreateChannelDialog } from '@/components/channels/create-channel-dialog'
 import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { User, Workspace, ConversationWithDetails, MessageWithSender } from '@/lib/types'
 import { Hash } from 'lucide-react'
 import { useSettings } from '@/lib/settings-context'
@@ -103,6 +105,10 @@ export default function ChannelsPage() {
 
   useEffect(() => {
     selectedChannelIdRef.current = selectedChannelId
+  }, [selectedChannelId])
+
+  useEffect(() => {
+    setShowChannelInfo(false)
   }, [selectedChannelId])
 
   useEffect(() => {
@@ -454,6 +460,7 @@ export default function ChannelsPage() {
   }
 
   const selectedChannel = conversations.find(c => c.id === selectedChannelId)
+  const shouldShowGroupInfo = selectedChannel?.type === 'group'
 
   return (
     <div className="flex h-screen flex-col mobile-app-shell mobile-overscroll-contain">
@@ -521,6 +528,7 @@ export default function ChannelsPage() {
                 currentUser={currentUser}
                 onToggleSidebar={isMobile ? () => setMobileView('list') : undefined}
                 mobileBackLabel={language === 'zh' ? '返回频道列表' : 'Back to channels'}
+                onToggleGroupInfo={() => setShowChannelInfo(prev => !prev)}
               />
               <MessageList 
                 key={`channel-messages-${selectedChannel.id}`}
@@ -563,15 +571,50 @@ export default function ChannelsPage() {
         </div>
 
         {selectedChannel && !isMobile && (
-          <ChannelInfoPanel
-            key={`channel-info-${selectedChannel.id}`}
-            conversation={selectedChannel}
-            isOpen={showChannelInfo}
-            onClose={() => setShowChannelInfo(false)}
-          />
+          shouldShowGroupInfo ? (
+            <GroupInfoPanel
+              key={`channel-group-info-${selectedChannel.id}`}
+              conversation={selectedChannel}
+              currentUser={currentUser}
+              isOpen={showChannelInfo}
+              onClose={() => setShowChannelInfo(false)}
+              onUpdate={() => {
+                if (currentUser && currentWorkspace) {
+                  void loadConversations(currentUser.id, currentWorkspace.id, { showLoading: false })
+                }
+              }}
+            />
+          ) : (
+            <ChannelInfoPanel
+              key={`channel-info-${selectedChannel.id}`}
+              conversation={selectedChannel}
+              isOpen={showChannelInfo}
+              onClose={() => setShowChannelInfo(false)}
+            />
+          )
         )}
       </div>
       {isMobile && <AppNavigation mobile />}
+
+      {selectedChannel && isMobile && shouldShowGroupInfo && (
+        <Sheet open={showChannelInfo} onOpenChange={setShowChannelInfo}>
+          <SheetContent side="right" className="w-full p-0 sm:w-[420px]">
+            <GroupInfoPanel
+              key={`channel-group-info-sheet-${selectedChannel.id}`}
+              conversation={selectedChannel}
+              currentUser={currentUser}
+              isOpen={showChannelInfo}
+              onClose={() => setShowChannelInfo(false)}
+              variant="sheet"
+              onUpdate={() => {
+                if (currentUser && currentWorkspace) {
+                  void loadConversations(currentUser.id, currentWorkspace.id, { showLoading: false })
+                }
+              }}
+            />
+          </SheetContent>
+        </Sheet>
+      )}
 
       <CreateChannelDialog
         open={showCreateChannel}
