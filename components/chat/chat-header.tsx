@@ -3,13 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ConversationWithDetails, User } from '@/lib/types'
-import { Hash, Lock, Users, Phone, Video, Info, MoreVertical, ChevronLeft } from 'lucide-react'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { Hash, Lock, Users, Phone, Video, Info, ChevronLeft } from 'lucide-react'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { VoiceCallDialog } from './voice-call-dialog'
 import { VideoCallDialog } from './video-call-dialog'
@@ -372,26 +366,6 @@ export function ChatHeader({
                 <Info className={cn("h-4 w-4", isMobile && "h-3.5 w-3.5")} />
               </Button>
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className={cn("touch-compact h-8 w-8", isMobile && "h-7 w-7")}
-                  aria-label={language === 'zh' ? '更多操作' : 'More actions'}
-                >
-                  <MoreVertical className={cn("h-4 w-4", isMobile && "h-3.5 w-3.5")} />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem>{t('muteNotifications')}</DropdownMenuItem>
-                <DropdownMenuItem>{t('pinConversation')}</DropdownMenuItem>
-                <DropdownMenuItem>{t('viewDetails')}</DropdownMenuItem>
-                <DropdownMenuItem className="text-destructive">
-                  {t('leaveConversation')}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
       </div>

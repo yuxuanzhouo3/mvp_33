@@ -11,7 +11,7 @@ import { MessageWithSender, User } from '@/lib/types'
 
 import { cn } from '@/lib/utils'
 
-import { File, ImageIcon, Video, Smile, ChevronDown, ChevronUp, Edit2, Trash2, Pin, PinOff, EyeOff, Reply, RotateCcw, Copy, Download, Eye, X, Phone, Clock, CheckCircle, XCircle, Bell } from 'lucide-react'
+import { File, ImageIcon, Video, Smile, Edit2, Trash2, Pin, PinOff, EyeOff, Reply, RotateCcw, Copy, Download, Eye, X, Phone, Clock, CheckCircle, XCircle, Bell } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
@@ -121,10 +121,6 @@ export function MessageList({
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
 
-  const [showScrollDownButton, setShowScrollDownButton] = useState(false)
-
-  const [showScrollUpButton, setShowScrollUpButton] = useState(false)
-  
   const [showFilePreview, setShowFilePreview] = useState<{ url: string; fileName: string; fileType: string } | null>(null)
 
   const [lastMessageCount, setLastMessageCount] = useState(messages.length)
@@ -367,7 +363,6 @@ export function MessageList({
           const container = getScrollContainer()
           if (container) {
             container.scrollTop = container.scrollHeight
-            setShowScrollDownButton(false)
           }
         })
         
@@ -383,174 +378,6 @@ export function MessageList({
     }
 
   }, [messages, lastMessageCount, isLoading])
-
-
-
-  useEffect(() => {
-
-    let scrollContainer: HTMLDivElement | null = null
-
-    let resizeObserver: ResizeObserver | null = null
-
-    let retryTimer: NodeJS.Timeout | null = null
-
-    let checkTimer: NodeJS.Timeout | null = null
-
-    let handleScroll: (() => void) | null = null
-
-
-
-    // Wait for DOM to be ready and find the scroll container
-
-    const findAndSetupScroll = () => {
-
-      scrollContainer = getScrollContainer()
-
-      
-
-      if (!scrollContainer) {
-
-        // Retry if not found
-
-        retryTimer = setTimeout(findAndSetupScroll, 100)
-
-        return
-
-      }
-
-
-
-      handleScroll = () => {
-
-        if (!scrollContainer) return
-
-        
-
-        const scrollTop = scrollContainer.scrollTop
-
-        const scrollHeight = scrollContainer.scrollHeight
-
-        const clientHeight = scrollContainer.clientHeight
-
-        
-
-        const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
-
-        const isNearTop = scrollTop < 100
-
-        const isScrollable = scrollHeight > clientHeight
-
-        
-
-        setShowScrollDownButton(!isNearBottom && isScrollable)
-
-        setShowScrollUpButton(!isNearTop && isScrollable)
-
-      }
-
-
-
-      scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
-
-      // Initial check after a short delay to ensure layout is complete
-
-      checkTimer = setTimeout(handleScroll, 200)
-
-      
-
-      // Also check on resize
-
-      resizeObserver = new ResizeObserver(() => {
-
-        if (handleScroll) {
-
-          setTimeout(handleScroll, 100)
-
-        }
-
-      })
-
-      resizeObserver.observe(scrollContainer)
-
-    }
-
-
-
-    const timer = setTimeout(findAndSetupScroll, 100)
-
-    
-
-    return () => {
-
-      clearTimeout(timer)
-
-      if (retryTimer) clearTimeout(retryTimer)
-
-      if (checkTimer) clearTimeout(checkTimer)
-
-      if (scrollContainer && handleScroll) {
-
-        scrollContainer.removeEventListener('scroll', handleScroll)
-
-      }
-
-      if (resizeObserver) {
-
-        resizeObserver.disconnect()
-
-      }
-
-    }
-
-  }, [messages])
-
-
-
-  const scrollToBottom = () => {
-
-    const scrollContainer = getScrollContainer()
-
-    if (scrollContainer) {
-
-      scrollContainer.scrollTo({
-
-        top: scrollContainer.scrollHeight,
-
-        behavior: 'smooth'
-
-      })
-
-      setShowScrollDownButton(false)
-
-      setShowScrollUpButton(true)
-
-    }
-
-  }
-
-
-
-  const scrollToTop = () => {
-
-    const scrollContainer = getScrollContainer()
-
-    if (scrollContainer) {
-
-      scrollContainer.scrollTo({
-
-        top: 0,
-
-        behavior: 'smooth'
-
-      })
-
-      setShowScrollUpButton(false)
-
-      setShowScrollDownButton(true)
-
-    }
-
-  }
 
 
 
@@ -1774,58 +1601,6 @@ export function MessageList({
         </div>
 
       </ScrollArea>
-
-
-
-      {showScrollUpButton && (
-
-        <Button
-
-          onClick={scrollToTop}
-
-          size="icon"
-
-          variant="default"
-
-          className={cn(
-            "absolute right-6 rounded-full shadow-lg z-20 bg-background border hover:bg-accent",
-            isMobile ? "top-4 h-9 w-9" : "top-6 h-10 w-10"
-          )}
-
-          aria-label="Scroll to top"
-
-        >
-
-          <ChevronUp className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
-
-        </Button>
-
-      )}
-
-      {showScrollDownButton && (
-
-        <Button
-
-          onClick={scrollToBottom}
-
-          size="icon"
-
-          variant="default"
-
-          className={cn(
-            "absolute right-6 rounded-full shadow-lg z-20 bg-background border hover:bg-accent",
-            isMobile ? "bottom-4 h-9 w-9" : "bottom-6 h-10 w-10"
-          )}
-
-          aria-label="Scroll to bottom"
-
-        >
-
-          <ChevronDown className={cn(isMobile ? "h-4 w-4" : "h-5 w-5")} />
-
-        </Button>
-
-      )}
 
 
 
