@@ -28,6 +28,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { JoinWorkspaceDialog } from '@/components/workspace/join-workspace-dialog'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { isAndroidWebView, signOutGoogle } from '@/lib/google-signin-bridge'
+import { IS_DOMESTIC_VERSION } from '@/config'
 
 interface WorkspaceHeaderProps {
   workspace: Workspace
@@ -283,6 +284,21 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
     ? realTimeUnreadCount
     : propTotalUnreadCount
 
+  const buildAuthHeaders = (): Record<string, string> => {
+    if (typeof window === 'undefined') return {}
+    const token = window.localStorage.getItem('chat_app_token') || ''
+    if (!token) return {}
+
+    if (IS_DOMESTIC_VERSION) {
+      return {
+        'x-cloudbase-session': token,
+        Authorization: `Bearer ${token}`,
+      }
+    }
+
+    return { Authorization: `Bearer ${token}` }
+  }
+
   const handleLogout = async () => {
     if (isAndroidWebView()) {
       try {
@@ -316,17 +332,22 @@ export function WorkspaceHeader({ workspace: initialWorkspace, currentUser, tota
     onWorkspaceChange?.(ws)
   }
 
-  const handleJoin = async (workspaceId: string): Promise<{ success: boolean; error?: string }> => {
+  const handleJoin = async (workspaceId: string, reason?: string): Promise<{ success: boolean; error?: string }> => {
     console.log('[WorkspaceHeader] ========== handleJoin 开始 ==========')
     console.log('[WorkspaceHeader] 目标工作区ID:', workspaceId)
+    console.log('[WorkspaceHeader] 申请原因:', reason)
 
     try {
       console.log('[WorkspaceHeader] 准备发送 POST 请求到 /api/workspace-join-requests')
+      const trimmedReason = reason?.trim() || undefined
 
       const response = await fetch('/api/workspace-join-requests', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceId }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildAuthHeaders(),
+        },
+        body: JSON.stringify({ workspaceId, reason: trimmedReason }),
       })
 
       console.log('[WorkspaceHeader] 响应状态:', response.status, response.statusText)

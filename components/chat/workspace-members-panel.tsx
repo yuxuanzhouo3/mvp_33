@@ -26,7 +26,7 @@ interface JoinRequest {
   user_id?: string
   name: string
   email: string
-  reason: string
+  reason?: string
   time: string
   status: 'pending' | 'approved' | 'rejected'
   created_at?: string
@@ -122,6 +122,10 @@ export function WorkspaceMembersPanel({
   const [requestsLoading, setRequestsLoading] = useState(false) // 申请列表加载中状态
   const [currentUserRole, setCurrentUserRole] = useState<MemberRole | null>(null) // 当前用户在工作区的角色
   const isLoadingJoinRequestsRef = useRef(false)
+  const formatRequestReason = (reason?: string) => {
+    const trimmed = (reason || '').trim()
+    return trimmed || (isZh ? '未填写' : 'No reason provided')
+  }
 
   // 确认对话框状态
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -364,10 +368,16 @@ export function WorkspaceMembersPanel({
       })
 
       console.log('[WorkspaceMembersPanel] API 响应状态:', response.status)
-      const data = await response.json()
-      console.log('[WorkspaceMembersPanel] API 响应数据:', data)
+      const rawText = await response.text()
+      let data: any = null
+      try {
+        data = rawText ? JSON.parse(rawText) : null
+      } catch (parseError) {
+        console.warn('[WorkspaceMembersPanel] API 响应 JSON 解析失败:', parseError)
+      }
+      console.log('[WorkspaceMembersPanel] API 响应数据:', rawText)
 
-      if (data.success) {
+      if (response.ok && data?.success) {
         console.log('[WorkspaceMembersPanel] 批准成功，开始刷新列表...')
         const reviewedAt = new Date().toISOString()
         setRequests(prev => prev.map(r => (
@@ -387,8 +397,9 @@ export function WorkspaceMembersPanel({
         window.dispatchEvent(new Event('workspaceJoinRequestsUpdated'))
         console.log('[WorkspaceMembersPanel] 批准流程完成')
       } else {
-        console.error('[WorkspaceMembersPanel] 批准失败:', data.error)
-        toast.error(data.error || (isZh ? '操作失败' : 'Operation failed'))
+        const errorMessage = data?.error || data?.message || rawText || (isZh ? '操作失败' : 'Operation failed')
+        console.error('[WorkspaceMembersPanel] 批准失败:', errorMessage)
+        toast.error(errorMessage)
       }
     } catch (error) {
       console.error('[WorkspaceMembersPanel] 批准请求异常:', error)
@@ -418,10 +429,16 @@ export function WorkspaceMembersPanel({
       })
 
       console.log('[WorkspaceMembersPanel] API 响应状态:', response.status)
-      const data = await response.json()
-      console.log('[WorkspaceMembersPanel] API 响应数据:', data)
+      const rawText = await response.text()
+      let data: any = null
+      try {
+        data = rawText ? JSON.parse(rawText) : null
+      } catch (parseError) {
+        console.warn('[WorkspaceMembersPanel] API 响应 JSON 解析失败:', parseError)
+      }
+      console.log('[WorkspaceMembersPanel] API 响应数据:', rawText)
 
-      if (data.success) {
+      if (response.ok && data?.success) {
         console.log('[WorkspaceMembersPanel] 拒绝成功，开始刷新列表...')
         const reviewedAt = new Date().toISOString()
         setRequests(prev => prev.map(r => (
@@ -439,8 +456,9 @@ export function WorkspaceMembersPanel({
         window.dispatchEvent(new Event('workspaceJoinRequestsUpdated'))
         console.log('[WorkspaceMembersPanel] 拒绝流程完成')
       } else {
-        console.error('[WorkspaceMembersPanel] 拒绝失败:', data.error)
-        toast.error(data.error || (isZh ? '操作失败' : 'Operation failed'))
+        const errorMessage = data?.error || data?.message || rawText || (isZh ? '操作失败' : 'Operation failed')
+        console.error('[WorkspaceMembersPanel] 拒绝失败:', errorMessage)
+        toast.error(errorMessage)
       }
     } catch (error) {
       console.error('[WorkspaceMembersPanel] 拒绝请求异常:', error)
@@ -944,7 +962,7 @@ export function WorkspaceMembersPanel({
                   <p className="text-xs font-bold text-blue-600 uppercase mb-2">
                     {isZh ? '申请理由' : 'Reason'}
                   </p>
-                  <p className="text-sm text-gray-700 leading-relaxed italic">"{selectedRequest.reason}"</p>
+                  <p className="text-sm text-gray-700 leading-relaxed italic">"{formatRequestReason(selectedRequest.reason)}"</p>
                 </div>
               )}
 
