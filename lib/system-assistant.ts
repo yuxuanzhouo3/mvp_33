@@ -112,7 +112,7 @@ async function getOrCreateSystemAssistantConversationCN(
   })
 
   // 3. Add members
-  await db.collection('conversation_members').add([
+  const members = [
     {
       conversation_id: convId,
       user_id: userId,
@@ -127,7 +127,11 @@ async function getOrCreateSystemAssistantConversationCN(
       created_at: now,
       region: 'cn',
     },
-  ])
+  ]
+
+  for (const member of members) {
+    await db.collection('conversation_members').add(member)
+  }
 
   return convId
 }
@@ -238,6 +242,9 @@ export async function sendSystemAssistantMessage(
     workspace_id: string
     workspace_name: string
     request_id?: string
+    applicant_id?: string
+    applicant_name?: string
+    reason?: string | null
   },
   isCN: boolean
 ): Promise<void> {

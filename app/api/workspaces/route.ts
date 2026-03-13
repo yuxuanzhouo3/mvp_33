@@ -163,12 +163,30 @@ export async function POST(request: NextRequest) {
         const { getCloudBaseDb } = await import('@/lib/cloudbase/client')
         const db = getCloudBaseDb()
         if (db) {
-          await db.collection('workspace_members').add({
-            workspace_id: workspace.id || (workspace as any)._id,
-            user_id: currentUser.id,
-            role: 'owner',
-            joined_at: new Date().toISOString(),
-          })
+          const workspaceId = workspace.id || (workspace as any)._id
+          const existingMember = await db
+            .collection('workspace_members')
+            .where({
+              workspace_id: workspaceId,
+              user_id: currentUser.id,
+            })
+            .get()
+
+          if (existingMember.data && existingMember.data.length > 0) {
+            const existing = existingMember.data[0]
+            if (existing.role !== 'owner') {
+              await db.collection('workspace_members')
+                .doc(existing._id)
+                .update({ role: 'owner', updated_at: new Date().toISOString() })
+            }
+          } else {
+            await db.collection('workspace_members').add({
+              workspace_id: workspaceId,
+              user_id: currentUser.id,
+              role: 'owner',
+              joined_at: new Date().toISOString(),
+            })
+          }
         }
       } catch (error) {
         console.warn('[Create Workspace] Failed to add owner to workspace_members:', error)

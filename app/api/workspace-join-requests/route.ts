@@ -107,17 +107,28 @@ export async function GET(request: NextRequest) {
         }
 
         const userIds = requests.map((r: any) => r.user_id)
-        const usersResult = await db
+        const usersByIdResult = await db
+          .collection('users')
+          .where({ id: db.command.in(userIds) })
+          .get()
+
+        const usersByDocIdResult = await db
           .collection('users')
           .where({ _id: db.command.in(userIds) })
           .get()
 
-        const usersMap = new Map(
-          (usersResult.data || []).map((u: any) => [u._id, u])
-        )
+        const usersMap = new Map<string, any>()
+        ;(usersByIdResult.data || []).forEach((u: any) => {
+          const key = u.id || u._id
+          if (key) usersMap.set(String(key), u)
+        })
+        ;(usersByDocIdResult.data || []).forEach((u: any) => {
+          const key = u.id || u._id
+          if (key && !usersMap.has(String(key))) usersMap.set(String(key), u)
+        })
 
         const formattedRequests = requests.map((r: any) => {
-          const user: any = usersMap.get(r.user_id) || {}
+          const user: any = usersMap.get(String(r.user_id)) || {}
           const status = (r.status || 'pending') as 'pending' | 'approved' | 'rejected'
           const displayTimeSource = status === 'pending' ? r.created_at : (r.reviewed_at || r.created_at)
           return {
@@ -356,6 +367,65 @@ export async function POST(request: NextRequest) {
       } catch (msgError: any) {
         console.error('[JoinRequest] 发送系统助手消息失败:', msgError)
         // 不阻断主流程
+      }
+
+      // 通知工作区 owner/admin
+      try {
+        const adminMembers = await db
+          .collection('workspace_members')
+          .where({
+            workspace_id: workspaceId,
+            role: db.command.in(['owner', 'admin']),
+          })
+          .get()
+
+        const adminIds = new Set<string>(
+          (adminMembers.data || [])
+            .map((m: any) => m.user_id)
+            .filter(Boolean)
+            .map((id: any) => String(id))
+        )
+
+        if (workspace?.owner_id) {
+          adminIds.add(String(workspace.owner_id))
+        }
+
+        adminIds.delete(String(userId))
+
+        let applicantName = '新成员'
+        try {
+          const applicantRes = await db
+            .collection('users')
+            .where({ id: userId })
+            .limit(1)
+            .get()
+          const applicant = applicantRes.data?.[0]
+          if (applicant) {
+            applicantName = applicant.full_name || applicant.username || applicant.email || applicant.name || applicantName
+          }
+        } catch {}
+
+        if (adminIds.size > 0) {
+          const { sendSystemAssistantMessage } = await import('@/lib/system-assistant')
+          for (const adminId of adminIds) {
+            await sendSystemAssistantMessage(
+              adminId,
+              `用户「${applicantName}」申请加入工作区「${workspaceName}」，请及时处理。`,
+              {
+                type: 'join_request',
+                workspace_id: workspaceId,
+                workspace_name: workspaceName,
+                request_id: requestId,
+                applicant_id: userId,
+                applicant_name: applicantName,
+                reason: reason || null,
+              },
+              true
+            )
+          }
+        }
+      } catch (notifyError: any) {
+        console.error('[JoinRequest] 通知管理员失败:', notifyError)
       }
 
       console.log('[JoinRequest] ========== 申请流程完成 ==========')
