@@ -8,6 +8,7 @@ import { getTranslation } from '@/lib/i18n'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { IS_DOMESTIC_VERSION } from '@/config'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -87,6 +88,21 @@ const getMembersCacheKey = (userId: string, workspaceId: string) =>
 const getMembersCacheTsKey = (userId: string, workspaceId: string) =>
   `workspace_members_ts_${userId}_${workspaceId}`
 
+const buildAuthHeaders = (): Record<string, string> => {
+  if (typeof window === 'undefined') return {}
+  const token = window.localStorage.getItem('chat_app_token') || ''
+  if (!token) return {}
+
+  if (IS_DOMESTIC_VERSION) {
+    return {
+      'x-cloudbase-session': token,
+      Authorization: `Bearer ${token}`,
+    }
+  }
+
+  return { Authorization: `Bearer ${token}` }
+}
+
 export function WorkspaceMembersPanel({
   currentUser,
   workspaceId,
@@ -142,7 +158,8 @@ export function WorkspaceMembersPanel({
       const response = await fetch(url, {
         cache: 'no-store',
         headers: {
-          'Cache-Control': 'no-cache'
+          'Cache-Control': 'no-cache',
+          ...buildAuthHeaders(),
         }
       })
       const data = await response.json()
@@ -254,7 +271,9 @@ export function WorkspaceMembersPanel({
         params.set('workspaceId', workspaceId)
       }
 
-      const response = await fetch(`/api/workspace-members?${params.toString()}`)
+      const response = await fetch(`/api/workspace-members?${params.toString()}`, {
+        headers: buildAuthHeaders(),
+      })
       const data = await response.json()
 
       if (data.success) {
@@ -337,7 +356,10 @@ export function WorkspaceMembersPanel({
 
       const response = await fetch('/api/workspace-join-requests/approve', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildAuthHeaders(),
+        },
         body: JSON.stringify({ requestId: request.id, workspaceId })
       })
 
@@ -388,7 +410,10 @@ export function WorkspaceMembersPanel({
 
       const response = await fetch('/api/workspace-join-requests/reject', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildAuthHeaders(),
+        },
         body: JSON.stringify({ requestId: request.id, workspaceId })
       })
 
@@ -440,7 +465,8 @@ export function WorkspaceMembersPanel({
     try {
       setIsOperating(true)
       const response = await fetch(`/api/workspace-members?memberId=${member.id}&workspaceId=${workspaceId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: buildAuthHeaders(),
       })
       const data = await response.json()
 
@@ -478,7 +504,10 @@ export function WorkspaceMembersPanel({
       console.log('[WorkspaceMembersPanel] 设为管理员:', { memberId: member.id, workspaceId })
       const response = await fetch('/api/workspace-members', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildAuthHeaders(),
+        },
         body: JSON.stringify({ workspaceId, memberId: member.id, role: 'admin' })
       })
       const data = await response.json()
@@ -519,7 +548,10 @@ export function WorkspaceMembersPanel({
       console.log('[WorkspaceMembersPanel] 取消管理员:', { memberId: member.id, workspaceId })
       const response = await fetch('/api/workspace-members', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildAuthHeaders(),
+        },
         body: JSON.stringify({ workspaceId, memberId: member.id, role: 'member' })
       })
       const data = await response.json()
