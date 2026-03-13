@@ -284,6 +284,13 @@ export interface AiAnalysisPayload {
   repo_digest?: string;
 }
 
+export interface AiMarketingProfile {
+  product_name: string;
+  product_summary: string;
+  core_features: string[];
+  marketing_angles: string[];
+}
+
 export interface AiProjectAnalysis {
   id: string;
   region: AiRegion;
@@ -455,6 +462,8 @@ export interface PosterGenerationRequest {
   analysis_id?: string;
   brief_id?: string;
   brief?: AiCreativeBriefPayload;
+  marketing_profile?: AiMarketingProfile;
+  prompt_override?: string;
   poster_goal: string;
   audience: string;
   style: string;
@@ -471,6 +480,8 @@ export interface VideoGenerationRequest {
   analysis_id?: string;
   brief_id?: string;
   brief?: AiCreativeBriefPayload;
+  marketing_profile?: AiMarketingProfile;
+  prompt_override?: string;
   aspect_ratio: "16:9" | "9:16";
   duration_seconds: number;
   headline: string;
@@ -1336,5 +1347,11 @@ export interface ReleaseFile extends StorageFile {
 export interface SocialLinkFile extends StorageFile {
   linkId?: string;
 }
+
+
+
+
+
+
 
 

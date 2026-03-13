@@ -6,6 +6,8 @@ import type {
   AiGenerationJob,
   AiJobType,
   AiLanguage,
+  AiMarketingProfile,
+  AiRegion,
   AiProjectAnalysis,
   AssetRegenerateRequest,
   PosterGenerationRequest,
@@ -23,6 +25,7 @@ import {
 } from './providers'
 import { hydrateAiAssetUrls, persistAiBinaryAsset, persistAiTextAsset, persistRemoteAiAsset } from './storage'
 import { resolveAiLanguage, resolveAiProviderRoute, resolveAiRegion } from './provider-router'
+import { sanitizeMarketingProfile } from './marketing-profile'
 
 interface JobEnvelope {
   job: AiGenerationJob
@@ -183,18 +186,48 @@ function buildAnalysisSummaryText(payload: AiProjectAnalysis['analysis_payload']
   return lines.join('\n')
 }
 
+function buildMarketingSummaryText(profile: AiMarketingProfile, language: AiLanguage): string {
+  const lines = [
+    `产品：${profile.product_name}`,
+    `概述：${profile.product_summary}`,
+    `核心功能：${profile.core_features.join('；')}`,
+    `营销卖点：${profile.marketing_angles.join('；')}`,
+  ]
+
+  if (language !== 'zh-CN') {
+    return [
+      `Product: ${profile.product_name}`,
+      `Summary: ${profile.product_summary}`,
+      `Core features: ${profile.core_features.join('; ')}`,
+      `Marketing angles: ${profile.marketing_angles.join('; ')}`,
+    ].join('\n')
+  }
+
+  return lines.join('\n')
+}
+
+function buildManualAnalysisPayload(profile: AiMarketingProfile): AiProjectAnalysis['analysis_payload'] {
+  return {
+    product_name: profile.product_name,
+    product_summary: profile.product_summary,
+    core_features: profile.core_features,
+    target_users: [],
+    technical_stack: [],
+    deployment_topology: [],
+    region_differences: [],
+    marketing_angles: profile.marketing_angles,
+  }
+}
 function buildPosterPromptSystem(language: AiLanguage): string {
   return isChineseLanguage(language)
-    ? '你是资深 B2B 增长设计师。请基于项目分析与营销简报，输出严格 JSON，字段必须包含 prompt, negative_prompt, title, subtitle, cta, layout_notes, rationale。prompt 必须适合文生图海报生成，突出产品卖点、现代 SaaS 工作台质感、清晰标题层级。'
+    ? '你是资深 B2B 增长设计师。请基于项目分析与营销简报，输出严格 JSON，字段必须包含 prompt, negative_prompt, title, subtitle, cta, layout_notes, rationale。要求：prompt 必须为中文，必须提炼并点名业务核心功能与卖点；画面为现代企业级协作产品海报，强调效率提升、可信科技感、清晰标题层级。不得输出英文或拼音。'
     : 'You are a senior B2B growth designer. Return strict JSON with keys prompt, negative_prompt, title, subtitle, cta, layout_notes, rationale. The prompt must be production-ready for poster generation and emphasize product differentiation, a modern SaaS control room aesthetic, and strong headline hierarchy.'
 }
-
 function buildVideoPlanSystem(language: AiLanguage): string {
   return isChineseLanguage(language)
-    ? '你是产品品牌导演。请基于项目分析与营销简报，输出严格 JSON，字段必须包含 headline, opening_hook, cover_prompt, narration, script_markdown, scenes。scenes 为数组，每项包含 title, visual_prompt, narration, subtitle。镜头数量控制在 4-6 个，适合 15-30 秒解说视频。'
+    ? '你是产品品牌导演。请基于项目分析与营销简报，输出严格 JSON，字段必须包含 headline, opening_hook, cover_prompt, narration, script_markdown, scenes。要求：所有字段内容必须为中文，必须体现核心功能与卖点；镜头数量控制在 4-6 个，适合 15-30 秒解说视频。不得输出英文或拼音。'
     : 'You are a product brand director. Return strict JSON with headline, opening_hook, cover_prompt, narration, script_markdown, scenes. scenes must be an array of 4-6 items, each with title, visual_prompt, narration, subtitle, suitable for a 15-30 second explainer video.'
 }
-
 function buildAnalysisSystem(language: AiLanguage): string {
   return isChineseLanguage(language)
     ? '你是资深解决方案架构师和产品营销顾问。你会阅读整个代码仓库并输出严格 JSON。字段必须包含 product_name, product_summary, core_features, target_users, technical_stack, deployment_topology, region_differences, marketing_angles, module_topology。module_topology 为数组，每项包含 name, purpose, paths。禁止输出 Markdown，禁止解释。'
@@ -293,11 +326,64 @@ async function createAnalysisRecord(job: AiGenerationJob, request: RepoAnalysisR
 
   return analysis
 }
+async function createManualAnalysisRecord(job: AiGenerationJob, profile: AiMarketingProfile): Promise<AiProjectAnalysis> {
+  const adapter = getDatabaseAdapter()
+  const language = (job.input_payload.language || job.language || resolveAiLanguage(job.region)) as AiLanguage
+  const payload = buildManualAnalysisPayload(profile)
+  const summaryText = buildMarketingSummaryText(profile, language)
+  const analysis = await adapter.createAiProjectAnalysis({
+    region: job.region,
+    language,
+    repo_scope: [],
+    repo_digest: 'manual',
+    analysis_payload: payload,
+    summary_text: summaryText,
+    created_by: job.created_by,
+  })
 
-async function ensureAnalysisForJob(job: AiGenerationJob): Promise<AiProjectAnalysis> {
+  await persistAiTextAsset({
+    region: job.region,
+    jobId: job.id,
+    assetType: 'analysis',
+    fileName: `analysis-${analysis.id}.json`,
+    mimeType: 'application/json',
+    text: JSON.stringify({
+      analysis,
+      source: 'marketing_profile',
+    }, null, 2),
+    metadata: {
+      analysis_id: analysis.id,
+      source: 'marketing_profile',
+    },
+  })
+
+  return analysis
+}
+
+async function ensureAnalysisForJob(job: AiGenerationJob, marketingProfile?: AiMarketingProfile | null): Promise<AiProjectAnalysis> {
   const adapter = getDatabaseAdapter()
   const requestedLanguage = (job.input_payload.language || job.language) as AiLanguage
 
+  if (marketingProfile) {
+    const sanitizedProfile = sanitizeMarketingProfile(marketingProfile, { allowEmpty: true })
+
+    if (job.analysis_id) {
+      const analysis = await adapter.getAiProjectAnalysisById(job.analysis_id)
+      if (analysis) {
+        return analysis
+      }
+    }
+
+    const outputAnalysisId = job.output_payload?.analysis_id
+    if (outputAnalysisId) {
+      const analysis = await adapter.getAiProjectAnalysisById(outputAnalysisId)
+      if (analysis) {
+        return analysis
+      }
+    }
+
+    return createManualAnalysisRecord(job, sanitizedProfile)
+  }
   if (job.analysis_id) {
     const analysis = await adapter.getAiProjectAnalysisById(job.analysis_id)
     if (analysis) {
@@ -351,6 +437,76 @@ function buildVideoPromptUser(language: AiLanguage, analysis: AiProjectAnalysis,
   }, null, 2)
 }
 
+
+export async function generatePosterPromptBundle(request: PosterGenerationRequest, region?: AiRegion): Promise<any> {
+  const resolvedRegion = resolveAiRegion(region)
+  const route = resolveAiProviderRoute(resolvedRegion)
+  const language = resolveAiLanguage(resolvedRegion)
+
+  const override = request.prompt_override?.trim()
+  if (override) {
+    return {
+      prompt: override,
+      negative_prompt: request.negative_prompt || '',
+      title: request.title,
+      subtitle: request.subtitle,
+      cta: request.cta,
+      layout_notes: '',
+      rationale: 'manual_override',
+    }
+  }
+
+  const profile = sanitizeMarketingProfile(request.marketing_profile, { allowEmpty: true })
+  const analysisPayload = buildManualAnalysisPayload(profile)
+  const summaryText = buildMarketingSummaryText(profile, language)
+  const now = new Date().toISOString()
+
+  const analysis: AiProjectAnalysis = {
+    id: 'manual-preview',
+    region: resolvedRegion,
+    language,
+    repo_scope: [],
+    repo_digest: 'manual',
+    analysis_payload: analysisPayload,
+    summary_text: summaryText,
+    created_by: 'system',
+    created_at: now,
+    updated_at: now,
+  }
+
+  const normalized = normalizeBriefPayload(language, request.brief)
+  const mergedSellingPoints = normalized.core_selling_points.length > 0
+    ? normalized.core_selling_points
+    : analysisPayload.marketing_angles
+
+  const brief: AiCreativeBrief = {
+    id: 'manual-preview',
+    analysis_id: analysis.id,
+    region: resolvedRegion,
+    language,
+    audience: normalized.audience,
+    core_selling_points: mergedSellingPoints,
+    brand_tone: normalized.brand_tone,
+    must_include: normalized.must_include,
+    must_avoid: normalized.must_avoid,
+    cta: normalized.cta,
+    poster_goal: normalized.poster_goal,
+    style_preset: normalized.style_preset,
+    extra_notes: normalized.extra_notes,
+    created_by: 'system',
+    created_at: now,
+    updated_at: now,
+  }
+
+  return generateStructuredJson({
+    region: resolvedRegion,
+    language,
+    model: route.analysisModel,
+    systemPrompt: buildPosterPromptSystem(language),
+    userPrompt: buildPosterPromptUser(language, analysis, brief, request),
+  })
+}
+
 function buildSubtitleText(videoPlan: any): string {
   const scenes = Array.isArray(videoPlan?.scenes) ? videoPlan.scenes : []
   return scenes.map((scene: any, index: number) => `${index + 1}. ${scene.subtitle || scene.narration || ''}`).join('\n')
@@ -391,9 +547,9 @@ async function finalizeImageJob(job: AiGenerationJob, remoteUrl: string | undefi
 
 async function processPosterJob(job: AiGenerationJob): Promise<AiGenerationJob> {
   const adapter = getDatabaseAdapter()
-  const analysis = await ensureAnalysisForJob(job)
-  const language = (job.input_payload.language || analysis.language || resolveAiLanguage(job.region)) as AiLanguage
   const request = job.input_payload.request as PosterGenerationRequest
+  const analysis = await ensureAnalysisForJob(job, request.marketing_profile)
+  const language = (job.input_payload.language || analysis.language || resolveAiLanguage(job.region)) as AiLanguage
   const brief = await createOrReuseBrief(job, language, analysis, job.input_payload.brief)
   const outputPayload = mergePayload(job.output_payload, {
     analysis_id: analysis.id,
@@ -401,13 +557,28 @@ async function processPosterJob(job: AiGenerationJob): Promise<AiGenerationJob> 
   })
 
   let promptBundle = outputPayload.prompt_bundle
-  if (!promptBundle) {
-    promptBundle = await generateStructuredJson({
-      region: job.region,
-      language,
-      systemPrompt: buildPosterPromptSystem(language),
-      userPrompt: buildPosterPromptUser(language, analysis, brief, request),
-    })
+    if (!promptBundle) {
+    if (request.prompt_override && request.prompt_override.trim()) {
+      const override = request.prompt_override.trim()
+      promptBundle = {
+        prompt: override,
+        negative_prompt: request.negative_prompt || '',
+        title: request.title,
+        subtitle: request.subtitle,
+        cta: request.cta,
+        layout_notes: '',
+        rationale: 'manual_override',
+      }
+    } else {
+      const route = resolveAiProviderRoute(job.region)
+      promptBundle = await generateStructuredJson({
+        region: job.region,
+        language,
+        model: route.analysisModel,
+        systemPrompt: buildPosterPromptSystem(language),
+        userPrompt: buildPosterPromptUser(language, analysis, brief, request),
+      })
+    }
 
     await adapter.updateAiGenerationJob(job.id, {
       status: 'in_progress',
@@ -685,9 +856,9 @@ async function finalizeVideoJob(job: AiGenerationJob, remoteUrl: string | undefi
 
 async function processVideoJob(job: AiGenerationJob): Promise<AiGenerationJob> {
   const adapter = getDatabaseAdapter()
-  const analysis = await ensureAnalysisForJob(job)
-  const language = (job.input_payload.language || analysis.language || resolveAiLanguage(job.region)) as AiLanguage
   const request = job.input_payload.request as VideoGenerationRequest
+  const analysis = await ensureAnalysisForJob(job, request.marketing_profile)
+  const language = (job.input_payload.language || analysis.language || resolveAiLanguage(job.region)) as AiLanguage
   const brief = await createOrReuseBrief(job, language, analysis, job.input_payload.brief)
   let outputPayload = mergePayload(job.output_payload, {
     analysis_id: analysis.id,
@@ -696,9 +867,11 @@ async function processVideoJob(job: AiGenerationJob): Promise<AiGenerationJob> {
 
   let videoPlan = outputPayload.video_plan
   if (!videoPlan) {
+    const route = resolveAiProviderRoute(job.region)
     videoPlan = await generateStructuredJson({
       region: job.region,
       language,
+      model: route.analysisModel,
       systemPrompt: buildVideoPlanSystem(language),
       userPrompt: buildVideoPromptUser(language, analysis, brief, request),
     })
@@ -959,5 +1132,22 @@ export async function regenerateFromAsset(assetId: string, request: AssetRegener
     analysis_id: match.analysis?.id || originalRequest.analysis_id,
   }, createdBy)
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
