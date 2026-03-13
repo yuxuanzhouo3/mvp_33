@@ -36,10 +36,8 @@ import type {
   SocialLink,
   CreateSocialLinkData,
   UpdateSocialLinkData,
-  Release,
-  ReleaseFilters,
+  AppRelease,
   CreateReleaseData,
-  UpdateReleaseData,
   AiProjectAnalysis,
   AiAnalysisFilters,
   CreateAiProjectAnalysisData,
@@ -1615,16 +1613,16 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
   /**
    * 根据 ID 获取版本发布
    */
-  async getReleaseById(id: string): Promise<Release | null> {
+  async getReleaseById(id: string): Promise<AppRelease | null> {
     await this.ensureInitialized();
     try {
       console.log(`[getReleaseById] 查询版本 ID: ${id}`);
       const result = await this.db.collection("releases").doc(id).get();
 
       console.log(`[getReleaseById] 查询结果:`, {
-        hasData: !!result.data,
+        hasData: Boolean(result.data),
         dataLength: result.data?.length,
-        requestId: result.requestId
+        requestId: result.requestId,
       });
 
       if (!result.data || result.data.length === 0) {
@@ -1652,41 +1650,12 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
   /**
    * 列出版本发布
    */
-  async listReleases(filters?: ReleaseFilters): Promise<Release[]> {
+  async listReleases(): Promise<AppRelease[]> {
     await this.ensureInitialized();
-    const where: any = {};
-
-    if (filters?.status) {
-      where.status = filters.status;
-    }
-
-    if (filters?.search) {
-      where.$or = [
-        { title: new RegExp(filters.search, "i") },
-        { version: new RegExp(filters.search, "i") },
-      ];
-    }
-
-    if (filters?.start_date || filters?.end_date) {
-      where.created_at = {};
-      if (filters.start_date) {
-        where.created_at.$gte = filters.start_date;
-      }
-      if (filters.end_date) {
-        where.created_at.$lte = filters.end_date;
-      }
-    }
-
-    const limit = filters?.limit || 50;
-    const offset = filters?.offset || 0;
-
     try {
       const result = await this.db
         .collection("releases")
-        .where(where)
         .orderBy("created_at", "desc")
-        .skip(offset)
-        .limit(limit)
         .get();
 
       return result.data.map((doc: any) => this.dbToRelease(doc));
@@ -1698,33 +1667,10 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
   /**
    * 统计版本发布数量
    */
-  async countReleases(filters?: ReleaseFilters): Promise<number> {
+  async countReleases(): Promise<number> {
     await this.ensureInitialized();
-    const where: any = {};
-
-    if (filters?.status) {
-      where.status = filters.status;
-    }
-
-    if (filters?.search) {
-      where.$or = [
-        { title: new RegExp(filters.search, "i") },
-        { version: new RegExp(filters.search, "i") },
-      ];
-    }
-
-    if (filters?.start_date || filters?.end_date) {
-      where.created_at = {};
-      if (filters.start_date) {
-        where.created_at.$gte = filters.start_date;
-      }
-      if (filters.end_date) {
-        where.created_at.$lte = filters.end_date;
-      }
-    }
-
     try {
-      const result = await this.db.collection("releases").where(where).count();
+      const result = await this.db.collection("releases").count();
       return result.total;
     } catch (error: any) {
       throw handleDatabaseError(error);
@@ -1734,24 +1680,23 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
   /**
    * 创建版本发布
    */
-  async createRelease(data: CreateReleaseData): Promise<Release> {
+  async createRelease(data: CreateReleaseData): Promise<AppRelease> {
     await this.ensureInitialized();
-    const now = new Date().toISOString();
+    const now = toISOString(new Date());
 
     const doc: any = {
       version: data.version,
-      title: data.title,
-      description: data.description,
-      status: data.status ?? "draft",
-      releaseNotes: data.releaseNotes,
-      fileUrl: data.fileUrl,
+      platform: data.platform,
+      variant: data.variant,
+      file_url: data.file_url,
+      file_name: data.file_name,
+      file_size: data.file_size,
+      release_notes: data.release_notes,
+      is_active: data.is_active,
+      is_mandatory: data.is_mandatory,
       created_at: now,
       updated_at: now,
     };
-
-    if (data.status === "published") {
-      doc.published_at = now;
-    }
 
     try {
       // 使用 add() 方法，CloudBase Node SDK 会自动生成 ID
@@ -1774,11 +1719,7 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
 
       console.log("[createRelease] 成功创建版本:", { insertedId, version: data.version });
 
-      // 返回完整的版本对象
-      return {
-        id: insertedId,
-        ...doc,
-      };
+      return this.dbToRelease({ _id: insertedId, ...doc });
     } catch (error: any) {
       console.error("[createRelease] 创建版本失败 - 详细错误信息:", {
         message: error.message,
@@ -1795,25 +1736,21 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
   /**
    * 更新版本发布
    */
-  async updateRelease(id: string, data: UpdateReleaseData): Promise<Release> {
+  async updateRelease(id: string, data: Partial<CreateReleaseData>): Promise<AppRelease> {
     await this.ensureInitialized();
     const update: any = {
-      updated_at: new Date().toISOString(),
+      updated_at: toISOString(new Date()),
     };
 
     if (data.version !== undefined) update.version = data.version;
-    if (data.title !== undefined) update.title = data.title;
-    if (data.description !== undefined) update.description = data.description;
-    if (data.status !== undefined) {
-      update.status = data.status;
-      // 如果状态从未发布变为已发布，设置发布时间
-      if (data.status === "published") {
-        update.published_at = new Date().toISOString();
-      }
-    }
-    if (data.releaseNotes !== undefined) update.releaseNotes = data.releaseNotes;
-    if (data.fileUrl !== undefined) update.fileUrl = data.fileUrl;
-    if (data.published_at !== undefined) update.published_at = data.published_at;
+    if (data.platform !== undefined) update.platform = data.platform;
+    if (data.variant !== undefined) update.variant = data.variant;
+    if (data.file_url !== undefined) update.file_url = data.file_url;
+    if (data.file_name !== undefined) update.file_name = data.file_name;
+    if (data.file_size !== undefined) update.file_size = data.file_size;
+    if (data.release_notes !== undefined) update.release_notes = data.release_notes;
+    if (data.is_active !== undefined) update.is_active = data.is_active;
+    if (data.is_mandatory !== undefined) update.is_mandatory = data.is_mandatory;
 
     try {
       await this.db.collection("releases").doc(id).update(update);
@@ -1848,26 +1785,47 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
   /**
    * 切换发布版本状态
    */
-  async toggleReleaseStatus(id: string, isActive: boolean): Promise<Release> {
+  async toggleReleaseStatus(id: string, isActive: boolean): Promise<AppRelease> {
     console.log('[CloudBaseAdapter] 切换发布版本状态:', id, isActive);
-    return this.updateRelease(id, { status: isActive ? 'published' : 'draft' });
+    return this.updateRelease(id, { is_active: isActive });
   }
 
   /**
    * 辅助方法：从数据库格式转换为 Release
    */
-  private dbToRelease(doc: any): Release {
+  private dbToRelease(doc: any): AppRelease {
+    const createdAt = doc.created_at || doc.createdAt || new Date().toISOString();
+    const fileSize =
+      typeof doc.file_size === "number"
+        ? doc.file_size
+        : typeof doc.fileSize === "number"
+          ? doc.fileSize
+          : 0;
+    const isActive =
+      doc.is_active !== undefined
+        ? doc.is_active
+        : doc.isActive !== undefined
+          ? doc.isActive
+          : true;
+    const isMandatory =
+      doc.is_mandatory !== undefined
+        ? doc.is_mandatory
+        : doc.isMandatory !== undefined
+          ? doc.isMandatory
+          : false;
+
     return {
       id: doc._id || doc.id,
       version: doc.version,
-      title: doc.title,
-      description: doc.description,
-      status: doc.status || "draft",
-      releaseNotes: doc.releaseNotes,
-      fileUrl: doc.fileUrl,
-      created_at: doc.created_at,
-      updated_at: doc.updated_at,
-      published_at: doc.published_at,
+      platform: doc.platform,
+      variant: doc.variant,
+      file_url: doc.file_url || doc.fileUrl || doc.fileURL || doc.fileId || "",
+      file_name: doc.file_name || doc.fileName || "",
+      file_size: fileSize,
+      release_notes: doc.release_notes || doc.releaseNotes,
+      is_active: isActive,
+      is_mandatory: isMandatory,
+      created_at: createdAt,
     };
   }
 
@@ -2273,6 +2231,19 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
     }
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

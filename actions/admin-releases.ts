@@ -1,7 +1,33 @@
 'use server';
 
 import { getDatabaseAdapter } from '@/lib/admin/database';
-import type { AppRelease, CreateReleaseData, Platform, Variant } from '@/lib/admin/types';
+import type { CreateReleaseData, Platform, Variant } from '@/lib/admin/types';
+
+function readString(formData: FormData, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = formData.get(key);
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function readNumber(formData: FormData, ...keys: string[]): number | undefined {
+  const raw = readString(formData, ...keys);
+  if (raw === undefined) return undefined;
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : undefined;
+}
+
+function readBoolean(formData: FormData, ...keys: string[]): boolean | undefined {
+  const raw = readString(formData, ...keys);
+  if (raw === undefined) return undefined;
+  const normalized = raw.toLowerCase();
+  if (normalized === 'true' || normalized === '1' || normalized === 'on') return true;
+  if (normalized === 'false' || normalized === '0' || normalized === 'off') return false;
+  return undefined;
+}
 
 /**
  * 获取所有发布版本
@@ -25,16 +51,30 @@ export async function createRelease(formData: FormData) {
   try {
     console.log('[Actions] 创建发布版本');
 
+    const version = readString(formData, 'version');
+    const platform = readString(formData, 'platform') as Platform | undefined;
+    const variantRaw = readString(formData, 'variant');
+    const fileUrl = readString(formData, 'file_url', 'fileUrl', 'cloudbaseFileId');
+    const fileName = readString(formData, 'file_name', 'fileName');
+    const fileSize = readNumber(formData, 'file_size', 'fileSize');
+    const releaseNotes = readString(formData, 'release_notes', 'releaseNotes');
+    const isActive = readBoolean(formData, 'is_active', 'isActive');
+    const isMandatory = readBoolean(formData, 'is_mandatory', 'isMandatory');
+
+    if (!version || !platform || !fileUrl || !fileName || fileSize === undefined) {
+      throw new Error('缺少必要的发布版本信息');
+    }
+
     const data: CreateReleaseData = {
-      version: formData.get('version') as string,
-      platform: formData.get('platform') as Platform,
-      variant: (formData.get('variant') as Variant) || undefined,
-      file_url: formData.get('file_url') as string,
-      file_name: formData.get('file_name') as string,
-      file_size: parseInt(formData.get('file_size') as string),
-      release_notes: formData.get('release_notes') as string || undefined,
-      is_active: formData.get('is_active') === 'true',
-      is_mandatory: formData.get('is_mandatory') === 'true',
+      version,
+      platform,
+      variant: variantRaw ? (variantRaw as Variant) : undefined,
+      file_url: fileUrl,
+      file_name: fileName,
+      file_size: fileSize,
+      release_notes: releaseNotes || undefined,
+      is_active: isActive === undefined ? true : isActive,
+      is_mandatory: isMandatory === undefined ? false : isMandatory,
     };
 
     const adapter = getDatabaseAdapter();
@@ -53,11 +93,14 @@ export async function updateRelease(id: string, formData: FormData) {
   try {
     console.log('[Actions] 更新发布版本:', id);
 
-    const data: Partial<CreateReleaseData> = {
-      release_notes: formData.get('release_notes') as string || undefined,
-      is_active: formData.get('is_active') === 'true',
-      is_mandatory: formData.get('is_mandatory') === 'true',
-    };
+    const data: Partial<CreateReleaseData> = {};
+    const releaseNotes = readString(formData, 'release_notes', 'releaseNotes');
+    const isActive = readBoolean(formData, 'is_active', 'isActive');
+    const isMandatory = readBoolean(formData, 'is_mandatory', 'isMandatory');
+
+    if (releaseNotes !== undefined) data.release_notes = releaseNotes;
+    if (isActive !== undefined) data.is_active = isActive;
+    if (isMandatory !== undefined) data.is_mandatory = isMandatory;
 
     const adapter = getDatabaseAdapter();
     const release = await adapter.updateRelease(id, data);

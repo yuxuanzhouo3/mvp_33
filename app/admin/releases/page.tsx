@@ -723,7 +723,13 @@ export default function ReleasesManagementPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => window.open(release.file_url, "_blank")}
+                          onClick={() => {
+                            if (!release.file_url) return;
+                            const url = release.file_url.startsWith("cloud://")
+                              ? `/api/files/cn-download?fileId=${encodeURIComponent(release.file_url)}`
+                              : release.file_url;
+                            window.open(url, "_blank");
+                          }}
                           title="下载"
                         >
                           <Download className="h-4 w-4" />
@@ -901,3 +907,7 @@ export default function ReleasesManagementPage() {
     </div>
   );
 }
+
+
+
+
