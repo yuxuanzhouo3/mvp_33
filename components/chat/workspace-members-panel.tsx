@@ -118,6 +118,15 @@ export function WorkspaceMembersPanel({
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
   const isZh = language === 'zh'
 
+  useEffect(() => {
+    if (!workspaceId) return
+    setMembers([])
+    setRequests([])
+    setSelectedId(null)
+    setActiveTab('members')
+    setMobileView('list')
+    setIsLoading(true)
+  }, [workspaceId])
   const loadJoinRequests = useCallback(async (options: { silent?: boolean } = {}) => {
     const { silent = false } = options
     if (!workspaceId || isLoadingJoinRequestsRef.current) return
@@ -1078,3 +1087,4 @@ export function WorkspaceMembersPanel({
     </div>
   )
 }
+

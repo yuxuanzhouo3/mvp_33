@@ -16,9 +16,26 @@ interface SettingsContextType {
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined)
 
+const LEGACY_LANGUAGE_STORAGE_KEY = 'language'
+
+const resolveClientRegion = (): 'cn' | 'global' => {
+  if (typeof window === 'undefined') return DEFAULT_REGION
+  const host = window.location.hostname.toLowerCase()
+  if (host.includes('mornscience.top')) {
+    return 'cn'
+  }
+  if (host.includes('mornscience.work')) {
+    return 'global'
+  }
+  return DEFAULT_REGION
+}
+
+const resolveClientDefaultLanguage = (): Language =>
+  resolveClientRegion() === 'cn' ? 'zh' : 'en'
+
+const getLanguageStorageKey = () => `language_${resolveClientRegion()}`
+
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const languageStorageKey = `language_${DEFAULT_REGION}`
-  const legacyLanguageStorageKey = 'language'
   // 初始语言从构建配置读取
   const [language, setLanguageState] = useState<Language>(DEFAULT_LANGUAGE as Language)
   const [theme, setThemeState] = useState<Theme>('light')
@@ -47,16 +64,27 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   // Load settings from localStorage on mount
   useEffect(() => {
+    if (typeof window === 'undefined') return
+
     // 只在客户端读取用户偏好，但不影响环境
-    const savedLanguage = (
-      localStorage.getItem(languageStorageKey) ||
-      localStorage.getItem(legacyLanguageStorageKey)
-    ) as Language
+    const languageStorageKey = getLanguageStorageKey()
+    const savedLanguage = localStorage.getItem(languageStorageKey) as Language
+    const legacyLanguage = localStorage.getItem(LEGACY_LANGUAGE_STORAGE_KEY) as Language
     const savedTheme = localStorage.getItem('theme') as Theme
 
+    const isValidLanguage = (value: string | null): value is Language =>
+      value === 'zh' || value === 'en'
+
     // 语言设置仅用于 UI 显示，不影响认证方式和数据库选择
-    if (savedLanguage && (savedLanguage === 'zh' || savedLanguage === 'en')) {
+    if (isValidLanguage(savedLanguage)) {
       setLanguageState(savedLanguage)
+    } else if (isValidLanguage(legacyLanguage)) {
+      setLanguageState(legacyLanguage)
+      localStorage.setItem(languageStorageKey, legacyLanguage)
+    } else {
+      const defaultLanguage = resolveClientDefaultLanguage()
+      setLanguageState(defaultLanguage)
+      localStorage.setItem(languageStorageKey, defaultLanguage)
     }
 
     if (savedTheme) {
@@ -72,11 +100,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // 语言切换不触发环境切换
   const setLanguage = (newLanguage: Language) => {
     setLanguageState(newLanguage)
-    localStorage.setItem(languageStorageKey, newLanguage)
-    // Keep legacy key for compatibility with existing pages/components.
-    localStorage.setItem(legacyLanguageStorageKey, newLanguage)
+    if (typeof window !== 'undefined') {
+      const languageStorageKey = getLanguageStorageKey()
+      localStorage.setItem(languageStorageKey, newLanguage)
+      // Keep legacy key for compatibility with existing pages/components.
+      localStorage.setItem(LEGACY_LANGUAGE_STORAGE_KEY, newLanguage)
+    }
   }
-
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme)
     localStorage.setItem('theme', newTheme)
@@ -400,4 +430,6 @@ export function useSettings() {
   }
   return context
 }
+
+
 

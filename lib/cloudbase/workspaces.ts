@@ -41,34 +41,47 @@ export async function getWorkspaces(userId?: string): Promise<Workspace[]> {
       return []
     }
 
-    // If userId is provided, only return workspaces where user is a member
+    // If userId is provided, return workspaces where user is a member or owner
     if (userId) {
       // First get workspace_ids from workspace_members
       const memberResult = await db.collection('workspace_members')
         .where({ user_id: userId })
         .get()
 
-      if (!memberResult.data || memberResult.data.length === 0) {
-        return []
+      const workspaceIds = (memberResult.data || [])
+        .map((m: any) => m.workspace_id)
+        .filter(Boolean)
+
+      let memberWorkspaces: any[] = []
+      if (workspaceIds.length > 0) {
+        const result = await db.collection('workspaces')
+          .where({ _id: db.command.in(workspaceIds) })
+          .get()
+        memberWorkspaces = result.data || []
       }
 
-      const workspaceIds = memberResult.data.map((m: any) => m.workspace_id).filter(Boolean)
-
-      if (workspaceIds.length === 0) {
-        return []
-      }
-
-      // Then get the workspaces by IDs
-      const result = await db.collection('workspaces')
-        .where({ _id: db.command.in(workspaceIds) })
-        .orderBy('created_at', 'desc')
+      // Also include workspaces owned by the user
+      const ownedResult = await db.collection('workspaces')
+        .where({ owner_id: userId })
         .get()
+      const ownedWorkspaces = ownedResult.data || []
 
-      if (result.data && result.data.length > 0) {
-        return result.data.map(normalizeCloudBaseWorkspace)
+      const combined = [...memberWorkspaces, ...ownedWorkspaces]
+      if (combined.length === 0) {
+        return []
       }
 
-      return []
+      const unique = new Map<string, any>()
+      combined.forEach((ws: any) => {
+        const key = ws?._id || ws?.id
+        if (key) {
+          unique.set(String(key), ws)
+        }
+      })
+
+      const list = Array.from(unique.values()).map(normalizeCloudBaseWorkspace)
+      list.sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+      return list
     }
 
     // Fallback: return all workspaces (for backward compatibility, but should not be used)
@@ -202,3 +215,5 @@ export async function getWorkspaceByInviteCode(inviteCode: string): Promise<Work
     return null
   }
 }
+
+

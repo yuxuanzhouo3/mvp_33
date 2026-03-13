@@ -54,10 +54,37 @@ export async function GET(request: NextRequest) {
         })
         .get()
 
-      if (!adminCheck.data || adminCheck.data.length === 0) {
-        return NextResponse.json({ success: true, requests: [] })
+      let isAdmin = adminCheck.data && adminCheck.data.length > 0
+      if (!isAdmin) {
+        try {
+          const workspaceRes = await db.collection('workspaces').doc(workspaceId).get()
+          const workspace = (workspaceRes as any)?.data || workspaceRes
+          if (workspace?.owner_id && workspace.owner_id === userId) {
+            isAdmin = true
+            const ownerMember = await db.collection('workspace_members')
+              .where({ workspace_id: workspaceId, user_id: userId })
+              .get()
+            if (!ownerMember.data || ownerMember.data.length === 0) {
+              await db.collection('workspace_members').add({
+                workspace_id: workspaceId,
+                user_id: userId,
+                role: 'owner',
+                joined_at: new Date().toISOString(),
+              })
+            } else if (ownerMember.data[0].role !== 'owner') {
+              await db.collection('workspace_members')
+                .doc(ownerMember.data[0]._id)
+                .update({ role: 'owner', updated_at: new Date().toISOString() })
+            }
+          }
+        } catch (error) {
+          console.warn('[workspace-join-requests] Failed to resolve owner admin role:', error)
+        }
       }
 
+      if (!isAdmin) {
+        return NextResponse.json({ success: true, requests: [] })
+      }
       // 获取申请（默认仅 pending，可选包含历史）
       try {
         const whereQuery: any = {
@@ -490,3 +517,5 @@ function getAvatarColor(name: string): string {
   const index = name.charCodeAt(0) % colors.length
   return colors[index]
 }
+
+

@@ -99,7 +99,37 @@ export async function GET(request: NextRequest) {
       })
 
       // 获取当前用户角色
-      const currentUserRole = await getWorkspaceMemberRoleCloudbase(targetWorkspaceId, userId)
+      let currentUserRole = await getWorkspaceMemberRoleCloudbase(targetWorkspaceId, userId)
+      if (!currentUserRole) {
+        try {
+          const { getCloudBaseDb } = await import('@/lib/cloudbase/client')
+          const db = getCloudBaseDb()
+          if (db) {
+            const workspaceRes = await db.collection('workspaces').doc(targetWorkspaceId).get()
+            const workspace = (workspaceRes as any)?.data || workspaceRes
+            if (workspace?.owner_id && workspace.owner_id === userId) {
+              currentUserRole = 'owner'
+              const ownerMember = await db.collection('workspace_members')
+                .where({ workspace_id: targetWorkspaceId, user_id: userId })
+                .get()
+              if (!ownerMember.data || ownerMember.data.length === 0) {
+                await db.collection('workspace_members').add({
+                  workspace_id: targetWorkspaceId,
+                  user_id: userId,
+                  role: 'owner',
+                  joined_at: new Date().toISOString(),
+                })
+              } else if (ownerMember.data[0].role !== 'owner') {
+                await db.collection('workspace_members')
+                  .doc(ownerMember.data[0]._id)
+                  .update({ role: 'owner', updated_at: new Date().toISOString() })
+              }
+            }
+          }
+        } catch (error) {
+          console.warn('[API /api/workspace-members] Failed to resolve owner role:', error)
+        }
+      }
       console.log('[API /api/workspace-members] 当前用户角色 (CloudBase):', { userId, currentUserRole })
 
       return NextResponse.json({
@@ -471,3 +501,4 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: error.message || 'Failed to update member role' }, { status: 500 })
   }
 }
+

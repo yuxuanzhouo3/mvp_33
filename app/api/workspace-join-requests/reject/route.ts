@@ -75,11 +75,38 @@ export async function POST(request: NextRequest) {
 
       console.log('[Reject API] 管理员检查结果:', adminCheck.data)
 
-      if (!adminCheck.data || adminCheck.data.length === 0) {
+      let isAdmin = adminCheck.data && adminCheck.data.length > 0
+      if (!isAdmin) {
+        try {
+          const workspaceRes = await db.collection('workspaces').doc(workspaceId).get()
+          const workspace = (workspaceRes as any)?.data || workspaceRes
+          if (workspace?.owner_id && workspace.owner_id === userId) {
+            isAdmin = true
+            const ownerMember = await db.collection('workspace_members')
+              .where({ workspace_id: workspaceId, user_id: userId })
+              .get()
+            if (!ownerMember.data || ownerMember.data.length === 0) {
+              await db.collection('workspace_members').add({
+                workspace_id: workspaceId,
+                user_id: userId,
+                role: 'owner',
+                joined_at: new Date().toISOString(),
+              })
+            } else if (ownerMember.data[0].role !== 'owner') {
+              await db.collection('workspace_members')
+                .doc(ownerMember.data[0]._id)
+                .update({ role: 'owner', updated_at: new Date().toISOString() })
+            }
+          }
+        } catch (error) {
+          console.warn('[Reject API] Failed to resolve owner admin role:', error)
+        }
+      }
+
+      if (!isAdmin) {
         console.log('[Reject API] 错误: 权限不足，需要管理员权限')
         return NextResponse.json({ success: false, error: 'Permission denied. Admin role required.' }, { status: 403 })
       }
-
       // 获取申请信息
       console.log('[Reject API] 获取申请信息, requestId:', requestId)
       let requestResult: any
@@ -294,3 +321,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message || 'Failed to reject request' }, { status: 500 })
   }
 }
+

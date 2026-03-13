@@ -171,6 +171,7 @@ export function CreateGroupDialog({
                   <Checkbox
                     checked={selectedUsers.some(u => u.id === contact.id)}
                     onCheckedChange={() => toggleUser(contact)}
+                    onClick={(event) => event.stopPropagation()}
                   />
                   <Avatar className="h-10 w-10">
                     <AvatarImage src={contact.avatar_url || undefined} />
@@ -214,3 +215,4 @@ export function CreateGroupDialog({
     </Dialog>
   )
 }
+

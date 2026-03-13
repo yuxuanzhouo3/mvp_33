@@ -159,6 +159,20 @@ export async function POST(request: NextRequest) {
         invite_code: inviteCode.trim().toUpperCase(),
       })
 
+      try {
+        const { getCloudBaseDb } = await import('@/lib/cloudbase/client')
+        const db = getCloudBaseDb()
+        if (db) {
+          await db.collection('workspace_members').add({
+            workspace_id: workspace.id || (workspace as any)._id,
+            user_id: currentUser.id,
+            role: 'owner',
+            joined_at: new Date().toISOString(),
+          })
+        }
+      } catch (error) {
+        console.warn('[Create Workspace] Failed to add owner to workspace_members:', error)
+      }
       return NextResponse.json({
         success: true,
         workspace
@@ -217,3 +231,5 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+

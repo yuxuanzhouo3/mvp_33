@@ -89,13 +89,6 @@ async function handleCloudBaseJoin(request: NextRequest, workspaceId: string) {
     }
 
     // 从 session 获取当前用户
-    // CloudBase 使用自定义 session，这里简化处理
-    // 实际应该从 cookie 或 header 获取用户信息
-
-    // 这里简化处理：假设用户已登录，直接返回成功
-    // 实际应该检查用户是否已是成员
-
-    // 检查用户是否已是成员
     const { getCloudBaseUser } = await import('@/lib/cloudbase/auth')
     const currentUser = await getCloudBaseUser(request)
 
@@ -104,6 +97,17 @@ async function handleCloudBaseJoin(request: NextRequest, workspaceId: string) {
         { error: 'Unauthorized' },
         { status: 401 }
       )
+    }
+
+    let desiredRole: 'owner' | 'member' = 'member'
+    try {
+      const workspaceRes = await db.collection('workspaces').doc(workspaceId).get()
+      const workspace = (workspaceRes as any)?.data || workspaceRes
+      if (workspace?.owner_id && workspace.owner_id === currentUser.id) {
+        desiredRole = 'owner'
+      }
+    } catch (error) {
+      console.warn('CloudBase join workspace: failed to resolve owner role', error)
     }
 
     // 检查是否已是成员
@@ -115,6 +119,12 @@ async function handleCloudBaseJoin(request: NextRequest, workspaceId: string) {
       .get()
 
     if (existingMember.data && existingMember.data.length > 0) {
+      const existing = existingMember.data[0]
+      if (desiredRole === 'owner' && existing.role !== 'owner') {
+        await db.collection('workspace_members')
+          .doc(existing._id)
+          .update({ role: 'owner', updated_at: new Date().toISOString() })
+      }
       return NextResponse.json({
         success: true,
         message: 'User is already a member of this workspace'
@@ -125,7 +135,7 @@ async function handleCloudBaseJoin(request: NextRequest, workspaceId: string) {
     await db.collection('workspace_members').add({
       workspace_id: workspaceId,
       user_id: currentUser.id,
-      role: 'member',
+      role: desiredRole,
       joined_at: new Date().toISOString(),
     })
 
@@ -141,7 +151,6 @@ async function handleCloudBaseJoin(request: NextRequest, workspaceId: string) {
     )
   }
 }
-
 /**
  * 处理 Supabase (国际版) 加入工作区
  */
