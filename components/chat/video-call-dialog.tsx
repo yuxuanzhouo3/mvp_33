@@ -2664,22 +2664,6 @@ export function VideoCallDialog({
     return tr('通话结束', 'Call ended')
   }
 
-  const getBadgeText = () => {
-    if (callStatus === 'connected') {
-      return remoteUserJoined ? tr('通话中', 'In Call') : tr('连接中', 'Connecting')
-    }
-    if (callStatus === 'ringing') return tr('来电', 'Incoming')
-    if (callStatus === 'calling') return tr('呼出', 'Outgoing')
-    return tr('已结束', 'Ended')
-  }
-
-  const statusBadgeClass = cn(
-    'inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium backdrop-blur-md',
-    callStatus === 'connected' && 'border-emerald-300/40 bg-emerald-400/20 text-emerald-100',
-    callStatus === 'calling' && 'border-sky-300/35 bg-sky-400/20 text-sky-100',
-    callStatus === 'ringing' && 'border-amber-300/40 bg-amber-400/25 text-amber-50',
-    callStatus === 'ended' && 'border-slate-300/30 bg-slate-500/25 text-slate-100',
-  )
   const showConnectedLocalVideo = callStatus === 'connected' && isVideoOn && hasConnectedLocalVideo
   const showPreCallLocalVideo = callStatus === 'calling' && hasLocalPreview
   const showLocalTile = callStatus === 'connected'
@@ -2719,7 +2703,6 @@ export function VideoCallDialog({
                   <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-white/80">
                     {tr('视频', 'VIDEO')}
                   </span>
-                  <span className={statusBadgeClass}>{getBadgeText()}</span>
                 </div>
                 <div className="mt-2 text-sm font-semibold">{displayName}</div>
                 <div className="text-xs text-white/70">{getStatusText()}</div>

@@ -2,7 +2,6 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
 import { useSubscription } from '@/hooks/use-subscription'
 import { SubscriptionBadge } from '@/components/subscription/subscription-badge'
 import { ArrowRight, ArrowLeft, Bell } from 'lucide-react'
@@ -14,23 +13,10 @@ import { useSettings } from '@/lib/settings-context'
 
 export default function SettingsPage() {
   const router = useRouter()
-  const { subscription, usage, limits } = useSubscription()
+  const { subscription } = useSubscription()
   const isMobile = useIsMobile()
   const { language } = useSettings()
   const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
-
-  const getUsagePercentage = (used: number, limit: number) => {
-    if (limit === Infinity) return 0
-    return Math.min((used / limit) * 100, 100)
-  }
-
-  const getStorageUsagePercentage = () => {
-    return getUsagePercentage(usage.storageUsed, usage.storageLimit)
-  }
-
-  const getMessagesUsagePercentage = () => {
-    return getUsagePercentage(usage.messagesUsed, usage.messagesLimit)
-  }
 
   return (
     <div className="flex h-screen min-w-0 flex-col mobile-app-shell mobile-overscroll-contain">
@@ -153,53 +139,6 @@ export default function SettingsPage() {
             <span>{tr('设备管理', 'Device Management')}</span>
             <ArrowRight className="h-4 w-4" />
           </Button>
-        </CardContent>
-      </Card>
-
-      {/* Usage Statistics */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>{tr('使用统计', 'Usage Statistics')}</CardTitle>
-          <CardDescription>{tr('查看资源使用情况', 'View your resource usage')}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Messages Usage */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">{tr('消息', 'Messages')}</span>
-              <span className="text-sm text-muted-foreground">
-                {usage.messagesUsed} / {usage.messagesLimit === Infinity ? '∞' : usage.messagesLimit}
-              </span>
-            </div>
-            <Progress value={getMessagesUsagePercentage()} className="h-2" />
-            {!limits.canSendMessage && (
-              <p className="text-xs text-muted-foreground mt-1">{tr('已达到限制，请升级至 Pro', 'Limit reached. Please upgrade to Pro')}</p>
-            )}
-          </div>
-
-          {/* Storage Usage */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">{tr('存储', 'Storage')}</span>
-              <span className="text-sm text-muted-foreground">
-                {(usage.storageUsed / 1024).toFixed(2)} GB / {usage.storageLimit === Infinity ? '∞' : (usage.storageLimit / 1024).toFixed(0)} GB
-              </span>
-            </div>
-            <Progress value={getStorageUsagePercentage()} className="h-2" />
-          </div>
-
-          {/* Workspaces Usage */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">{tr('工作区', 'Workspaces')}</span>
-              <span className="text-sm text-muted-foreground">
-                {usage.workspacesUsed} / {usage.workspacesLimit === Infinity ? '∞' : usage.workspacesLimit}
-              </span>
-            </div>
-            {!limits.canCreateWorkspace && (
-              <p className="text-xs text-muted-foreground mt-1">{tr('已达到限制，请升级至 Pro', 'Limit reached. Please upgrade to Pro')}</p>
-            )}
-          </div>
         </CardContent>
       </Card>
 

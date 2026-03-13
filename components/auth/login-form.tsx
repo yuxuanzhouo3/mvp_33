@@ -108,7 +108,6 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
         loginFailed: 'Login failed',
         emailPlaceholder: 'you@company.com',
         enterCredentials: 'Enter your credentials to access your workspace',
-        quickDemo: 'Quick Demo Login',
         signingIn: 'Signing in...',
         invalidCredentials: 'Invalid email or password',
         unexpectedResponse: 'Server returned an unexpected response. Please try again.',
@@ -138,7 +137,6 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
         loginFailed: '登录失败',
         emailPlaceholder: 'you@company.com',
         enterCredentials: '输入您的凭据以访问工作区',
-        quickDemo: '快速演示登录',
         signingIn: '登录中...',
         invalidCredentials: 'Invalid email or password',
         unexpectedResponse: '服务器返回了意外响应，请稍后再试。',
@@ -344,61 +342,6 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
     }
   }
 
-  // Quick login for demo
-  const handleQuickLogin = async () => {
-    setEmail('alice@company.com')
-    setPassword('password')
-    setError('')
-    setIsLoading(true)
-
-    try {
-      const deviceInfo = await collectClientDeviceInfo()
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: 'alice@company.com',
-          password: 'password',
-          ...deviceInfo,
-        }),
-      })
-
-      console.log('[QUICK LOGIN] Response status:', response.status)
-      let parsedBody
-      try {
-        parsedBody = await parseLoginResponse(response)
-      } catch (parseError) {
-        console.error('[QUICK LOGIN] Failed to parse response:', parseError)
-        throw new Error(t('unexpectedResponse'))
-      }
-      const data = parsedBody.data || {}
-
-      if (!response.ok) {
-        console.error('[QUICK LOGIN] Login failed:', data?.error)
-        throw new Error(data?.error || 'Invalid email or password')
-      }
-
-      if (data?.success && data?.user) {
-        console.log('[QUICK LOGIN] Login successful')
-        // Store user and token
-        if (typeof window !== 'undefined') {
-          mockAuth.setCurrentUser(data.user)
-          localStorage.setItem('chat_app_token', data.token)
-        }
-        onSuccess()
-      } else {
-        throw new Error('Invalid email or password')
-      }
-    } catch (err) {
-      console.error('[QUICK LOGIN] Error:', err)
-      setError(err instanceof Error ? err.message : 'Login failed')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   const handleMiniProgramLogin = () => {
     setError('')
     if (typeof window === 'undefined') return
@@ -581,15 +524,6 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
             {t('signIn')}
           </>
         )}
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full"
-        onClick={handleQuickLogin}
-        disabled={isLoading}
-      >
-        {t('quickDemo')}
       </Button>
       {footerActions}
     </form>
