@@ -10,11 +10,14 @@ import { useRouter } from 'next/navigation'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AppNavigation } from '@/components/layout/app-navigation'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useSettings } from '@/lib/settings-context'
 
 export default function SettingsPage() {
   const router = useRouter()
   const { subscription, usage, limits } = useSubscription()
   const isMobile = useIsMobile()
+  const { language } = useSettings()
+  const tr = (zh: string, en: string) => (language === 'zh' ? zh : en)
 
   const getUsagePercentage = (used: number, limit: number) => {
     if (limit === Infinity) return 0
@@ -40,11 +43,11 @@ export default function SettingsPage() {
         className="mb-4 h-9 px-2"
       >
         <ArrowLeft className="h-4 w-4 mr-2" />
-        Back
+        {tr('返回', 'Back')}
       </Button>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold mb-2 sm:text-3xl">Settings</h1>
-        <p className="text-muted-foreground">Manage your subscription and usage</p>
+        <h1 className="text-2xl font-bold mb-2 sm:text-3xl">{tr('设置', 'Settings')}</h1>
+        <p className="text-muted-foreground">{tr('管理订阅和使用情况', 'Manage your subscription and usage')}</p>
       </div>
 
       {/* Subscription Status */}
@@ -53,18 +56,18 @@ export default function SettingsPage() {
           <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="flex flex-wrap items-center gap-2">
-                Subscription Status
+                {tr('订阅状态', 'Subscription Status')}
                 <SubscriptionBadge subscription={subscription} showDays />
               </CardTitle>
               <CardDescription className="mt-1">
                 {subscription.type === 'free' ? (
-                  'You are currently on the free plan'
+                  tr('您当前为免费方案', 'You are currently on the free plan')
                 ) : subscription.isActive ? (
                   subscription.daysRemaining !== null
-                    ? `Your subscription expires in ${subscription.daysRemaining} days`
-                    : 'Your subscription is active'
+                    ? tr(`您的订阅将在 ${subscription.daysRemaining} 天后到期`, `Your subscription expires in ${subscription.daysRemaining} days`)
+                    : tr('您的订阅已激活', 'Your subscription is active')
                 ) : (
-                  'Your subscription has expired'
+                  tr('您的订阅已过期', 'Your subscription has expired')
                 )}
               </CardDescription>
             </div>
@@ -74,7 +77,7 @@ export default function SettingsPage() {
                 variant="default"
                 className="w-full gap-2 sm:w-auto"
               >
-                Upgrade to Pro
+                {tr('升级至 Pro', 'Upgrade to Pro')}
               </Button>
             )}
             {subscription.type !== 'free' && !subscription.isActive && (
@@ -83,7 +86,7 @@ export default function SettingsPage() {
                 variant="outline"
                 className="w-full gap-2 sm:w-auto"
               >
-                Renew Subscription
+                {tr('续订', 'Renew Subscription')}
               </Button>
             )}
           </div>
@@ -94,19 +97,19 @@ export default function SettingsPage() {
               <AlertDescription>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="font-medium mb-1">Free Plan Limits</p>
+                    <p className="font-medium mb-1">{tr('免费方案限制', 'Free Plan Limits')}</p>
                     <ul className="text-sm text-muted-foreground space-y-1">
-                      <li>• 1,000 messages per month</li>
-                      <li>• 1GB storage space</li>
-                      <li>• 1 workspace</li>
-                      <li>• Up to 10 members per workspace</li>
+                      <li>• {tr('每月 1,000 条消息', '1,000 messages per month')}</li>
+                      <li>• {tr('1GB 存储空间', '1GB storage space')}</li>
+                      <li>• {tr('1 个工作区', '1 workspace')}</li>
+                      <li>• {tr('每个工作区最多 10 位成员', 'Up to 10 members per workspace')}</li>
                     </ul>
                   </div>
                   <Button
                     onClick={() => router.push('/payment')}
                     className="w-full gap-2 sm:w-auto"
                   >
-                    View Pro Plans
+                    {tr('查看 Pro 方案', 'View Pro Plans')}
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </div>
@@ -119,8 +122,8 @@ export default function SettingsPage() {
       {/* Account Security & Management */}
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Account Security & Management</CardTitle>
-          <CardDescription>Manage your devices and security settings</CardDescription>
+          <CardTitle>{tr('账号安全与管理', 'Account Security & Management')}</CardTitle>
+          <CardDescription>{tr('管理登录设备和安全设置', 'Manage your devices and security settings')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           <Button
@@ -130,7 +133,7 @@ export default function SettingsPage() {
           >
             <span className="inline-flex items-center gap-2">
               <Bell className="h-4 w-4" />
-              Message Notifications
+              {tr('消息通知', 'Message Notifications')}
             </span>
             <ArrowRight className="h-4 w-4" />
           </Button>
@@ -139,7 +142,7 @@ export default function SettingsPage() {
             variant="outline"
             className="w-full justify-between"
           >
-            <span>Preferences & Privacy</span>
+            <span>{tr('偏好与隐私', 'Preferences & Privacy')}</span>
             <ArrowRight className="h-4 w-4" />
           </Button>
           <Button
@@ -147,7 +150,7 @@ export default function SettingsPage() {
             variant="outline"
             className="w-full justify-between"
           >
-            <span>Device Management</span>
+            <span>{tr('设备管理', 'Device Management')}</span>
             <ArrowRight className="h-4 w-4" />
           </Button>
         </CardContent>
@@ -156,28 +159,28 @@ export default function SettingsPage() {
       {/* Usage Statistics */}
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Usage Statistics</CardTitle>
-          <CardDescription>View your resource usage</CardDescription>
+          <CardTitle>{tr('使用统计', 'Usage Statistics')}</CardTitle>
+          <CardDescription>{tr('查看资源使用情况', 'View your resource usage')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Messages Usage */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">Messages</span>
+              <span className="text-sm font-medium">{tr('消息', 'Messages')}</span>
               <span className="text-sm text-muted-foreground">
                 {usage.messagesUsed} / {usage.messagesLimit === Infinity ? '∞' : usage.messagesLimit}
               </span>
             </div>
             <Progress value={getMessagesUsagePercentage()} className="h-2" />
             {!limits.canSendMessage && (
-              <p className="text-xs text-muted-foreground mt-1">Limit reached. Please upgrade to Pro</p>
+              <p className="text-xs text-muted-foreground mt-1">{tr('已达到限制，请升级至 Pro', 'Limit reached. Please upgrade to Pro')}</p>
             )}
           </div>
 
           {/* Storage Usage */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">Storage</span>
+              <span className="text-sm font-medium">{tr('存储', 'Storage')}</span>
               <span className="text-sm text-muted-foreground">
                 {(usage.storageUsed / 1024).toFixed(2)} GB / {usage.storageLimit === Infinity ? '∞' : (usage.storageLimit / 1024).toFixed(0)} GB
               </span>
@@ -188,13 +191,13 @@ export default function SettingsPage() {
           {/* Workspaces Usage */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">Workspaces</span>
+              <span className="text-sm font-medium">{tr('工作区', 'Workspaces')}</span>
               <span className="text-sm text-muted-foreground">
                 {usage.workspacesUsed} / {usage.workspacesLimit === Infinity ? '∞' : usage.workspacesLimit}
               </span>
             </div>
             {!limits.canCreateWorkspace && (
-              <p className="text-xs text-muted-foreground mt-1">Limit reached. Please upgrade to Pro</p>
+              <p className="text-xs text-muted-foreground mt-1">{tr('已达到限制，请升级至 Pro', 'Limit reached. Please upgrade to Pro')}</p>
             )}
           </div>
         </CardContent>
@@ -204,51 +207,51 @@ export default function SettingsPage() {
       {subscription.type === 'free' && (
         <Card>
           <CardHeader>
-            <CardTitle>Pro Features</CardTitle>
-            <CardDescription>Upgrade to Pro to unlock the following features</CardDescription>
+            <CardTitle>{tr('Pro 功能', 'Pro Features')}</CardTitle>
+            <CardDescription>{tr('升级至 Pro 解锁以下功能', 'Upgrade to Pro to unlock the following features')}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex items-start gap-3">
                 <div className="h-1.5 w-1.5 rounded-full bg-foreground mt-2" />
                 <div>
-                  <p className="font-medium">Unlimited Messages</p>
-                  <p className="text-sm text-muted-foreground">Send messages without restrictions</p>
+                  <p className="font-medium">{tr('无限消息', 'Unlimited Messages')}</p>
+                  <p className="text-sm text-muted-foreground">{tr('消息发送不受限制', 'Send messages without restrictions')}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <div className="h-1.5 w-1.5 rounded-full bg-foreground mt-2" />
                 <div>
-                  <p className="font-medium">Large Storage</p>
-                  <p className="text-sm text-muted-foreground">100GB (Monthly) or 1TB (Annual)</p>
+                  <p className="font-medium">{tr('大容量存储', 'Large Storage')}</p>
+                  <p className="text-sm text-muted-foreground">{tr('月度 100GB 或年度 1TB', '100GB (Monthly) or 1TB (Annual)')}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <div className="h-1.5 w-1.5 rounded-full bg-foreground mt-2" />
                 <div>
-                  <p className="font-medium">Unlimited Workspaces</p>
-                  <p className="text-sm text-muted-foreground">Create as many workspaces as you need</p>
+                  <p className="font-medium">{tr('无限工作区', 'Unlimited Workspaces')}</p>
+                  <p className="text-sm text-muted-foreground">{tr('可创建任意数量的工作区', 'Create as many workspaces as you need')}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <div className="h-1.5 w-1.5 rounded-full bg-foreground mt-2" />
                 <div>
-                  <p className="font-medium">Video Calls</p>
-                  <p className="text-sm text-muted-foreground">HD video calling features</p>
+                  <p className="font-medium">{tr('视频通话', 'Video Calls')}</p>
+                  <p className="text-sm text-muted-foreground">{tr('高清视频通话功能', 'HD video calling features')}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <div className="h-1.5 w-1.5 rounded-full bg-foreground mt-2" />
                 <div>
-                  <p className="font-medium">Unlimited Members</p>
-                  <p className="text-sm text-muted-foreground">No member limit per workspace</p>
+                  <p className="font-medium">{tr('无限成员', 'Unlimited Members')}</p>
+                  <p className="text-sm text-muted-foreground">{tr('每个工作区无成员数量限制', 'No member limit per workspace')}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <div className="h-1.5 w-1.5 rounded-full bg-foreground mt-2" />
                 <div>
-                  <p className="font-medium">Priority Support</p>
-                  <p className="text-sm text-muted-foreground">24/7 priority customer support</p>
+                  <p className="font-medium">{tr('优先支持', 'Priority Support')}</p>
+                  <p className="text-sm text-muted-foreground">{tr('7x24 优先客户支持', '24/7 priority customer support')}</p>
                 </div>
               </div>
             </div>
@@ -258,7 +261,7 @@ export default function SettingsPage() {
                 variant="default"
                 className="w-full gap-2"
               >
-                Upgrade to Pro Now
+                {tr('立即升级 Pro', 'Upgrade to Pro Now')}
               </Button>
             </div>
           </CardContent>
