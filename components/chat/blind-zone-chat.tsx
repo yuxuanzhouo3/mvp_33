@@ -36,6 +36,9 @@ export function BlindZoneChat({
   const { language } = useSettings()
   const t = (key: keyof typeof import('@/lib/i18n').translations.en) => getTranslation(language, key)
   const { toast } = useToast()
+  useEffect(() => {
+    console.log('[盲区调试] props: isOpen =', isOpen, 'workspaceId =', workspaceId, 'isWorkspaceAdmin =', isWorkspaceAdmin)
+  }, [isOpen, workspaceId, isWorkspaceAdmin])
 
   // 加载消息
   const loadMessages = useCallback(async () => {
@@ -53,8 +56,21 @@ export function BlindZoneChat({
       const response = await fetch(url)
       console.log('[盲区调试] loadMessages: 响应状态 =', response.status)
 
-      const data = await response.json()
+      const responseText = await response.text()
+      const responseSnippet = responseText.length > 1000 ? `${responseText.slice(0, 1000)}...` : responseText
+      console.log('[盲区调试] loadMessages: 响应文本 =', responseSnippet)
+
+      let data: any = null
+      try {
+        data = responseText ? JSON.parse(responseText) : null
+      } catch (error) {
+        console.warn('[盲区调试] loadMessages: JSON 解析失败', error)
+      }
       console.log('[盲区调试] loadMessages: 响应数据 =', JSON.stringify(data, null, 2))
+
+      if (!data) {
+        throw new Error('Invalid response JSON')
+      }
 
       if (data.success) {
         console.log('[盲区调试] loadMessages: 成功，消息数量 =', data.messages?.length || 0)
@@ -113,6 +129,15 @@ export function BlindZoneChat({
       console.log('[盲区调试] handleSendMessage: 跳过发送, inputText.trim() =', inputText.trim())
       return
     }
+    if (!workspaceId) {
+      console.log('[盲区调试] handleSendMessage: workspaceId 为空，取消发送')
+      toast({
+        title: language === 'zh' ? '发送失败' : 'Send Failed',
+        description: language === 'zh' ? '未选择工作区，无法发送' : 'No workspace selected. Unable to send.',
+        variant: 'destructive',
+      })
+      return
+    }
 
     const content = inputText.trim()
     console.log('[盲区调试] handleSendMessage: 准备发送消息, content =', content)
@@ -159,8 +184,21 @@ export function BlindZoneChat({
       console.log('[盲区调试] handleSendMessage: 响应状态 =', response.status)
       console.log('[盲区调试] handleSendMessage: 响应 OK =', response.ok)
 
-      const data = await response.json()
+      const responseText = await response.text()
+      const responseSnippet = responseText.length > 1000 ? `${responseText.slice(0, 1000)}...` : responseText
+      console.log('[盲区调试] handleSendMessage: 响应文本 =', responseSnippet)
+
+      let data: any = null
+      try {
+        data = responseText ? JSON.parse(responseText) : null
+      } catch (error) {
+        console.warn('[盲区调试] handleSendMessage: JSON 解析失败', error)
+      }
       console.log('[盲区调试] handleSendMessage: 响应数据 =', JSON.stringify(data, null, 2))
+
+      if (!data) {
+        throw new Error('Invalid response JSON')
+      }
 
       if (data.success && data.message) {
         console.log('[盲区调试] handleSendMessage: 发送成功，替换乐观消息')

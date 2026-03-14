@@ -196,8 +196,30 @@ export async function isWorkspaceMember(workspaceId: string, userId: string): Pr
     const isMember = (res.data?.length || 0) > 0
     console.log('[盲区DB] isWorkspaceMember: 是否为成员 =', isMember)
 
-    return isMember
-  } catch (error) {
+    if (isMember) {
+      return true
+    }
+
+    // fallback: allow workspace owner even if workspace_members is incomplete
+    try {
+      const ownerQuery = { _id: workspaceId, owner_id: userId }
+      console.log('[盲区DB] isWorkspaceMember: 回退查询工作区 owner =', ownerQuery)
+      const ownerRes = await db.collection('workspaces')
+        .where(ownerQuery)
+        .limit(1)
+        .get()
+      const isOwner = (ownerRes.data?.length || 0) > 0
+      console.log('[盲区DB] isWorkspaceMember: 是否为 owner =', isOwner)
+      return isOwner
+    } catch (ownerError) {
+      console.error('[盲区DB] isWorkspaceMember: owner 查询异常 =', ownerError)
+      return false
+    }
+  } catch (error: any) {
+    if (error?.code === 'DATABASE_COLLECTION_NOT_EXIST') {
+      console.log('[盲区DB] isWorkspaceMember: workspace_members 不存在，默认放行')
+      return true
+    }
     console.error('[盲区DB] isWorkspaceMember: 查询异常 =', error)
     return false
   }

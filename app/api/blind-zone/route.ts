@@ -4,9 +4,12 @@ import { IS_DOMESTIC_VERSION } from '@/config'
 
 // GET /api/blind-zone?workspaceId=xxx
 export async function GET(request: NextRequest) {
+  console.log('[盲区API] GET: 开始处理请求')
   try {
     const searchParams = request.nextUrl.searchParams
     const workspaceId = searchParams.get('workspaceId')
+
+    console.log('[盲区API] GET: workspaceId =', workspaceId)
 
     if (!workspaceId) {
       return NextResponse.json(
@@ -19,16 +22,20 @@ export async function GET(request: NextRequest) {
     let userId: string | null = null
 
     if (IS_DOMESTIC_VERSION) {
+      console.log('[盲区API] GET: 国内版，验证 CloudBase session')
       const { verifyCloudBaseSession } = await import('@/lib/cloudbase/auth')
       const user = await verifyCloudBaseSession(request)
+      console.log('[盲区API] GET: CloudBase 验证结果 =', user ? { id: user.id } : null)
       if (!user) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
       userId = user.id
     } else {
+      console.log('[盲区API] GET: 国际版，验证 Supabase session')
       const { createClient } = await import('@/lib/supabase/server')
       const supabase = await createClient()
       const { data: { user } } = await supabase.auth.getUser()
+      console.log('[盲区API] GET: Supabase 验证结果 =', user ? { id: user.id } : null)
       if (!user) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
@@ -37,6 +44,7 @@ export async function GET(request: NextRequest) {
 
     const dbClient = await getDatabaseClientForUser(request)
     const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
+    console.log('[盲区API] GET: 数据库客户端 =', { type: dbClient.type, region: userRegion })
 
     // 验证工作区是否存在
     let workspaceExists = false
@@ -44,11 +52,14 @@ export async function GET(request: NextRequest) {
       const { getCloudBaseDb } = await import('@/lib/cloudbase/client')
       const db = getCloudBaseDb()
       if (db) {
+        console.log('[盲区API] GET: CloudBase 工作区查询 _id =', workspaceId)
         const res = await db.collection('workspaces')
           .where({ _id: workspaceId })
           .limit(1)
           .get()
         workspaceExists = (res.data?.length || 0) > 0
+      } else {
+        console.log('[盲区API] GET: CloudBase DB 未配置')
       }
     } else {
       const { createClient } = await import('@/lib/supabase/server')
@@ -61,6 +72,7 @@ export async function GET(request: NextRequest) {
       workspaceExists = !!workspace
     }
 
+    console.log('[盲区API] GET: workspaceExists =', workspaceExists)
     if (!workspaceExists) {
       return NextResponse.json(
         { error: 'Workspace not found. Please select a valid workspace.' },
@@ -73,9 +85,11 @@ export async function GET(request: NextRequest) {
     if (dbClient.type === 'cloudbase' && userRegion === 'cn') {
       const { isWorkspaceMember } = await import('@/lib/database/cloudbase/blind-zone')
       isMember = await isWorkspaceMember(workspaceId, userId)
+      console.log('[盲区API] GET: CloudBase 成员验证结果 =', isMember)
     } else {
       const { isWorkspaceMember } = await import('@/lib/database/supabase/blind-zone')
       isMember = await isWorkspaceMember(workspaceId, userId)
+      console.log('[盲区API] GET: Supabase 成员验证结果 =', isMember)
     }
 
     if (!isMember) {
@@ -94,6 +108,8 @@ export async function GET(request: NextRequest) {
       const { getBlindZoneMessages } = await import('@/lib/database/supabase/blind-zone')
       messages = await getBlindZoneMessages(workspaceId)
     }
+
+    console.log('[盲区API] GET: 返回消息数量 =', messages?.length || 0)
 
     return NextResponse.json({
       success: true,
@@ -163,11 +179,25 @@ export async function POST(request: NextRequest) {
       const { getCloudBaseDb } = await import('@/lib/cloudbase/client')
       const db = getCloudBaseDb()
       if (db) {
+        const queryWithRegion = { _id: workspaceId, region: 'cn' }
+        console.log('[盲区API] POST: CloudBase 工作区查询(含region) =', queryWithRegion)
         const res = await db.collection('workspaces')
-          .where({ _id: workspaceId, region: 'cn' })
+          .where(queryWithRegion)
           .limit(1)
           .get()
         workspaceExists = (res.data?.length || 0) > 0
+
+        if (!workspaceExists) {
+          const fallbackQuery = { _id: workspaceId }
+          console.log('[盲区API] POST: CloudBase 工作区回退查询(不含region) =', fallbackQuery)
+          const resFallback = await db.collection('workspaces')
+            .where(fallbackQuery)
+            .limit(1)
+            .get()
+          workspaceExists = (resFallback.data?.length || 0) > 0
+        }
+      } else {
+        console.log('[盲区API] POST: CloudBase DB 未配置')
       }
     } else {
       // Supabase: 查询工作区是否存在
@@ -181,6 +211,7 @@ export async function POST(request: NextRequest) {
       workspaceExists = !!workspace
     }
 
+    console.log('[盲区API] POST: workspaceExists =', workspaceExists)
     if (!workspaceExists) {
       console.log('[盲区API] POST: 工作区不存在 (404), workspaceId =', workspaceId)
       return NextResponse.json(
@@ -188,7 +219,6 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       )
     }
-
     // 验证用户是工作区成员
     let isMember = false
     if (dbClient.type === 'cloudbase' && userRegion === 'cn') {
