@@ -278,7 +278,16 @@ export default function Home() {
       </main>
 
       <footer className="relative z-10 border-t border-black/5 bg-white/70 py-6 text-center text-xs text-black/50 dark:border-white/10 dark:bg-black/40 dark:text-white/50">
-        {t.footer}
+        <span>{t.footer}</span>
+        <span className="mx-2">|</span>
+        <a
+          href="https://beian.miit.gov.cn/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hover:underline"
+        >
+          粤ICP备2024281756号-3
+        </a>
       </footer>
     </div>
   )
