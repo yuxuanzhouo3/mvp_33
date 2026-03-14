@@ -19,7 +19,6 @@ import {
   Square,
   Terminal,
   Video,
-  Volume2,
   X,
 } from 'lucide-react'
 import type { AiAsset, AiGenerationJob, AiLanguage, AiMarketingProfile } from '@/lib/admin/types'
@@ -190,7 +189,6 @@ export default function AiStudioClient({ region: _region, language, route: _rout
 
   const posterAsset = posterJob?.assets.find((asset) => asset.asset_type === 'image') || null
   const videoAsset = videoJob?.assets.find((asset) => asset.asset_type === 'video') || null
-  const coverAsset = videoJob?.assets.find((asset) => asset.asset_type === 'cover') || null
 
   useEffect(() => () => {
     Object.values(pollersRef.current).forEach((stop) => stop?.())
@@ -471,7 +469,6 @@ export default function AiStudioClient({ region: _region, language, route: _rout
 
   const posterPrompt = posterJob?.job?.output_payload?.prompt_bundle?.prompt || ''
   const executedPosterPrompt = posterPrompt || posterPromptDraft
-  const videoPlan = videoJob?.job?.output_payload?.video_plan || null
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-6 flex flex-col">
@@ -904,50 +901,8 @@ export default function AiStudioClient({ region: _region, language, route: _rout
                       )}
                     </div>
 
-                    {coverAsset && (
-                      <div className="rounded-xl overflow-hidden border border-slate-800">
-                        <img src={coverAsset.public_url} alt="cover" className="w-full object-cover" />
-                      </div>
-                    )}
-
                     {videoAsset && (
                       <video src={videoAsset.public_url} controls className="w-full rounded-xl border border-slate-800" />
-                    )}
-
-                    {videoPlan?.scenes && (
-                      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-                        <div className="p-3 bg-slate-800 border-b border-slate-700 font-medium text-xs text-slate-300 flex justify-between">
-                          <span>{videoPlan.headline || profile.product_name}</span>
-                          <span className="text-amber-300 flex items-center gap-1">
-                            <Mic className="w-3 h-3" /> {vidVoice}
-                          </span>
-                        </div>
-                        <div className="p-3 space-y-3">
-                          {videoPlan.scenes.map((scene: any, index: number) => (
-                            <div key={`${scene.title || 'scene'}-${index}`} className="flex gap-3 p-2.5 bg-slate-900/80 rounded-lg border border-slate-700/50">
-                              <div className="flex-shrink-0 w-6 h-6 bg-amber-500/20 text-amber-200 rounded-full flex items-center justify-center font-semibold text-xs shadow-inner">
-                                {index + 1}
-                              </div>
-                              <div className="flex-1 space-y-2">
-                                <div>
-                                  <span className="text-[10px] font-semibold text-slate-500 mb-0.5 block uppercase">画面</span>
-                                  <p className="text-xs text-slate-300 bg-slate-800 p-1.5 rounded border border-slate-700">
-                                    {scene.visual_prompt || scene.visual || scene.title || ''}
-                                  </p>
-                                </div>
-                                <div>
-                                  <span className="text-[10px] font-semibold text-emerald-300 mb-0.5 flex items-center gap-1 uppercase">
-                                    <Volume2 className="w-3 h-3" /> 台词
-                                  </span>
-                                  <p className="text-xs text-emerald-100 bg-emerald-900/20 border border-emerald-900/40 p-1.5 rounded">
-                                    {scene.narration || scene.audio || ''}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
                     )}
                   </div>
                 )}
