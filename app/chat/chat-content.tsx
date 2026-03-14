@@ -5918,9 +5918,18 @@ function ChatPageContent() {
 
       } else {
 
-        // Remove failed message
+        console.error('Failed to send message:', {
+          error: data?.error,
+          details: data,
+          type,
+          conversationId: selectedConversationId,
+        })
 
+        // Remove failed message
         setMessages(prev => prev.filter(msg => msg.id !== tempId))
+
+        const errorMsg = data?.error || (language === 'zh' ? '发送失败' : 'Failed to send message')
+        alert(errorMsg)
 
       }
 
@@ -5929,8 +5938,9 @@ function ChatPageContent() {
       console.error('Failed to send message:', error)
 
       // Remove failed message
-
       setMessages(prev => prev.filter(msg => msg.id !== tempId))
+
+      alert(language === 'zh' ? '发送失败，请稍后重试' : 'Failed to send message. Please try again.')
 
     }
 

@@ -161,6 +161,7 @@ export async function POST(request: NextRequest) {
 
     const dbClient = await getDatabaseClientForUser(request)
     const userRegion = dbClient.region === 'cn' ? 'cn' : 'global'
+    const normalizedType = type === 'voice' ? 'audio' : type
 
     // CN: write message into CloudBase messages collection
     if (dbClient.type === 'cloudbase' && userRegion === 'cn') {
@@ -314,11 +315,15 @@ export async function POST(request: NextRequest) {
       code_language: metadata?.code_language
     })
     
+    if (normalizedType !== type) {
+      console.log('[messages][INTL] Normalized message type:', { input: type, stored: normalizedType })
+    }
+
     const message = await createMessage(
       conversationId,
       user.id,
       contentForStorage,
-      type,
+      normalizedType,
       metadata
     )
 
@@ -327,7 +332,7 @@ export async function POST(request: NextRequest) {
       senderId: user.id,
       messageId: String(message.id || ''),
       content: contentForStorage,
-      type,
+      type: normalizedType,
     }).catch((error) => {
       console.error('[messages][INTL] push notify failed:', error)
     })
