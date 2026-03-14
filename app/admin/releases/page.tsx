@@ -462,11 +462,11 @@ export default function ReleasesManagementPage() {
                     id="file"
                     name="file"
                     type="file"
-                    accept=".apk,.ipa,.exe,.dmg,.deb,.rpm,.AppImage,.zip"
+                    accept=".apk,.aab,.ipa,.exe,.dmg,.deb,.rpm,.AppImage,.zip"
                     required
                   />
                   <p className="text-xs text-muted-foreground">
-                    支持 APK、IPA、EXE、DMG、DEB、RPM 等格式
+                    支持 APK、AAB、IPA、EXE、DMG、DEB、RPM 等格式
                   </p>
                 </div>
 

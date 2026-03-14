@@ -33,6 +33,8 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '4.5mb',
     },
+    // Next.js 16+ 使用 proxyClientMaxBodySize 替代 middlewareClientMaxBodySize
+    proxyClientMaxBodySize: '500mb',
   },
 }
 
