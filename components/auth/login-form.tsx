@@ -49,7 +49,7 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
   const [countdown, setCountdown] = useState(0)
   const [error, setError] = useState('')
   const [isMiniProgram, setIsMiniProgram] = useState(false)
-  const [loginMode, setLoginMode] = useState<'email' | 'sms'>(() => (IS_DOMESTIC_VERSION ? 'sms' : 'email'))
+  const [loginMode, setLoginMode] = useState<'email' | 'sms'>('email')
   const { language } = useSettings()
 
   const isDomestic = IS_DOMESTIC_VERSION
@@ -73,7 +73,7 @@ export function LoginForm({ onSuccess, onForgotPassword, onRegister, successMess
     const miniProgram = detectWeChatMiniProgram()
     setIsMiniProgram(miniProgram)
     if (!miniProgram) {
-      setLoginMode('sms')
+      setLoginMode('email')
     }
   }, [])
 
