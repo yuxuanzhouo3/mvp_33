@@ -30,16 +30,36 @@ function readEnv(names: string[]): string {
 
 function getTpnsConfig(region: TpnsRegion): TpnsConfig | null {
   if (region === 'CN') {
-    const accessId = readEnv(['TPNS_CHINA_ACCESS_ID', 'TPNS_CN_ACCESS_ID'])
-    const secretKey = readEnv(['TPNS_CHINA_SECRET_KEY', 'TPNS_CN_SECRET_KEY'])
-    const host = readEnv(['TPNS_CHINA_API_HOST', 'TPNS_CN_API_HOST']) || 'api.tpns.tencent.com'
+    const accessId = readEnv([
+      'TPNS_CHINA_ACCESS_ID',
+      'TPNS_CN_ACCESS_ID',
+      'TPNS_ACCESS_ID',
+      'TPNS_SECRET_ID',
+    ])
+    const secretKey = readEnv([
+      'TPNS_CHINA_SECRET_KEY',
+      'TPNS_CN_SECRET_KEY',
+      'TPNS_ACCESS_KEY',
+      'TPNS_SECRET_KEY',
+    ])
+    const host =
+      readEnv(['TPNS_CHINA_API_HOST', 'TPNS_CN_API_HOST', 'TPNS_API_HOST']) || 'api.tpns.tencent.com'
     if (!accessId || !secretKey) return null
     return { accessId, secretKey, host }
   }
 
-  const accessId = readEnv(['TPNS_GLOBAL_ACCESS_ID'])
-  const secretKey = readEnv(['TPNS_GLOBAL_SECRET_KEY'])
-  const host = readEnv(['TPNS_GLOBAL_API_HOST']) || 'api.tpns.sgp.tencent.com'
+  const accessId = readEnv([
+    'TPNS_GLOBAL_ACCESS_ID',
+    'TPNS_ACCESS_ID',
+    'TPNS_SECRET_ID',
+  ])
+  const secretKey = readEnv([
+    'TPNS_GLOBAL_SECRET_KEY',
+    'TPNS_ACCESS_KEY',
+    'TPNS_SECRET_KEY',
+  ])
+  const host =
+    readEnv(['TPNS_GLOBAL_API_HOST', 'TPNS_API_HOST']) || 'api.tpns.sgp.tencent.com'
   if (!accessId || !secretKey) return null
   return { accessId, secretKey, host }
 }
