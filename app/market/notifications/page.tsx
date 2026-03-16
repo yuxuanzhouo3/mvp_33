@@ -13,7 +13,7 @@ export default async function MarketNotificationsPage() {
     <Suspense
       fallback={
         <div className="min-h-screen bg-muted/20 px-4 py-8">
-          <div className="mx-auto max-w-6xl space-y-4">
+          <div className="mx-auto max-w-[1480px] space-y-4">
             <Skeleton className="h-10 w-1/3" />
             <Skeleton className="h-[600px] w-full" />
           </div>
