@@ -78,14 +78,27 @@ async function searchCloudbaseUsers(query: string): Promise<NotificationUser[]> 
   const userIds = rows.map((user) => String(user?.id || user?._id || "").trim()).filter(Boolean)
   if (userIds.length === 0) return []
 
-  const devicesRes = await db
-    .collection("user_devices")
-    .where({ user_id: cmd.in(userIds) })
-    .limit(userIds.length * 3)
-    .get()
+  const latestDevices = await Promise.all(
+    userIds.map(async (userId) => {
+      const devicesRes = await db
+        .collection("user_devices")
+        .where({ user_id: userId })
+        .orderBy("last_active_at", "desc")
+        .limit(20)
+        .get()
 
-  const devices: any[] = Array.isArray(devicesRes?.data) ? devicesRes.data : []
-  const deviceByUser = mapAndroidDevices(devices)
+      const devices: any[] = Array.isArray(devicesRes?.data) ? devicesRes.data : []
+      return mapAndroidDevices(devices).get(userId) || null
+    }),
+  )
+
+  const deviceByUser = new Map<string, any>()
+  latestDevices.forEach((device) => {
+    const userId = String(device?.user_id || "").trim()
+    if (userId && device) {
+      deviceByUser.set(userId, device)
+    }
+  })
 
   return rows
     .map<NotificationUser | null>((user) => {
@@ -132,7 +145,9 @@ async function searchSupabaseUsers(query: string): Promise<NotificationUser[]> {
 
   const { data: devices, error: deviceError } = await supabase
     .from("user_devices")
-    .select("user_id, push_token, client_type, device_type, device_brand, device_model")
+    .select(
+      "user_id, push_token, client_type, device_type, device_brand, device_model, push_token_updated_at, last_active_at, created_at",
+    )
     .in("user_id", userIds)
 
   if (deviceError) throw deviceError

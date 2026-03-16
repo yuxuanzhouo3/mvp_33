@@ -168,7 +168,9 @@ async function collectSupabaseTokens(): Promise<string[]> {
 
   const { data: devices, error: devicesError } = await supabase
     .from("user_devices")
-    .select("user_id, push_token, client_type, device_type, device_brand, device_model")
+    .select(
+      "user_id, push_token, client_type, device_type, device_brand, device_model, push_token_updated_at, last_active_at, created_at",
+    )
     .in("user_id", userIds)
 
   if (devicesError) throw devicesError
