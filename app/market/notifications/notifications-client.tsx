@@ -631,12 +631,14 @@ export function NotificationsClient() {
                       <div className="mt-2 text-2xl font-semibold text-slate-950">
                         {isLoadingCold ? "--" : coldSnapshot?.inactiveTotalCount ?? 0}
                       </div>
+                      <div className="mt-1 text-[11px] text-slate-400">包含没有推送设备的用户</div>
                     </div>
                     <div className="rounded-2xl border border-white bg-white px-4 py-3 shadow-sm">
                       <div className="text-xs text-slate-500">具备推送能力</div>
                       <div className="mt-2 text-2xl font-semibold text-slate-950">
                         {isLoadingCold ? "--" : coldSnapshot?.eligibleTotalCount ?? 0}
                       </div>
+                      <div className="mt-1 text-[11px] text-slate-400">仅统计已登记 Android Token 的用户</div>
                     </div>
                     <div className="rounded-2xl border border-white bg-white px-4 py-3 shadow-sm">
                       <div className="text-xs text-slate-500">当前勾选发送</div>
@@ -649,6 +651,14 @@ export function NotificationsClient() {
                       当前系统最多处理前 2000 位冷召回用户，列表与发送范围也按这一上限执行。
                     </div>
                   )}
+
+                  {!!coldSnapshot &&
+                    coldSnapshot.inactiveTotalCount > 0 &&
+                    coldSnapshot.eligibleTotalCount === 0 && (
+                      <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+                        当前这批 7 天未登录用户里，没有人登记 Android 推送 Token，因此无法出现在可推送列表中。
+                      </div>
+                    )}
 
                   {coldError && (
                     <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -674,7 +684,9 @@ export function NotificationsClient() {
                         )}
 
                         {!isLoadingCold && visibleColdUsers.length === 0 && (
-                          <div className="px-4 py-6 text-sm text-slate-500">当前没有可推送的冷召回用户。</div>
+                          <div className="px-4 py-6 text-sm text-slate-500">
+                            当前没有可推送的冷召回用户。只有已登记 Android 推送 Token 的用户才会出现在这里。
+                          </div>
                         )}
 
                         {visibleColdUsers.map((user) => {
