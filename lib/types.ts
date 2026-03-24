@@ -111,6 +111,7 @@ export interface MessageMetadata {
   mime_type?: string
   file_type?: string
   duration_seconds?: number
+  duration?: number
   thumbnail_url?: string
   mentions?: string[]
   code_language?: string

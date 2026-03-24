@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { useSubscription } from '@/hooks/use-subscription'
 import { SubscriptionBadge } from '@/components/subscription/subscription-badge'
-import { ArrowRight, ArrowLeft, Bell } from 'lucide-react'
+import { ArrowRight, ArrowLeft, Bell, Gift } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AppNavigation } from '@/components/layout/app-navigation'
@@ -137,6 +137,17 @@ export default function SettingsPage() {
             className="w-full justify-between"
           >
             <span>{tr('设备管理', 'Device Management')}</span>
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+          <Button
+            onClick={() => router.push('/settings/invite-rewards')}
+            variant="outline"
+            className="w-full justify-between"
+          >
+            <span className="inline-flex items-center gap-2">
+              <Gift className="h-4 w-4" />
+              {tr('邀请有奖', 'Invite Rewards')}
+            </span>
             <ArrowRight className="h-4 w-4" />
           </Button>
         </CardContent>

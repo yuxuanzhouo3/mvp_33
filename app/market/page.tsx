@@ -35,8 +35,8 @@ const MARKET_SUBSYSTEMS = [
   },
   {
     id: "4",
-    title: "用户裂变系统",
-    description: "邀请转化、激活与奖励明细（已完成）",
+    title: "营销中台",
+    description: "统一钱包、裂变任务、广告激励与风控",
     href: "/market/fission",
     status: "已完成",
     icon: UserPlus2,
