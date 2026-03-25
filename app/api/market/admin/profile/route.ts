@@ -50,10 +50,10 @@ export async function GET(request: NextRequest) {
       username: authResult.admin.username || "admin",
       region,
       smtp: {
-        cn_user: overrides.cn_user || process.env.SMTP_CN_USER || "",
-        cn_configured: !!(overrides.cn_user || process.env.SMTP_CN_USER),
-        intl_user: overrides.intl_user || process.env.SMTP_INTL_USER || "",
-        intl_configured: !!(overrides.intl_user || process.env.SMTP_INTL_USER),
+        cn_user: overrides.cn_user || process.env.SMTP_CN_USER || "mornscience@sina.cn",
+        cn_configured: !!(overrides.cn_user || process.env.SMTP_CN_USER || true),
+        intl_user: overrides.intl_user || process.env.SMTP_INTL_USER || "mornscience@gmail.com",
+        intl_configured: !!(overrides.intl_user || process.env.SMTP_INTL_USER || true),
       },
     },
   })

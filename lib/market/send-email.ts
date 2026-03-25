@@ -31,7 +31,7 @@ function getSmtpConfig() {
       host: process.env.SMTP_INTL_HOST || "smtp.gmail.com",
       port: parseInt(process.env.SMTP_INTL_PORT || "465", 10),
       secure: true,
-      user: overrides.intl_user || process.env.SMTP_INTL_USER || "",
+      user: overrides.intl_user || process.env.SMTP_INTL_USER || "mornscience@gmail.com",
       pass: overrides.intl_pass || process.env.SMTP_INTL_PASS || "",
     }
   }
@@ -40,7 +40,7 @@ function getSmtpConfig() {
     host: process.env.SMTP_CN_HOST || "smtp.sina.cn",
     port: parseInt(process.env.SMTP_CN_PORT || "465", 10),
     secure: true,
-    user: overrides.cn_user || process.env.SMTP_CN_USER || "",
+    user: overrides.cn_user || process.env.SMTP_CN_USER || "mornscience@sina.cn",
     pass: overrides.cn_pass || process.env.SMTP_CN_PASS || "",
   }
 }

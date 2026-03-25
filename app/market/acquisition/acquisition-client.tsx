@@ -1147,9 +1147,10 @@ export function AcquisitionClient() {
           <p className="text-muted-foreground mt-2 text-sm">管理博主合作、企业采购线索与 Ad-to-Earn 广告资源。</p>
         </div>
         <Link href="/market/profile">
-          <Button variant="outline" size="sm" className="flex items-center space-x-2">
-            <User className="h-4 w-4" />
+          <Button variant="outline" className="flex items-center space-x-2 px-5 py-2.5 text-sm font-medium border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300 dark:hover:bg-violet-900/50">
+            <User className="h-5 w-5" />
             <span>个人中心</span>
+            <Settings className="h-3.5 w-3.5 opacity-50" />
           </Button>
         </Link>
       </div>
