@@ -22,7 +22,7 @@ const MARKET_SUBSYSTEMS = [
     title: "产品获客系统",
     description: "对接博主合作与企业采购线索管理",
     href: "/market/acquisition",
-    status: "规划中",
+    status: "已完成",
     icon: Megaphone,
   },
   {
