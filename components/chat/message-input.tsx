@@ -403,9 +403,7 @@ export function MessageInput({
                   </PopoverContent>
                 </Popover>
 
-                <Button size="icon" variant="ghost" disabled={disabled} className="touch-compact h-8 w-8">
-                  <AtSign className="h-4 w-4" />
-                </Button>
+
 
                 <Button
                   size="icon"
@@ -427,16 +425,7 @@ export function MessageInput({
                   <ImageIcon className="h-4 w-4" />
                 </Button>
 
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  disabled={disabled}
-                  onClick={() => setShowCodeDialog(true)}
-                  title="分享代码"
-                  className="touch-compact h-8 w-8"
-                >
-                  <Code2 className="h-4 w-4" />
-                </Button>
+
 
                 <Button
                   size="icon"

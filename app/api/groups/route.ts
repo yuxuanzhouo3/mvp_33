@@ -30,30 +30,23 @@ export async function POST(request: NextRequest) {
 
     console.log('[API /api/groups POST] 当前用户', { userId: user.id, email: user.email })
 
-    const { userIds, workspaceId } = await request.json()
+    const { userIds, workspaceId, groupName } = await request.json()
     console.log('[API /api/groups POST] 请求参数', {
       userIds,
       userIdsCount: userIds?.length,
-      workspaceId
+      workspaceId,
+      groupName
     })
 
-    // TEMP: Allow creating group with 0 or more members (creator will be added automatically)
-    // if (!userIds || userIds.length < 2) {
-    //   return NextResponse.json(
-    //     { error: 'At least 2 members required' },
-    //     { status: 400 }
-    //   )
-    // }
-
-    console.error('[API /api/groups POST] 调用 createGroup 函数', {
-      params: JSON.stringify({ userId: user.id, userIds, workspaceId }),
+    console.log('[API /api/groups POST] 调用 createGroup 函数', {
+      params: JSON.stringify({ userId: user.id, userIds, workspaceId, groupName }),
       database: IS_DOMESTIC_VERSION ? 'CloudBase' : 'Supabase'
     })
 
     // 根据环境变量选择数据库
     const result = IS_DOMESTIC_VERSION
-      ? await createGroupCloudbase(user.id, userIds, workspaceId)
-      : await createGroupSupabase(user.id, userIds, workspaceId)
+      ? await createGroupCloudbase(user.id, userIds || [], workspaceId, groupName)
+      : await createGroupSupabase(user.id, userIds || [], workspaceId)
 
     console.error('[API /api/groups POST] createGroup 返回', {
       hasResult: !!result,

@@ -5,9 +5,27 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { MessageSquare, Users, Hash, Settings, Building2 } from 'lucide-react'
+import {
+  MessageSquare,
+  Users,
+  Hash,
+  Settings,
+  Building2,
+  Video,
+  CalendarDays,
+  FileText,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/lib/settings-context'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 interface NavItem {
   href: string
@@ -16,6 +34,7 @@ interface NavItem {
     zh: string
     en: string
   }
+  dividerAfter?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -38,11 +57,46 @@ const navItems: NavItem[] = [
     href: '/channels',
     icon: Hash,
     label: { zh: '频道', en: 'Channels' },
+    dividerAfter: true,
   },
   {
-    href: '/settings',
-    icon: Settings,
-    label: { zh: '设置', en: 'Settings' },
+    href: '/meetings',
+    icon: Video,
+    label: { zh: '会议', en: 'Meetings' },
+  },
+  {
+    href: '/calendar',
+    icon: CalendarDays,
+    label: { zh: '日历', en: 'Calendar' },
+  },
+  {
+    href: '/docs',
+    icon: FileText,
+    label: { zh: '云文档', en: 'Docs' },
+  },
+]
+
+// Mobile bottom tabs - keep original 4 items for cleaner mobile UX
+const mobileNavItems: NavItem[] = [
+  {
+    href: '/chat',
+    icon: MessageSquare,
+    label: { zh: '消息', en: 'Messages' },
+  },
+  {
+    href: '/contacts',
+    icon: Users,
+    label: { zh: '联系人', en: 'Contacts' },
+  },
+  {
+    href: '/workspace-members',
+    icon: Building2,
+    label: { zh: '工作区', en: 'Workspace' },
+  },
+  {
+    href: '/channels',
+    icon: Hash,
+    label: { zh: '频道', en: 'Channels' },
   },
 ]
 
@@ -59,6 +113,7 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0)
   const [contactPendingCount, setContactPendingCount] = useState(0)
   const [chatUnreadCount, setChatUnreadCount] = useState(0)
+  const [sidebarExpanded, setSidebarExpanded] = useState(false)
 
   useEffect(() => {
     navItems.forEach((item) => {
@@ -66,10 +121,25 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
     })
   }, [router])
 
+  // 从 localStorage 恢复侧边栏状态
+  useEffect(() => {
+    if (!mobile) {
+      const saved = localStorage.getItem('sidebar_expanded')
+      if (saved === 'true') setSidebarExpanded(true)
+    }
+  }, [mobile])
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarExpanded((prev) => {
+      const next = !prev
+      localStorage.setItem('sidebar_expanded', String(next))
+      return next
+    })
+  }, [])
+
   // 获取待审批申请数量
   const fetchPendingRequestsCount = useCallback(async (forceRefresh = false) => {
     try {
-      // 从 localStorage 获取当前工作区
       const workspaceStr = localStorage.getItem('chat_app_current_workspace')
       if (!workspaceStr) {
         setPendingRequestsCount(0)
@@ -113,7 +183,7 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
     }
   }, [])
 
-  // 获取联系人待处理请求数量（侧边栏联系人红点）
+  // 获取联系人待处理请求数量
   const fetchContactPendingCount = useCallback(async (forceRefresh = false) => {
     try {
       const userStr = localStorage.getItem('chat_app_current_user')
@@ -154,7 +224,7 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
     }
   }, [])
 
-  // 获取聊天未读总数（不在聊天页时也能显示消息红点）
+  // 获取聊天未读总数
   const fetchChatUnreadCount = useCallback(async (forceRefresh = false) => {
     try {
       const userStr = localStorage.getItem('chat_app_current_user')
@@ -181,7 +251,6 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
         }
       }
 
-      // 先用本地 conversations 缓存做快速更新
       const convCacheKey = `conversations_${user.id}_${workspace.id}`
       const convCacheRaw = localStorage.getItem(convCacheKey)
       if (convCacheRaw) {
@@ -206,11 +275,8 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
           0
         )
         setChatUnreadCount(count)
-
         localStorage.setItem(cacheKey, count.toString())
         localStorage.setItem(cacheTsKey, Date.now().toString())
-
-        // 同步更新 conversations 缓存，便于其他页面复用
         localStorage.setItem(convCacheKey, JSON.stringify(data.conversations))
         localStorage.setItem(`conversations_timestamp_${user.id}_${workspace.id}`, Date.now().toString())
       }
@@ -258,9 +324,7 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
 
     setupInterval()
 
-    // 监听自定义事件，当有新申请或审批操作时刷新
     const handleRefresh = () => {
-      // 添加小延迟确保数据库已更新
       setTimeout(() => {
         void runRefresh(true)
       }, 100)
@@ -302,16 +366,24 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
   const effectiveChatUnreadCount =
     typeof totalUnreadCount === 'number' ? totalUnreadCount : chatUnreadCount
 
+  const getBadgeCount = (href: string) => {
+    if (href === '/chat') return effectiveChatUnreadCount
+    if (href === '/contacts') return contactPendingCount
+    if (href === '/workspace-members') return pendingRequestsCount
+    return 0
+  }
+
+  // ============================================================
+  // Mobile: bottom tab bar (kept simple with 4 items)
+  // ============================================================
   if (mobile) {
     return (
       <nav className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
-        <div className="grid grid-cols-5 gap-0.5 px-1 pt-1 pb-[max(0.4rem,env(safe-area-inset-bottom))]">
-          {navItems.map((item) => {
+        <div className="grid grid-cols-4 gap-0.5 px-1 pt-1 pb-[max(0.4rem,env(safe-area-inset-bottom))]">
+          {mobileNavItems.map((item) => {
             const Icon = item.icon
             const active = isActive(item.href)
-            const showChatBadge = item.href === '/chat' && effectiveChatUnreadCount > 0
-            const showContactBadge = item.href === '/contacts' && contactPendingCount > 0
-            const showPendingBadge = item.href === '/workspace-members' && pendingRequestsCount > 0
+            const badgeCount = getBadgeCount(item.href)
 
             return (
               <Button
@@ -326,28 +398,12 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
                 <Link href={item.href}>
                   <span className="relative">
                     <Icon className="h-4 w-4 shrink-0" />
-                    {showChatBadge && (
+                    {badgeCount > 0 && (
                       <Badge
                         variant="destructive"
                         className="absolute -top-2 -right-3 h-4 min-w-4 px-1 text-[10px] leading-none"
                       >
-                        {effectiveChatUnreadCount > 99 ? '99+' : effectiveChatUnreadCount}
-                      </Badge>
-                    )}
-                    {showContactBadge && (
-                      <Badge
-                        variant="destructive"
-                        className="absolute -top-2 -right-3 h-4 min-w-4 px-1 text-[10px] leading-none"
-                      >
-                        {contactPendingCount > 99 ? '99+' : contactPendingCount}
-                      </Badge>
-                    )}
-                    {showPendingBadge && (
-                      <Badge
-                        variant="destructive"
-                        className="absolute -top-2 -right-3 h-4 min-w-4 px-1 text-[10px] leading-none"
-                      >
-                        {pendingRequestsCount > 99 ? '99+' : pendingRequestsCount}
+                        {badgeCount > 99 ? '99+' : badgeCount}
                       </Badge>
                     )}
                   </span>
@@ -361,56 +417,171 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
     )
   }
 
-  return (
-    <div className="w-32 border-r bg-background flex flex-col py-4 gap-1">
-      {navItems.map((item) => {
-        const Icon = item.icon
-        const active = isActive(item.href)
-        const showChatBadge = item.href === '/chat' && effectiveChatUnreadCount > 0
-        const showContactBadge = item.href === '/contacts' && contactPendingCount > 0
-        const showPendingBadge = item.href === '/workspace-members' && pendingRequestsCount > 0
+  // ============================================================
+  // Desktop: Feishu-style dark vertical sidebar
+  // ============================================================
+  const sidebarWidth = sidebarExpanded ? 'w-[180px]' : 'w-[72px]'
 
-        return (
-          <Button
-            key={item.href}
-            asChild
-            variant="ghost"
-            className={cn(
-              'w-full h-12 flex items-center justify-start gap-3 px-4 rounded-lg transition-colors relative',
-              active && 'bg-primary/10 text-primary hover:bg-primary/15'
-            )}
-          >
-            <Link href={item.href}>
-              <Icon className="h-5 w-5 shrink-0" />
-              <span className="text-sm font-medium">{item.label[language]}</span>
-              {showChatBadge && (
-                <Badge
-                  variant="destructive"
-                  className="absolute right-2 h-5 px-2 flex items-center justify-center text-xs font-medium"
+  return (
+    <TooltipProvider delayDuration={200}>
+      <aside
+        className={cn(
+          'flex flex-col h-full transition-all duration-200 ease-in-out select-none',
+          'bg-gradient-to-b from-[#1e1f2e] to-[#171827]',
+          sidebarWidth
+        )}
+      >
+        {/* Logo / Search area */}
+        <div className="flex items-center justify-center h-14 px-2 shrink-0">
+          {sidebarExpanded ? (
+            <button
+              onClick={() => router.push('/chat')}
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg
+                         text-slate-300 hover:bg-white/10 transition-colors text-sm font-medium"
+            >
+              <Search className="h-4 w-4 text-slate-400 shrink-0" />
+              <span className="truncate text-slate-400">
+                {language === 'zh' ? '搜索' : 'Search'}
+              </span>
+            </button>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => router.push('/chat')}
+                  className="flex items-center justify-center w-10 h-10 rounded-lg
+                             text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-colors"
                 >
-                  {effectiveChatUnreadCount > 99 ? '99+' : effectiveChatUnreadCount}
-                </Badge>
+                  <Search className="h-5 w-5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="font-medium">
+                {language === 'zh' ? '搜索' : 'Search'}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+
+        {/* Navigation items */}
+        <nav className="flex-1 flex flex-col gap-0.5 px-2 py-1 overflow-y-auto scrollbar-hide">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            const active = isActive(item.href)
+            const badgeCount = getBadgeCount(item.href)
+
+            const navButton = (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  'group relative flex items-center rounded-lg transition-all duration-150',
+                  sidebarExpanded
+                    ? 'h-10 px-3 gap-3'
+                    : 'h-11 flex-col justify-center gap-1 px-1',
+                  active
+                    ? 'bg-white/15 text-white shadow-sm'
+                    : 'text-slate-400 hover:bg-white/8 hover:text-slate-200'
+                )}
+              >
+                <span className="relative shrink-0">
+                  <Icon className={cn('transition-colors', sidebarExpanded ? 'h-[18px] w-[18px]' : 'h-5 w-5')} />
+                  {badgeCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center
+                                     h-4 min-w-4 px-1 rounded-full bg-red-500 text-[10px] font-bold text-white
+                                     leading-none shadow-sm">
+                      {badgeCount > 99 ? '99+' : badgeCount}
+                    </span>
+                  )}
+                </span>
+
+                {sidebarExpanded ? (
+                  <span className="text-[13px] font-medium truncate">{item.label[language]}</span>
+                ) : (
+                  <span className="text-[10px] font-medium leading-none opacity-80">{item.label[language]}</span>
+                )}
+              </Link>
+            )
+
+            return (
+              <div key={item.href}>
+                {!sidebarExpanded ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      {navButton}
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="font-medium">
+                      {item.label[language]}
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  navButton
+                )}
+                {item.dividerAfter && (
+                  <div className="mx-3 my-2 border-t border-white/10" />
+                )}
+              </div>
+            )
+          })}
+        </nav>
+
+        {/* Bottom section: expand toggle + settings */}
+        <div className="shrink-0 px-2 pb-3 pt-1 flex flex-col gap-1 border-t border-white/10">
+          {/* Settings */}
+          {sidebarExpanded ? (
+            <Link
+              href="/settings"
+              className={cn(
+                'flex items-center h-10 px-3 gap-3 rounded-lg transition-colors',
+                isActive('/settings')
+                  ? 'bg-white/15 text-white'
+                  : 'text-slate-400 hover:bg-white/8 hover:text-slate-200'
               )}
-              {showContactBadge && (
-                <Badge
-                  variant="destructive"
-                  className="absolute right-2 h-5 min-w-5 px-1.5 flex items-center justify-center text-xs font-medium"
-                >
-                  {contactPendingCount > 99 ? '99+' : contactPendingCount}
-                </Badge>
-              )}
-              {showPendingBadge && (
-                <Badge
-                  variant="destructive"
-                  className="absolute right-2 h-5 w-5 flex items-center justify-center p-0 text-xs font-medium"
-                >
-                  {pendingRequestsCount > 99 ? '99+' : pendingRequestsCount}
-                </Badge>
-              )}
+            >
+              <Settings className="h-[18px] w-[18px] shrink-0" />
+              <span className="text-[13px] font-medium">{language === 'zh' ? '设置' : 'Settings'}</span>
             </Link>
-          </Button>
-        )
-      })}
-    </div>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  href="/settings"
+                  className={cn(
+                    'flex flex-col items-center justify-center h-11 rounded-lg transition-colors gap-1',
+                    isActive('/settings')
+                      ? 'bg-white/15 text-white'
+                      : 'text-slate-400 hover:bg-white/8 hover:text-slate-200'
+                  )}
+                >
+                  <Settings className="h-5 w-5" />
+                  <span className="text-[10px] font-medium leading-none opacity-80">
+                    {language === 'zh' ? '设置' : 'Settings'}
+                  </span>
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="font-medium">
+                {language === 'zh' ? '设置' : 'Settings'}
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {/* Expand/Collapse toggle */}
+          <button
+            onClick={toggleSidebar}
+            className="flex items-center justify-center h-8 rounded-lg
+                       text-slate-500 hover:bg-white/8 hover:text-slate-300 transition-colors"
+            title={sidebarExpanded
+              ? (language === 'zh' ? '收起侧边栏' : 'Collapse sidebar')
+              : (language === 'zh' ? '展开侧边栏' : 'Expand sidebar')
+            }
+          >
+            {sidebarExpanded ? (
+              <ChevronLeft className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+      </aside>
+    </TooltipProvider>
   )
 }

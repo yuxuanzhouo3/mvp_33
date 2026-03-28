@@ -4,29 +4,40 @@ import { Conversation } from '@/lib/types'
 export async function createGroup(
   creatorId: string,
   userIds: string[],
-  workspaceId: string
+  workspaceId: string,
+  groupName?: string
 ): Promise<{ groupId: string } | null> {
   const db = getCloudBaseDb()
   if (!db) return null
 
   try {
-    // 生成群名称(取前3个成员名称)
-    const userIdsToQuery = userIds.slice(0, 3)
-    const usersRes = await db.collection('users')
-      .where({
-        id: db.command.in(userIdsToQuery)
-      })
-      .get()
+    // 确定群名称
+    let finalGroupName = groupName?.trim() || ''
 
-    const users = usersRes.data || []
-    const groupName = users.map((u: any) => u.full_name || u.name).join('、') || 'New Group'
+    if (!finalGroupName) {
+      // 如果没有提供群名，尝试从成员名称生成
+      if (userIds.length > 0) {
+        const userIdsToQuery = userIds.slice(0, 3)
+        const usersRes = await db.collection('users')
+          .where({
+            id: db.command.in(userIdsToQuery)
+          })
+          .get()
+
+        const users = usersRes.data || []
+        finalGroupName = users.map((u: any) => u.full_name || u.name).join('、') || '新建群聊'
+      } else {
+        // 无成员时使用默认名称
+        finalGroupName = '新建群聊'
+      }
+    }
 
     // 创建群聊
     const now = new Date().toISOString()
     const convRes = await db.collection('conversations').add({
       workspace_id: workspaceId,
       type: 'group',
-      name: groupName,
+      name: finalGroupName,
       created_by: creatorId,
       is_private: false,
       created_at: now,

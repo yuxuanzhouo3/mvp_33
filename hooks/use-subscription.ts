@@ -131,7 +131,30 @@ export function useSubscription() {
     // Set loading to true only when actually fetching
     setLoading(true)
     try {
-      const supabase = createClient()
+      let supabase: ReturnType<typeof createClient> | null = null
+      try {
+        supabase = createClient()
+      } catch (e) {
+        // CN region: Supabase is not configured, use API-only approach
+        try {
+          const res = await fetch('/api/subscription', { cache: 'no-store' })
+          if (res.ok) {
+            const payload = await res.json()
+            const data = payload?.data || {}
+            const rawType = data.subscription_type as string | null | undefined
+            const rawExpires = data.subscription_expires_at as string | null | undefined
+            const subscriptionType: 'free' | 'monthly' | 'yearly' = rawType === 'monthly' || rawType === 'yearly' ? rawType : 'free'
+            const expiresAt: string | null = rawExpires || null
+            const isActive = !expiresAt || new Date(expiresAt) > new Date()
+            const daysRemaining = expiresAt ? Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null
+            setSubscription({ type: subscriptionType, expiresAt, isActive, daysRemaining: daysRemaining && daysRemaining > 0 ? daysRemaining : null })
+          }
+        } catch (apiError) {
+          console.warn('Failed to load subscription via API:', apiError)
+        }
+        setLoading(false)
+        return
+      }
       const { data: { user } } = await supabase.auth.getUser()
       
       if (!user) {
@@ -205,7 +228,13 @@ export function useSubscription() {
 
   const loadUsage = async () => {
     try {
-      const supabase = createClient()
+      let supabase: ReturnType<typeof createClient> | null = null
+      try {
+        supabase = createClient()
+      } catch (e) {
+        // CN region: Supabase is not configured, skip usage loading
+        return
+      }
       const { data: { user } } = await supabase.auth.getUser()
       
       if (!user) return
