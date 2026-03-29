@@ -254,6 +254,7 @@ function ChatPageContent() {
   const [selectedConversationId, setSelectedConversationId] = useState<string>()
 
   const [messages, setMessages] = useState<MessageWithSender[]>([])
+  const [messageSearchQuery, setMessageSearchQuery] = useState('')
   const [conversationMetaState, setConversationMetaState] = useState<ConversationMetaState>('idle')
 
   const [showNewConversation, setShowNewConversation] = useState(false)
@@ -1594,6 +1595,12 @@ function ChatPageContent() {
         if (selectedConversationIdRef.current === conversationId) {
           messagesConversationIdRef.current = conversationId
           setMessages(nextMessages)
+          // Fire-and-forget: mark messages as read by current user
+          fetch('/api/messages/read', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conversationId }),
+          }).catch(() => {})
         } else {
           console.log('⏭️ Skip stale messages update for conversation:', conversationId)
         }
@@ -6057,6 +6064,43 @@ function ChatPageContent() {
     }
   }, [currentUser, currentWorkspace, selectedConversationId, loadConversations, setConversations, persistConversationsCache])
 
+  const handleForwardMessage = useCallback(async (messageId: string, targetConversationId: string) => {
+    const msg = messages.find(m => m.id === messageId)
+    if (!msg || !currentUser) return
+    try {
+      const forwardContent = msg.content
+        ? `[转发] ${msg.content}`
+        : `[转发] [${msg.type}]`
+      const res = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationId: targetConversationId,
+          content: forwardContent,
+          type: 'text',
+          metadata: { forwarded_from: msg.id },
+        }),
+      })
+      const data = await res.json()
+      if (data.success || data.message) {
+        // Update conversation list to bump the target conversation to top
+        setConversations(prev => {
+          const updated = prev.map(conv =>
+            conv.id === targetConversationId
+              ? { ...conv, last_message_at: new Date().toISOString() }
+              : conv
+          )
+          persistConversationsCache(updated)
+          return updated
+        })
+        // Auto-switch to the target conversation so the user sees the message immediately
+        setSelectedConversationId(targetConversationId)
+      }
+    } catch (error) {
+      console.error('Failed to forward message:', error)
+    }
+  }, [messages, currentUser, setConversations, persistConversationsCache, setSelectedConversationId])
+
   const handleHideMessage = useCallback(async (messageId: string) => {
 
     if (!currentUser) return
@@ -8636,7 +8680,14 @@ function ChatPageContent() {
                     onUnpinMessage={handleUnpinMessage}
 
                     onReplyMessage={handleReplyMessage}
-
+                    onForwardMessage={handleForwardMessage}
+                    conversations={conversations.map(c => ({
+                      id: c.id,
+                      name: c.name || c.members?.map((m: any) => m.full_name || m.username).filter(Boolean).join(', ') || undefined,
+                      type: c.type,
+                    }))}
+                    searchQuery={messageSearchQuery}
+                    onSearchQueryChange={setMessageSearchQuery}
                   />
 
                   {/* 系统助手会话不显示输入框 - 只能接收通知，不能回复 */}

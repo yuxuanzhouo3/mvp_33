@@ -64,6 +64,7 @@ function mapMessageDocToDto(doc: any, fallbackNow?: string): MessageWithSender |
     is_edited: !!doc.is_edited,
     is_deleted: !!doc.is_deleted,
     is_recalled: !!doc.is_recalled,
+    read_by: Array.isArray(doc.read_by) ? doc.read_by : [],
     created_at: createdAt,
     updated_at: updatedAt,
     metadata: parseMetadata(doc.metadata),
@@ -440,5 +441,109 @@ export async function unhideMessage(messageId: string, userId: string): Promise<
   }
 }
 
+/**
+ * Mark messages as read by a specific user.
+ * Adds `userId` to the `read_by` array of every message in the given
+ * conversation that was NOT sent by this user and hasn't been read yet.
+ */
+export async function markMessagesAsRead(
+  conversationId: string,
+  userId: string,
+): Promise<number> {
+  const db = getCloudBaseDb()
+  if (!db) throw new Error('CloudBase not configured')
+
+  const res = await db.collection('messages')
+    .where({
+      conversation_id: conversationId,
+      is_deleted: false,
+      region: 'cn',
+    })
+    .orderBy('created_at', 'desc')
+    .limit(100)
+    .get()
+
+  const docs: any[] = Array.isArray(res?.data) ? res.data : []
+  let count = 0
+
+  for (const doc of docs) {
+    const senderId = String(doc.sender_id || '')
+    if (senderId === userId) continue
+    const readBy: string[] = Array.isArray(doc.read_by) ? doc.read_by : []
+    if (readBy.includes(userId)) continue
+    try {
+      await db.collection('messages')
+        .doc(doc._id)
+        .update({
+          read_by: [...readBy, userId],
+          updated_at: new Date().toISOString(),
+        })
+      count++
+    } catch (e) {
+      console.error('markMessagesAsRead: error updating message', doc._id, e)
+    }
+  }
+
+  return count
+}
+
+/**
+ * Full-text search messages in a conversation using CloudBase regex.
+ */
+export async function searchMessages(
+  conversationId: string,
+  query: string,
+  limit: number = 50,
+): Promise<MessageWithSender[]> {
+  const db = getCloudBaseDb()
+  if (!db) throw new Error('CloudBase not configured')
+
+  if (!query || !query.trim()) return []
+
+  const res = await db.collection('messages')
+    .where({
+      conversation_id: conversationId,
+      content: db.RegExp({ regexp: query.trim(), options: 'i' }),
+      is_deleted: false,
+      region: 'cn',
+    })
+    .orderBy('created_at', 'desc')
+    .limit(limit)
+    .get()
+
+  const docs: any[] = Array.isArray(res?.data) ? res.data : []
+  const messages = docs
+    .map((doc: any) => mapMessageDocToDto(doc))
+    .filter((msg: MessageWithSender | null): msg is MessageWithSender => !!msg)
+
+  // Enrich with sender info
+  const senderIds = Array.from(new Set(messages.map(m => String(m.sender_id || '').trim()).filter(Boolean)))
+  if (senderIds.length === 0) return messages
+
+  const usersRes = await db.collection('users')
+    .where({ id: db.command.in(senderIds) })
+    .get()
+
+  const usersById = new Map<string, any>()
+  ;(usersRes?.data || []).forEach((u: any) => {
+    const uid = String(u.id || u._id || '').trim()
+    if (!uid) return
+    usersById.set(uid, {
+      id: uid,
+      email: u.email || '',
+      username: u.username || u.email?.split('@')[0] || '',
+      full_name: u.full_name || u.name || '',
+      avatar_url: u.avatar_url || null,
+      status: u.status || 'offline',
+      region: u.region || 'cn',
+    })
+  })
+
+  return messages.map(m => {
+    const sid = String(m.sender_id || '').trim()
+    const sender = usersById.get(sid)
+    return sender ? { ...m, sender } : m
+  })
+}
 
 

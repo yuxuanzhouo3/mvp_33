@@ -301,40 +301,70 @@ function RichTextEditor({ content, onChange, language }: { content: string; onCh
     document.execCommand(cmd, false, value)
     editorRef.current?.focus()
     if (editorRef.current) onChange(editorRef.current.innerHTML)
+    // Force re-render for active state tracking
+    setActiveStates(getActiveStates())
   }
 
   const handleInput = () => {
     if (editorRef.current) onChange(editorRef.current.innerHTML)
+    setActiveStates(getActiveStates())
   }
+
+  const getActiveStates = () => ({
+    bold: document.queryCommandState('bold'),
+    italic: document.queryCommandState('italic'),
+    underline: document.queryCommandState('underline'),
+    justifyLeft: document.queryCommandState('justifyLeft'),
+    justifyCenter: document.queryCommandState('justifyCenter'),
+    justifyRight: document.queryCommandState('justifyRight'),
+    insertUnorderedList: document.queryCommandState('insertUnorderedList'),
+    insertOrderedList: document.queryCommandState('insertOrderedList'),
+  })
+
+  const [activeStates, setActiveStates] = useState({
+    bold: false, italic: false, underline: false,
+    justifyLeft: false, justifyCenter: false, justifyRight: false,
+    insertUnorderedList: false, insertOrderedList: false,
+  })
+
+  // Update active states on selection change
+  useEffect(() => {
+    const handleSelectionChange = () => setActiveStates(getActiveStates())
+    document.addEventListener('selectionchange', handleSelectionChange)
+    return () => document.removeEventListener('selectionchange', handleSelectionChange)
+  }, [])
+
+  const tbBtn = (cmd: string, active: boolean) =>
+    `p-1.5 rounded transition-colors ${active ? 'bg-primary/15 text-primary shadow-sm' : 'hover:bg-muted'}`
 
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
       <div className="flex items-center gap-0.5 px-3 py-1.5 border-b bg-muted/30 flex-wrap">
-        <button onClick={() => execCommand('bold')} className="p-1.5 rounded hover:bg-muted" title="Bold">
+        <button onClick={() => execCommand('bold')} className={tbBtn('bold', activeStates.bold)} title="Bold">
           <Bold className="h-4 w-4" />
         </button>
-        <button onClick={() => execCommand('italic')} className="p-1.5 rounded hover:bg-muted" title="Italic">
+        <button onClick={() => execCommand('italic')} className={tbBtn('italic', activeStates.italic)} title="Italic">
           <Italic className="h-4 w-4" />
         </button>
-        <button onClick={() => execCommand('underline')} className="p-1.5 rounded hover:bg-muted" title="Underline">
+        <button onClick={() => execCommand('underline')} className={tbBtn('underline', activeStates.underline)} title="Underline">
           <Underline className="h-4 w-4" />
         </button>
         <div className="w-px h-5 bg-border mx-1" />
-        <button onClick={() => execCommand('justifyLeft')} className="p-1.5 rounded hover:bg-muted">
+        <button onClick={() => execCommand('justifyLeft')} className={tbBtn('justifyLeft', activeStates.justifyLeft)}>
           <AlignLeft className="h-4 w-4" />
         </button>
-        <button onClick={() => execCommand('justifyCenter')} className="p-1.5 rounded hover:bg-muted">
+        <button onClick={() => execCommand('justifyCenter')} className={tbBtn('justifyCenter', activeStates.justifyCenter)}>
           <AlignCenter className="h-4 w-4" />
         </button>
-        <button onClick={() => execCommand('justifyRight')} className="p-1.5 rounded hover:bg-muted">
+        <button onClick={() => execCommand('justifyRight')} className={tbBtn('justifyRight', activeStates.justifyRight)}>
           <AlignRight className="h-4 w-4" />
         </button>
         <div className="w-px h-5 bg-border mx-1" />
-        <button onClick={() => execCommand('insertUnorderedList')} className="p-1.5 rounded hover:bg-muted">
+        <button onClick={() => execCommand('insertUnorderedList')} className={tbBtn('insertUnorderedList', activeStates.insertUnorderedList)}>
           <List className="h-4 w-4" />
         </button>
-        <button onClick={() => execCommand('insertOrderedList')} className="p-1.5 rounded hover:bg-muted">
+        <button onClick={() => execCommand('insertOrderedList')} className={tbBtn('insertOrderedList', activeStates.insertOrderedList)}>
           <ListOrdered className="h-4 w-4" />
         </button>
         <div className="w-px h-5 bg-border mx-1" />
@@ -529,7 +559,6 @@ export default function DocsPage() {
     { type: 'doc' as const, ...DOC_TYPES.doc },
     { type: 'spreadsheet' as const, ...DOC_TYPES.spreadsheet },
     { type: 'slides' as const, ...DOC_TYPES.slides },
-    { type: 'folder' as const, ...DOC_TYPES.folder },
   ]
 
   // Render type-specific editor
@@ -611,15 +640,12 @@ export default function DocsPage() {
                 <div className="flex gap-3 overflow-x-auto pb-1">
                   {quickCreateTypes.map(t => {
                     const Icon = t.icon
-                    const isCreateable = t.type !== 'folder'
                     return (
                       <button key={t.type}
                         onClick={() => {
-                          if (isCreateable) {
-                            setNewType(t.type as any)
-                            setNewTitle('')
-                            setShowCreateDialog(true)
-                          }
+                          setNewType(t.type as any)
+                          setNewTitle('')
+                          setShowCreateDialog(true)
                         }}
                         className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-muted/50 transition-colors shrink-0 min-w-[80px]">
                         <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${t.color} flex items-center justify-center shadow-sm`}>

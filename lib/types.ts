@@ -97,6 +97,8 @@ export interface Message {
   is_deleted: boolean
   is_recalled?: boolean
   is_pinned?: boolean
+  read_by?: string[]
+  forwarded_from?: string
   created_at: string
   updated_at: string
 }

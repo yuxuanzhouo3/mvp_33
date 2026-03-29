@@ -65,7 +65,9 @@ export async function GET(request: NextRequest) {
       const result = await query.get()
       return NextResponse.json({ success: true, documents: result.data || [] })
     } catch (err: any) {
-      if (err?.code === 'DATABASE_COLLECTION_NOT_EXIST') {
+      const errMsg = String(err?.message || err?.code || '')
+      if (errMsg.includes('COLLECTION_NOT_EXIST') || errMsg.includes('not exist') || err?.code === 'DATABASE_COLLECTION_NOT_EXIST') {
+        // Collection might not exist yet — return empty
         return NextResponse.json({ success: true, documents: [] })
       }
       throw err
@@ -121,12 +123,27 @@ export async function POST(request: NextRequest) {
         document: { ...document, _id: result.id, id: result.id },
       })
     } catch (err: any) {
-      if (err?.code === 'DATABASE_COLLECTION_NOT_EXIST') {
-        const fakeId = `doc_${Date.now()}`
-        return NextResponse.json({
-          success: true,
-          document: { ...document, _id: fakeId, id: fakeId },
-        })
+      const errMsg = String(err?.message || err?.code || '')
+      if (errMsg.includes('COLLECTION_NOT_EXIST') || errMsg.includes('not exist') || err?.code === 'DATABASE_COLLECTION_NOT_EXIST') {
+        // Auto-create collection and retry
+        try {
+          await db.createCollection('documents')
+        } catch { /* collection might already exist */ }
+        try {
+          const result = await db.collection('documents').add(document)
+          return NextResponse.json({
+            success: true,
+            document: { ...document, _id: result.id, id: result.id },
+          })
+        } catch (retryErr: any) {
+          console.error('[API /api/docs POST] Retry after create collection failed:', retryErr)
+          // Final fallback: return temporary document so UI isn't broken
+          const fakeId = `doc_${Date.now()}`
+          return NextResponse.json({
+            success: true,
+            document: { ...document, _id: fakeId, id: fakeId },
+          })
+        }
       }
       throw err
     }

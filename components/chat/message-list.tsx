@@ -11,7 +11,7 @@ import { MessageWithSender, User } from '@/lib/types'
 
 import { cn } from '@/lib/utils'
 
-import { File, ImageIcon, Video, Smile, Edit2, Trash2, Pin, PinOff, EyeOff, Reply, RotateCcw, Copy, Download, Eye, X, Phone, Clock, CheckCircle, XCircle, Bell } from 'lucide-react'
+import { File, ImageIcon, Video, Smile, Edit2, Trash2, Pin, PinOff, EyeOff, Reply, RotateCcw, Copy, Download, Eye, X, Phone, Clock, CheckCircle, XCircle, Bell, Forward, Search, Check, CheckCheck } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
@@ -80,7 +80,10 @@ interface MessageListProps {
   onUnpinMessage?: (messageId: string) => void
 
   onReplyMessage?: (messageId: string) => void
-
+  onForwardMessage?: (messageId: string, targetConversationId: string) => void
+  conversations?: { id: string; name?: string; type?: string }[]
+  searchQuery?: string
+  onSearchQueryChange?: (query: string) => void
 }
 
 
@@ -110,8 +113,11 @@ export function MessageList({
 
   onUnpinMessage,
 
-  onReplyMessage
-
+  onReplyMessage,
+  onForwardMessage,
+  conversations,
+  searchQuery,
+  onSearchQueryChange,
 }: MessageListProps) {
   const router = useRouter()
 
@@ -128,8 +134,11 @@ export function MessageList({
   const previousMessagesLengthRef = useRef(messages.length)
 
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
-
   const [editContent, setEditContent] = useState('')
+  const [forwardingMessage, setForwardingMessage] = useState<MessageWithSender | null>(null)
+  const [forwardSearch, setForwardSearch] = useState('')
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
+  const [showSearchBar, setShowSearchBar] = useState(false)
 
   const { language } = useSettings()
   const isMobile = useIsMobile()
@@ -643,9 +652,56 @@ export function MessageList({
 
 
 
+  // Filter messages based on search query
+  const filteredMessages = searchQuery?.trim()
+    ? messages.filter(m => m.content?.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : messages
+
   return (
 
-    <div className="flex-1 relative overflow-hidden min-h-0">
+    <div className="flex-1 relative overflow-hidden min-h-0 flex flex-col">
+
+      {/* Message Search Bar */}
+      {onSearchQueryChange && (
+        <div className={cn(
+          'overflow-hidden transition-all duration-200',
+          showSearchBar ? 'max-h-14 border-b' : 'max-h-0'
+        )}>
+          <div className="flex items-center gap-2 px-4 py-2">
+            <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+            <input
+              type="text"
+              placeholder={tr('搜索消息...', 'Search messages...')}
+              value={searchQuery || ''}
+              onChange={(e) => onSearchQueryChange(e.target.value)}
+              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              autoFocus
+            />
+            {searchQuery && (
+              <span className="text-xs text-muted-foreground shrink-0">
+                {filteredMessages.length} {tr('条结果', 'results')}
+              </span>
+            )}
+            <button
+              onClick={() => { onSearchQueryChange(''); setShowSearchBar(false) }}
+              className="h-6 w-6 flex items-center justify-center rounded hover:bg-accent transition-colors shrink-0"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Search toggle button */}
+      {onSearchQueryChange && !showSearchBar && (
+        <button
+          onClick={() => setShowSearchBar(true)}
+          className="absolute top-2 right-4 z-10 h-8 w-8 flex items-center justify-center rounded-full bg-background/80 border shadow-sm hover:bg-accent transition-colors"
+          title={tr('搜索消息', 'Search messages')}
+        >
+          <Search className="h-4 w-4" />
+        </button>
+      )}
 
       <ScrollArea 
 
@@ -665,7 +721,7 @@ export function MessageList({
 
             <div className={cn("space-y-4 px-4", isMobile && "space-y-3 px-1")} ref={scrollRef}>
 
-            {messages.map((message, index) => {
+            {filteredMessages.map((message, index) => {
 
             const normalizedCurrentUserId = String(currentUser?.id || '').trim()
 
@@ -857,13 +913,51 @@ export function MessageList({
                   data-testid="chat-message-row"
                   data-message-side={isOwn ? 'own' : 'peer'}
                   className={cn(
-                    'flex items-start gap-2', // message row aligns avatar and bubble from the top
+                    'flex items-start gap-2 relative group/msg',
                     isMobile && 'gap-1.5',
                     isMobile && 'px-0',
                     grouped && !isMobile && 'mt-1',
                     isOwn && 'flex-row-reverse'
                   )}
+                  onMouseEnter={() => setHoveredMessageId(message.id)}
+                  onMouseLeave={() => setHoveredMessageId(null)}
                 >
+                  {/* ===== Hover Action Bar (飞书风格) ===== */}
+                  {!isMobile && !message.is_deleted && !message.is_recalled && hoveredMessageId === message.id && (
+                    <div
+                      className={cn(
+                        'absolute -top-8 z-20 flex items-center gap-0.5 bg-white dark:bg-gray-800 rounded-lg shadow-lg border px-1 py-0.5',
+                        isOwn ? 'right-10' : 'left-10'
+                      )}
+                    >
+                      {commonEmojis.slice(0, 6).map(emoji => (
+                        <button
+                          key={emoji}
+                          onClick={() => onAddReaction?.(message.id, emoji)}
+                          className="h-7 w-7 flex items-center justify-center rounded hover:bg-accent text-sm transition-colors"
+                          title={emoji}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                      <div className="w-px h-4 bg-border mx-0.5" />
+                      {onReplyMessage && (
+                        <button onClick={() => onReplyMessage(message.id)} className="h-7 w-7 flex items-center justify-center rounded hover:bg-accent transition-colors" title={tr('回复', 'Reply')}>
+                          <Reply className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {onForwardMessage && (
+                        <button onClick={() => setForwardingMessage(message)} className="h-7 w-7 flex items-center justify-center rounded hover:bg-accent transition-colors" title={tr('转发', 'Forward')}>
+                          <Forward className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {isOwn && onRecallMessage && canRecallMessage(message) && (
+                        <button onClick={() => handleRecall(message.id)} className="h-7 w-7 flex items-center justify-center rounded hover:bg-accent transition-colors" title={tr('撤回', 'Recall')}>
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {/* 头像：系统消息（无 sender）不渲染头像占位 */}
                   {displaySender && (
@@ -1412,25 +1506,37 @@ export function MessageList({
                       })()}
 
                       {message.type === 'text' && (
-                        <p
-                          className={cn(
-                            isMobile
-                              ? 'text-[14px] leading-[1.45] whitespace-pre-wrap break-words'
-                              : 'text-[14px] leading-[1.6] whitespace-pre-wrap break-words',
-                            (message.is_deleted || message.is_recalled) && 'italic opacity-60',
-                          )}
-                        >
-                          {message.is_recalled ? t('messageRecalled') : message.content}
-                          {message.is_edited && !message.is_deleted && (
-                            <span className="text-xs opacity-70 ml-2">{t('edited')}</span>
-                          )}
-                          {message.is_pinned && (
-                            <span className="text-xs opacity-70 ml-2 flex items-center gap-1">
-                              <Pin className="h-3 w-3" />
-                              {t('pinned')}
+                        <div className="flex items-end gap-1.5">
+                          <p
+                            className={cn(
+                              isMobile
+                                ? 'text-[14px] leading-[1.45] whitespace-pre-wrap break-words'
+                                : 'text-[14px] leading-[1.6] whitespace-pre-wrap break-words',
+                              (message.is_deleted || message.is_recalled) && 'italic opacity-60',
+                              'flex-1'
+                            )}
+                          >
+                            {message.is_recalled ? t('messageRecalled') : message.content}
+                            {message.is_edited && !message.is_deleted && (
+                              <span className="text-xs opacity-70 ml-2">{t('edited')}</span>
+                            )}
+                            {message.is_pinned && (
+                              <span className="text-xs opacity-70 ml-2 flex items-center gap-1">
+                                <Pin className="h-3 w-3" />
+                                {t('pinned')}
+                              </span>
+                            )}
+                          </p>
+                          {isOwn && !message.is_deleted && !message.is_recalled && (
+                            <span className="shrink-0 mb-0.5" title={message.read_by?.length ? tr('已读', 'Read') : tr('已送达', 'Sent')}>
+                              {message.read_by && message.read_by.length > 0 ? (
+                                <CheckCheck className="h-3.5 w-3.5 text-blue-500" />
+                              ) : (
+                                <Check className="h-3.5 w-3.5 text-gray-400" />
+                              )}
                             </span>
                           )}
-                        </p>
+                        </div>
                       )}
 
                         </div>
@@ -1438,6 +1544,21 @@ export function MessageList({
                         </ContextMenuTrigger>
 
                         <ContextMenuContent>
+                          {/* 回复 */}
+                          {onReplyMessage && !message.is_deleted && !message.is_recalled && (
+                            <ContextMenuItem onClick={() => onReplyMessage(message.id)}>
+                              <Reply className="h-4 w-4 mr-2" />
+                              {tr('回复', 'Reply')}
+                            </ContextMenuItem>
+                          )}
+                          {/* 转发 */}
+                          {onForwardMessage && !message.is_deleted && !message.is_recalled && (
+                            <ContextMenuItem onClick={() => setForwardingMessage(message)}>
+                              <Forward className="h-4 w-4 mr-2" />
+                              {tr('转发', 'Forward')}
+                            </ContextMenuItem>
+                          )}
+                          {(onReplyMessage || onForwardMessage) && <ContextMenuSeparator />}
 
                           {message.is_pinned ? (
 
@@ -1603,6 +1724,38 @@ export function MessageList({
       </ScrollArea>
 
 
+
+      {/* Forward Message Dialog */}
+      <Dialog open={forwardingMessage !== null} onOpenChange={(open) => !open && setForwardingMessage(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{tr('转发消息', 'Forward Message')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="p-3 bg-muted/50 rounded-lg border text-sm">
+              <p className="text-xs text-muted-foreground mb-1">{tr('转发内容', 'Forwarding')}:</p>
+              <p className="truncate">{forwardingMessage?.content || tr('[媒体消息]', '[Media]')}</p>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input type="text" placeholder={tr('搜索会话...', 'Search conversations...')} value={forwardSearch} onChange={(e) => setForwardSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 text-sm border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
+            </div>
+            <ScrollArea className="h-[240px]">
+              <div className="space-y-0.5">
+                {(conversations || []).filter(c => !forwardSearch || c.name?.toLowerCase().includes(forwardSearch.toLowerCase())).map(conv => (
+                  <button key={conv.id} onClick={() => { if (forwardingMessage && onForwardMessage) { onForwardMessage(forwardingMessage.id, conv.id); setForwardingMessage(null); toast({ description: tr('消息已转发', 'Message forwarded') }); }}} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-accent text-left transition-colors">
+                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-medium">{(conv.name || '?')[0]}</div>
+                    <span className="text-sm truncate">{conv.name || tr('未命名', 'Unnamed')}</span>
+                  </button>
+                ))}
+                {(!conversations || conversations.length === 0) && (
+                  <p className="text-sm text-muted-foreground text-center py-8">{tr('暂无可转发的会话', 'No conversations available')}</p>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Message Dialog */}
 
