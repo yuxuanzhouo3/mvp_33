@@ -922,42 +922,7 @@ export function MessageList({
                   onMouseEnter={() => setHoveredMessageId(message.id)}
                   onMouseLeave={() => setHoveredMessageId(null)}
                 >
-                  {/* ===== Hover Action Bar (飞书风格) ===== */}
-                  {!isMobile && !message.is_deleted && !message.is_recalled && hoveredMessageId === message.id && (
-                    <div
-                      className={cn(
-                        'absolute -top-8 z-20 flex items-center gap-0.5 bg-white dark:bg-gray-800 rounded-lg shadow-lg border px-1 py-0.5',
-                        isOwn ? 'right-10' : 'left-10'
-                      )}
-                    >
-                      {commonEmojis.slice(0, 6).map(emoji => (
-                        <button
-                          key={emoji}
-                          onClick={() => onAddReaction?.(message.id, emoji)}
-                          className="h-7 w-7 flex items-center justify-center rounded hover:bg-accent text-sm transition-colors"
-                          title={emoji}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                      <div className="w-px h-4 bg-border mx-0.5" />
-                      {onReplyMessage && (
-                        <button onClick={() => onReplyMessage(message.id)} className="h-7 w-7 flex items-center justify-center rounded hover:bg-accent transition-colors" title={tr('回复', 'Reply')}>
-                          <Reply className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                      {onForwardMessage && (
-                        <button onClick={() => setForwardingMessage(message)} className="h-7 w-7 flex items-center justify-center rounded hover:bg-accent transition-colors" title={tr('转发', 'Forward')}>
-                          <Forward className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                      {isOwn && onRecallMessage && canRecallMessage(message) && (
-                        <button onClick={() => handleRecall(message.id)} className="h-7 w-7 flex items-center justify-center rounded hover:bg-accent transition-colors" title={tr('撤回', 'Recall')}>
-                          <RotateCcw className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  )}
+
 
                   {/* 头像：系统消息（无 sender）不渲染头像占位 */}
                   {displaySender && (
@@ -1527,15 +1492,7 @@ export function MessageList({
                               </span>
                             )}
                           </p>
-                          {isOwn && !message.is_deleted && !message.is_recalled && (
-                            <span className="shrink-0 mb-0.5" title={message.read_by?.length ? tr('已读', 'Read') : tr('已送达', 'Sent')}>
-                              {message.read_by && message.read_by.length > 0 ? (
-                                <CheckCheck className="h-3.5 w-3.5 text-blue-500" />
-                              ) : (
-                                <Check className="h-3.5 w-3.5 text-gray-400" />
-                              )}
-                            </span>
-                          )}
+
                         </div>
                       )}
 
