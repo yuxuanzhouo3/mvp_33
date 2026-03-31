@@ -12,6 +12,7 @@ import { WorkspaceHeader } from '@/components/chat/workspace-header'
 import { ChatTopBannerAd } from '@/components/chat/chat-top-banner-ad'
 
 import { ChatHeader } from '@/components/chat/chat-header'
+import { ChatImportDialog } from '@/components/chat/chat-import-dialog'
 import { ConversationMetaSkeleton } from '@/components/chat/conversation-meta-skeleton'
 
 import { ChatTabs } from '@/components/chat/chat-tabs'
@@ -262,6 +263,7 @@ function ChatPageContent() {
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('list')
   const [groupInfoOpen, setGroupInfoOpen] = useState(false) // Group info panel state
+  const [showImportDialog, setShowImportDialog] = useState(false) // Chat import dialog state
   const [announcementDrawerOpen, setAnnouncementDrawerOpen] = useState(false) // Announcement drawer state
   const [activeTab, setActiveTab] = useState('messages') // Chat tabs state
   const [activeChannel, setActiveChannel] = useState<'none' | 'announcement' | 'blind'>('none') // Global announcement & blind zone state
@@ -8626,6 +8628,7 @@ function ChatPageContent() {
                     onToggleSidebar={isMobile ? () => setMobileView('list') : undefined}
                     mobileBackLabel={language === 'zh' ? '返回会话列表' : 'Back to conversations'}
                     onToggleGroupInfo={() => setGroupInfoOpen(prev => !prev)}
+                    onImportChat={() => setShowImportDialog(true)}
                   />
 
                   {displayConversation.type === 'group' && (
@@ -8929,6 +8932,22 @@ function ChatPageContent() {
       )}
 
     </div>
+
+    {/* Chat Import Dialog */}
+    {displayConversation && (
+      <ChatImportDialog
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        conversationId={displayConversation.id}
+        conversationType={displayConversation.type as 'direct' | 'group' | 'channel'}
+        currentUserName={currentUser?.full_name || currentUser?.username || ''}
+        onImportComplete={() => {
+          if (displayConversation?.id) {
+            loadMessages(displayConversation.id)
+          }
+        }}
+      />
+    )}
     </>
   )
 

@@ -209,6 +209,7 @@ export async function getMessagesCN(conversationId: string): Promise<MessageWith
       region: 'cn',
     })
     .orderBy('created_at', 'asc')
+    .limit(1000)
     .get()
 
   const docs = res.data || []

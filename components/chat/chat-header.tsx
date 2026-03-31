@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ConversationWithDetails, User } from '@/lib/types'
-import { Hash, Lock, Users, Phone, Video, Info, ChevronLeft } from 'lucide-react'
+import { Hash, Lock, Users, Phone, Video, Info, ChevronLeft, Download } from 'lucide-react'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { VoiceCallDialog } from './voice-call-dialog'
 import { VideoCallDialog } from './video-call-dialog'
@@ -21,6 +21,7 @@ interface ChatHeaderProps {
   currentUser: User
   onToggleSidebar?: () => void
   onToggleGroupInfo?: () => void
+  onImportChat?: () => void
   mobileBackLabel?: string
 }
 
@@ -29,6 +30,7 @@ export function ChatHeader({
   currentUser,
   onToggleSidebar,
   onToggleGroupInfo,
+  onImportChat,
   mobileBackLabel,
 }: ChatHeaderProps) {
   const [showVoiceCall, setShowVoiceCall] = useState(false)
@@ -355,6 +357,18 @@ export function ChatHeader({
             >
               <Video className={cn("h-4 w-4", isMobile && "h-3.5 w-3.5")} />
             </Button>
+            {onImportChat && (
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={onImportChat}
+                className={cn("touch-compact h-8 w-8", isMobile && "h-7 w-7")}
+                aria-label={language === 'zh' ? '导入聊天记录' : 'Import chat history'}
+                title={language === 'zh' ? '导入聊天记录' : 'Import chat history'}
+              >
+                <Download className={cn("h-4 w-4", isMobile && "h-3.5 w-3.5")} />
+              </Button>
+            )}
             {conversation.type === 'group' && (
               <Button
                 size="icon"
