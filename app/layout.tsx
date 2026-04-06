@@ -1,8 +1,9 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import "./globals.css";
 import { SettingsProvider } from '@/lib/settings-context';
 import { RegionProvider } from '@/lib/region-context';
 import { Toaster } from '@/components/ui/toaster';
+import { Toaster as SonnerToaster } from '@/components/ui/sonner';
 import { DEFAULT_LANGUAGE } from '@/config';
 import { ClientErrorLogger } from '@/components/debug/client-error-logger';
 import { MpLoginBridge } from '@/components/auth/mp-login-bridge';
@@ -33,6 +34,7 @@ export default function RootLayout({
             <MpLoginBridge />
             {children}
             <Toaster />
+            <SonnerToaster position="top-center" richColors />
           </SettingsProvider>
         </RegionProvider>
       </body>

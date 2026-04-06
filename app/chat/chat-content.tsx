@@ -1737,12 +1737,27 @@ function ChatPageContent() {
               cachedConversations = JSON.parse(cachedData) || []
               console.log('📦 Loading conversations from cache for instant display:', cachedConversations.length, 'conversations')
               
-              // CRITICAL: Filter out conversations where the other user is not in contacts
+              // CRITICAL: Filter out conversations where the other user is not in contacts AND not a workspace member
               // This ensures deleted contacts' conversations don't appear even from cache
               try {
-                const contactsResponse = await fetch('/api/contacts')
+                const [contactsResponse, membersResponse] = await Promise.all([
+                  fetch('/api/contacts'),
+                  fetch(`/api/workspace-members?workspaceId=${workspaceId}`),
+                ])
                 if (contactsResponse.ok) {
                   const contactsData = await contactsResponse.json()
+                  // Build workspace members set
+                  let workspaceMemberIds = new Set<string>()
+                  if (membersResponse.ok) {
+                    try {
+                      const membersData = await membersResponse.json()
+                      if (membersData.success && membersData.members) {
+                        workspaceMemberIds = new Set(
+                          membersData.members.map((m: any) => m.id || m.user_id).filter(Boolean)
+                        )
+                      }
+                    } catch { /* ignore */ }
+                  }
                   if (contactsData.success && contactsData.contacts) {
                     const contactUserIds = new Set(
                       contactsData.contacts.map((c: any) => c.contact_user_id || c.user?.id).filter(Boolean)
@@ -1786,9 +1801,9 @@ function ChatPageContent() {
                         return true // Keep self-conversations
                       }
                       
-                      // If the other user is not in contacts, filter out this conversation
-                      if (!contactUserIds.has(otherUserId) && !isSystemAssistantUserId(otherUserId)) {
-                        console.log('🗑️ [Cache] Filtering out direct conversation - user not in contacts:', {
+                      // If the other user is not in contacts AND not a workspace member, filter out this conversation
+                      if (!contactUserIds.has(otherUserId) && !workspaceMemberIds.has(otherUserId) && !isSystemAssistantUserId(otherUserId)) {
+                        console.log('🗑️ [Cache] Filtering out direct conversation - user not in contacts or workspace:', {
                           conversationId: conv.id,
                           otherUserId: otherUserId,
                         })
@@ -1921,17 +1936,33 @@ function ChatPageContent() {
           // Define allApiIds first before using it
           const allApiIds = new Set(data.conversations.map((c: any) => c.id))
           
-          // Check contacts to see if conversations should really be filtered
+          // Check contacts AND workspace members to see if conversations should really be filtered
           try {
-            const contactsResponse = await fetch('/api/contacts')
+            // Fetch contacts and workspace members in parallel
+            const [contactsResponse, membersResponse] = await Promise.all([
+              fetch('/api/contacts'),
+              fetch(`/api/workspace-members?workspaceId=${workspaceId}`),
+            ])
             if (contactsResponse.ok) {
               const contactsData = await contactsResponse.json()
+              // Build a set of workspace member IDs (fallback to empty if fetch failed)
+              let workspaceMemberIds = new Set<string>()
+              if (membersResponse.ok) {
+                try {
+                  const membersData = await membersResponse.json()
+                  if (membersData.success && membersData.members) {
+                    workspaceMemberIds = new Set(
+                      membersData.members.map((m: any) => m.id || m.user_id).filter(Boolean)
+                    )
+                  }
+                } catch { /* ignore parse errors */ }
+              }
               if (contactsData.success && contactsData.contacts) {
                 const contactUserIds = new Set(
                   contactsData.contacts.map((c: any) => c.contact_user_id || c.user?.id).filter(Boolean)
                 )
                 
-                // Only keep conversations where the other user is still in contacts
+                // Keep conversations where the other user is a contact OR a workspace member
                   const validConversationIds = new Set(
                     data.conversations
                       .filter((conv: any) => {
@@ -1953,7 +1984,8 @@ function ChatPageContent() {
                               return true // Keep self-conversations
                             }
                             
-                            return !!otherUserId && (contactUserIds.has(otherUserId) || isSystemAssistantUserId(otherUserId))
+                            // Keep if user is a contact, a workspace member, or a system assistant
+                            return !!otherUserId && (contactUserIds.has(otherUserId) || workspaceMemberIds.has(otherUserId) || isSystemAssistantUserId(otherUserId))
                           }
                           return false // Filter out invalid direct conversations
                         }
@@ -2585,10 +2617,24 @@ function ChatPageContent() {
               }
               
               const contactCount = contactUserIds.size - 1 // exclude self
+
+              // Also fetch workspace members to avoid filtering out workspace conversations
+              let workspaceMemberIds = new Set<string>()
+              try {
+                const membersResponse = await fetch(`/api/workspace-members?workspaceId=${workspaceId}`)
+                if (membersResponse.ok) {
+                  const membersData = await membersResponse.json()
+                  if (membersData.success && membersData.members) {
+                    workspaceMemberIds = new Set(
+                      membersData.members.map((m: any) => m.id || m.user_id).filter(Boolean)
+                    )
+                  }
+                }
+              } catch { /* ignore */ }
               
               // Debug: contacts used for cleanup
               const contactIdsArray = Array.from(contactUserIds)
-              console.log('👥 Contacts for cleanup', { count: contactCount, ids: contactIdsArray })
+              console.log('👥 Contacts for cleanup', { count: contactCount, ids: contactIdsArray, workspaceMembers: workspaceMemberIds.size })
 
               // Check each direct conversation
               const conversationsToDelete: string[] = []
@@ -2609,13 +2655,14 @@ function ChatPageContent() {
                   
                   // If missing otherUserId, treat as invalid and delete
                   const noOther = !otherUserId
-                  // If the other user is not in contacts list, mark this conversation as deleted
+                  // If the other user is not in contacts AND not a workspace member, mark this conversation as deleted
                   const isSystemAssistantConversation = isSystemAssistantUserId(otherUserId)
+                  const isWorkspaceMember = otherUserId && workspaceMemberIds.has(otherUserId)
                   const noContacts = contactCount === 0
                   const notInContacts = otherUserId && !contactUserIds.has(otherUserId)
-                  if ((noOther || (!isSystemAssistantConversation && (noContacts || notInContacts))) && !deletedConversations.includes(conv.id)) {
+                  if ((noOther || (!isSystemAssistantConversation && !isWorkspaceMember && (noContacts || notInContacts))) && !deletedConversations.includes(conv.id)) {
                     conversationsToDelete.push(conv.id)
-                    console.log(`🧹 Auto-marking conversation ${conv.id} as deleted (user ${otherUserId || 'unknown'} not in contacts or contact list empty)`, {
+                    console.log(`🧹 Auto-marking conversation ${conv.id} as deleted (user ${otherUserId || 'unknown'} not in contacts or workspace)`, {
                       members: memberIds,
                       contactCount,
                       contactIds: contactIdsArray,

@@ -397,32 +397,24 @@ export async function POST(request: NextRequest) {
         }
 
         // 3. 检查是否满足 "同工作区 或 好友关系"
-        const senderWorkspaces = await chatService.getUserWorkspaces(currentUser.id)
-        const targetWorkspaces = await chatService.getUserWorkspaces(otherUserId)
-        const commonWorkspaces = senderWorkspaces.filter((ws: string) => targetWorkspaces.includes(ws))
-        const isFriend = await userService.checkFriendRelation(currentUser.id, otherUserId)
+        // skip_contact_check=true: 工作区成员页面调用，直接跳过共同工作区检查
+        if (!skip_contact_check) {
+          const senderWorkspaces = await chatService.getUserWorkspaces(currentUser.id)
+          const targetWorkspaces = await chatService.getUserWorkspaces(otherUserId)
+          const commonWorkspaces = senderWorkspaces.filter((ws: string) => targetWorkspaces.includes(ws))
+          const isFriend = await userService.checkFriendRelation(currentUser.id, otherUserId)
 
-        if (commonWorkspaces.length === 0 && !isFriend) {
-          console.log('[CN] Permission check failed: no common workspace and not friends', {
-            senderId: currentUser.id,
-            targetId: otherUserId,
-            senderWorkspaces,
-            targetWorkspaces,
-            isFriend,
-          })
-          return NextResponse.json(
-            { error: 'Users must share a workspace or be contacts', code: 'PERMISSION_DENIED' },
-            { status: 403 }
-          )
+          if (commonWorkspaces.length === 0 && !isFriend) {
+            console.log('[CN] Permission check failed: no common workspace and not friends')
+            return NextResponse.json(
+              { error: 'Users must share a workspace or be contacts', code: 'PERMISSION_DENIED' },
+              { status: 403 }
+            )
+          }
+          console.log('[CN] Slack mode check passed')
+        } else {
+          console.log('[CN] Skipping workspace check: skip_contact_check=true')
         }
-
-        console.log('[CN] Slack mode check passed:', {
-          currentUserId: currentUser.id,
-          targetUserId: otherUserId,
-          skipContactCheck: skip_contact_check,
-          commonWorkspaces,
-          isFriend,
-        })
 
         // CRITICAL: Reuse existing direct conversation to avoid duplicates in CN.
         const existingDirect = await findDirectConversationCN(currentUser.id, otherUserId)
@@ -499,43 +491,24 @@ export async function POST(request: NextRequest) {
       }
 
       // 3. 检查是否满足 "同工作区 或 好友关系"
-      // 获取发送者和接收者的 Workspace 列表，检查是否有交集
-      const senderWorkspaces = await chatService.getUserWorkspaces(currentUser.id)
-      const targetWorkspaces = await chatService.getUserWorkspaces(otherUserId)
-      const isFriend = await userService.checkFriendRelation(currentUser.id, otherUserId)
+      // skip_contact_check=true: 工作区成员页面调用，直接跳过；RLS会阻止查询目标用户workspace
+      if (!skip_contact_check) {
+        const senderWorkspaces = await chatService.getUserWorkspaces(currentUser.id)
+        const targetWorkspaces = await chatService.getUserWorkspaces(otherUserId)
+        const isFriend = await userService.checkFriendRelation(currentUser.id, otherUserId)
+        const commonWorkspaces = senderWorkspaces.filter((ws: string) => targetWorkspaces.includes(ws))
 
-      console.log('[INTL] Workspace check:', {
-        senderId: currentUser.id,
-        targetId: otherUserId,
-        senderWorkspaces,
-        targetWorkspaces,
-        isFriend,
-      })
-
-      // 找到共同的 Workspace
-      const commonWorkspaces = senderWorkspaces.filter((ws: string) => targetWorkspaces.includes(ws))
-
-      if (commonWorkspaces.length === 0 && !isFriend) {
-        console.log('[INTL] Permission check failed: no common workspace and not friends:', {
-          senderId: currentUser.id,
-          targetId: otherUserId,
-          senderWorkspaces,
-          targetWorkspaces,
-          isFriend,
-        })
-        return NextResponse.json(
-          { error: 'Users must share a workspace or be contacts', code: 'PERMISSION_DENIED' },
-          { status: 403 }
-        )
+        if (commonWorkspaces.length === 0 && !isFriend) {
+          console.log('[INTL] Permission check failed: no common workspace and not friends')
+          return NextResponse.json(
+            { error: 'Users must share a workspace or be contacts', code: 'PERMISSION_DENIED' },
+            { status: 403 }
+          )
+        }
+        console.log('[INTL] Slack mode check passed')
+      } else {
+        console.log('[INTL] Skipping workspace check: skip_contact_check=true')
       }
-
-      console.log('[POST /api/conversations] Slack mode check passed:', {
-        currentUserId: currentUser.id,
-        targetUserId: otherUserId,
-        skipContactCheck: skip_contact_check,
-        commonWorkspaces,
-        isFriend,
-      })
     }
 
     // OPTIMIZED: Get workspace (skip contact check if requested, e.g., from contacts page)

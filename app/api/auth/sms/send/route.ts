@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { IS_DOMESTIC_VERSION } from '@/config';
 import { isChinaRegion } from '@/lib/config/region';
@@ -52,6 +52,16 @@ async function sendTencentSms(phone: string, code: string) {
     TemplateId: templateId,
     TemplateParamSet: [code],
   };
+
+  // Debug: log exact params to diagnose 1012 signature error
+  console.log('[SMS] SendSms params:', JSON.stringify({
+    phone: `+86${phone}`,
+    SmsSdkAppId: smsSdkAppId,
+    SignName: signName,
+    SignNameHex: Buffer.from(signName, 'utf-8').toString('hex'),
+    SignNameLength: signName.length,
+    TemplateId: templateId,
+  }));
 
   const response = await client.SendSms(params);
   console.log('[SMS] Tencent SendSms response:', JSON.stringify(response));

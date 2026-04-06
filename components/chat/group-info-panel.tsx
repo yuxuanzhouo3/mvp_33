@@ -16,6 +16,7 @@ import { AnnouncementDrawer } from './announcement-drawer'
 import { GroupFilesDialog } from './group-files-dialog'
 import { GroupNicknameDialog } from './group-nickname-dialog'
 import { useSettings } from '@/lib/settings-context'
+import { toast } from 'sonner'
 
 interface GroupInfoPanelProps {
   conversation: ConversationWithDetails
@@ -148,6 +149,15 @@ export function GroupInfoPanel({
               <div className="p-4 space-y-4">
                 {/* Quick Actions */}
                 <div className="space-y-1">
+                  {/* Invite members – visible to ALL members (WeChat-style) */}
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start hover:bg-accent transition-colors duration-200 rounded-lg"
+                    onClick={() => setShowAddMembers(true)}
+                  >
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    {tr('邀请成员', 'Invite Members')}
+                  </Button>
                   <Button
                     variant="ghost"
                     className="w-full justify-start hover:bg-accent transition-colors duration-200 rounded-lg"
@@ -173,15 +183,6 @@ export function GroupInfoPanel({
                     {tr('群昵称', 'Group Nickname')}
                   </Button>
                   {isAdmin && (
-                    <>
-                      <Button
-                        variant="ghost"
-                        className="w-full justify-start hover:bg-accent transition-colors duration-200 rounded-lg"
-                        onClick={() => setShowAddMembers(true)}
-                      >
-                        <UserPlus className="mr-2 h-4 w-4" />
-                        {tr('添加成员', 'Add Members')}
-                      </Button>
                       <Button
                         variant="ghost"
                         className="w-full justify-start hover:bg-accent transition-colors duration-200 rounded-lg"
@@ -190,7 +191,6 @@ export function GroupInfoPanel({
                         <Settings className="mr-2 h-4 w-4" />
                         {tr('群聊设置', 'Group Settings')}
                       </Button>
-                    </>
                   )}
                 </div>
 
@@ -279,8 +279,11 @@ export function GroupInfoPanel({
         open={showAddMembers}
         onOpenChange={setShowAddMembers}
         conversationId={conversation.id}
+        conversationName={conversation.name || undefined}
         existingMemberIds={conversation.members.map(m => m.id)}
         onUpdate={onUpdate}
+        showInviteLink={true}
+        isAdmin={isAdmin}
       />
 
       <AnnouncementDrawer

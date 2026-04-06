@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { useSettings } from '@/lib/settings-context'
 
 import { getTranslation } from '@/lib/i18n'
+import { linkifyMessageContent } from '@/components/chat/linkify-message'
 import { useIsMobile } from '@/hooks/use-mobile'
 
 import {
@@ -1481,7 +1482,7 @@ export function MessageList({
                               'flex-1'
                             )}
                           >
-                            {message.is_recalled ? t('messageRecalled') : message.content}
+                            {message.is_recalled ? t('messageRecalled') : linkifyMessageContent(message.content || '')}
                             {message.is_edited && !message.is_deleted && (
                               <span className="text-xs opacity-70 ml-2">{t('edited')}</span>
                             )}

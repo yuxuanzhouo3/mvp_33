@@ -22,6 +22,9 @@ interface LoginPageClientProps {
 export default function LoginPageClient({ initialStep = 'login' }: LoginPageClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+
+  // Support ?redirect=... so flows like group-invite can return here after login
+  const redirectTarget = searchParams?.get('redirect') || '/chat'
   const [step, setStep] = useState<'login' | 'register' | 'reset-password' | 'workspace'>(initialStep)
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null)
   const { language, setLanguage } = useSettings()
@@ -65,7 +68,7 @@ export default function LoginPageClient({ initialStep = 'login' }: LoginPageClie
           setStep('workspace')
         } else if (user && workspace) {
           // User has both, redirect to chat
-          router.replace('/chat')
+          router.replace(redirectTarget)
           return
         }
         
@@ -99,7 +102,7 @@ export default function LoginPageClient({ initialStep = 'login' }: LoginPageClie
         const existingWorkspace = mockAuth.getCurrentWorkspace()
         if (existingWorkspace) {
           console.log('✅ Workspace already set, redirecting to chat...')
-          router.replace('/chat')
+          router.replace(redirectTarget)
         } else {
           setStep('workspace')
         }
@@ -152,7 +155,7 @@ export default function LoginPageClient({ initialStep = 'login' }: LoginPageClie
         if (existingWorkspace) {
           console.log('✅ User has workspace, redirecting to chat...')
           // Use replace instead of push to avoid adding to history
-          router.replace('/chat')
+          router.replace(redirectTarget)
         } else {
           console.log('✅ User logged in, showing workspace selector...')
           setStep('workspace')
@@ -185,7 +188,7 @@ export default function LoginPageClient({ initialStep = 'login' }: LoginPageClie
     
     if (user && workspace) {
       // User is already logged in with workspace, redirect to chat
-      router.replace('/chat')
+      router.replace(redirectTarget)
     } else if (user && initialStepSetRef.current) {
       // User is logged in but no workspace selected
       // Only update if initial step has been set to avoid unnecessary updates
@@ -285,8 +288,8 @@ export default function LoginPageClient({ initialStep = 'login' }: LoginPageClie
     }
 
     // Use replace instead of push to avoid adding to history
-    console.log('🚀 [WORKSPACE SELECT] Redirecting to /chat with workspace:', workspace.id)
-    router.replace('/chat')
+    console.log('🚀 [WORKSPACE SELECT] Redirecting to', redirectTarget, 'with workspace:', workspace.id)
+    router.replace(redirectTarget)
   }
 
   const t = (key: string) => {
