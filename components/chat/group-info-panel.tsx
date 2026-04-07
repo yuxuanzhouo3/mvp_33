@@ -112,14 +112,16 @@ export function GroupInfoPanel({
             <div className="border-b p-4">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-semibold text-lg">{tr('群聊信息', 'Group Info')}</h2>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={onClose}
-                  className="h-8 w-8"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+                {!isSheet && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={onClose}
+                    className="h-8 w-8"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
 
               <div className="flex items-start gap-3">

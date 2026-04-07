@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
+  MoreHorizontal,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/lib/settings-context'
@@ -26,6 +27,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 
 interface NavItem {
   href: string
@@ -76,7 +82,7 @@ const navItems: NavItem[] = [
   },
 ]
 
-// Mobile bottom tabs - keep original 4 items for cleaner mobile UX
+// Mobile bottom tabs - primary 4 items + "More" popup
 const mobileNavItems: NavItem[] = [
   {
     href: '/chat',
@@ -97,6 +103,30 @@ const mobileNavItems: NavItem[] = [
     href: '/channels',
     icon: Hash,
     label: { zh: '频道', en: 'Channels' },
+  },
+]
+
+// Items shown in "More" popup on mobile
+const mobileMoreItems: NavItem[] = [
+  {
+    href: '/meetings',
+    icon: Video,
+    label: { zh: '会议', en: 'Meetings' },
+  },
+  {
+    href: '/calendar',
+    icon: CalendarDays,
+    label: { zh: '日历', en: 'Calendar' },
+  },
+  {
+    href: '/docs',
+    icon: FileText,
+    label: { zh: '云文档', en: 'Docs' },
+  },
+  {
+    href: '/settings',
+    icon: Settings,
+    label: { zh: '设置', en: 'Settings' },
   },
 ]
 
@@ -374,12 +404,14 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
   }
 
   // ============================================================
-  // Mobile: bottom tab bar (kept simple with 4 items)
+  // Mobile: bottom tab bar (4 primary + "More" popup)
   // ============================================================
   if (mobile) {
+    const isMoreActive = mobileMoreItems.some(item => isActive(item.href))
+
     return (
       <nav className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
-        <div className="grid grid-cols-4 gap-0.5 px-1 pt-1 pb-[max(0.4rem,env(safe-area-inset-bottom))]">
+        <div className="grid grid-cols-5 gap-0.5 px-1 pt-1 pb-[max(0.4rem,env(safe-area-inset-bottom))]">
           {mobileNavItems.map((item) => {
             const Icon = item.icon
             const active = isActive(item.href)
@@ -412,6 +444,52 @@ export function AppNavigation({ totalUnreadCount, mobile = false }: AppNavigatio
               </Button>
             )
           })}
+
+          {/* "More" popup */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                className={cn(
+                  'relative h-14 w-full flex-col gap-1 rounded-lg px-1',
+                  isMoreActive && 'bg-primary/10 text-primary hover:bg-primary/15'
+                )}
+              >
+                <MoreHorizontal className="h-4 w-4 shrink-0" />
+                <span className="text-[10px] font-medium leading-none">
+                  {language === 'zh' ? '更多' : 'More'}
+                </span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              side="top"
+              align="end"
+              sideOffset={8}
+              className="w-44 p-1.5 rounded-xl shadow-lg"
+            >
+              <div className="flex flex-col gap-0.5">
+                {mobileMoreItems.map((item) => {
+                  const Icon = item.icon
+                  const active = isActive(item.href)
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                        active
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-foreground hover:bg-muted'
+                      )}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      {item.label[language]}
+                    </Link>
+                  )
+                })}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </nav>
     )

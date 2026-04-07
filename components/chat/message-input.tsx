@@ -289,7 +289,7 @@ export function MessageInput({
 
           {isMobile ? (
             <div className="space-y-1.5">
-              <div className="flex items-end gap-1">
+              <div className="flex items-end gap-1.5 min-w-0 overflow-hidden">
                 <textarea
                   ref={textareaRef}
                   value={message}
@@ -298,7 +298,7 @@ export function MessageInput({
                   onPaste={handlePaste}
                   placeholder={t('typeMessage')}
                   disabled={disabled}
-                  className="flex-1 h-[34px] min-h-[34px] max-h-[120px] resize-none rounded-[16px] border border-[#D6DEE6] bg-white px-3 py-1 text-[15px] leading-[1.35] shadow-none outline-none focus:border-[#C7CFD8]"
+                  className="flex-1 min-w-0 h-[34px] min-h-[34px] max-h-[120px] resize-none rounded-[16px] border border-[#D6DEE6] bg-white px-3 py-1 text-[15px] leading-[1.35] shadow-none outline-none focus:border-[#C7CFD8]"
                   rows={1}
                 />
                 <Button
@@ -306,7 +306,7 @@ export function MessageInput({
                   data-testid="chat-composer-send-button"
                   disabled={!canSend || disabled}
                   className={cn(
-                    "touch-compact h-[34px] min-w-[68px] rounded-[16px] px-3 text-[13px] font-medium",
+                    "touch-compact shrink-0 h-[34px] w-[56px] rounded-[16px] px-0 text-[13px] font-medium",
                     canSend && !disabled
                       ? "bg-[#1a9dff] text-white hover:bg-[#128de7]"
                       : "bg-[#b8dffa] text-white/90 hover:bg-[#b8dffa]"

@@ -198,7 +198,7 @@ export default function CalendarPage() {
                       onClick={() => day && setSelectedDay(day === selectedDay ? null : day)}
                       className={`bg-background min-h-[80px] sm:min-h-[100px] p-2 text-sm transition-colors cursor-pointer
                         ${day ? 'hover:bg-muted/50' : ''}
-                        ${day === selectedDay ? 'ring-2 ring-blue-500 ring-inset bg-blue-50/30 dark:bg-blue-950/20' : ''}`}
+                        ${day !== null && day === selectedDay ? 'ring-2 ring-blue-500 ring-inset bg-blue-50/30 dark:bg-blue-950/20' : ''}`}
                     >
                       {day && (
                         <>
