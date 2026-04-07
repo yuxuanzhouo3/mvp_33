@@ -359,6 +359,9 @@ function ChatPageContent() {
   const conversationMetaTokenRef = useRef(0)
   const conversationMetaLoadRequestedRef = useRef<string | null>(null)
 
+  // CRITICAL: This ref must be declared before loadConversations which references it
+  const creatingConversationForUserRef = useRef<string | null>(null)
+
   const pendingConversationMapRef = useRef<Map<string, ConversationWithDetails>>(new Map())
 
   const conversationDetailsRef = useRef<Map<string, ConversationWithDetails>>(new Map())
@@ -1936,6 +1939,10 @@ function ChatPageContent() {
           // Define allApiIds first before using it
           const allApiIds = new Set(data.conversations.map((c: any) => c.id))
           
+          // GUARD: Skip contacts validation if conversation creation is in progress
+          if (creatingConversationForUserRef.current) {
+            // Skip contacts validation during creation to prevent race condition
+          } else {
           // Check contacts AND workspace members to see if conversations should really be filtered
           try {
             // Fetch contacts and workspace members in parallel
@@ -2024,6 +2031,7 @@ function ChatPageContent() {
             console.error('Failed to check contacts for conversation validation:', contactsCheckError)
             // If contacts check fails, don't auto-cleanup deletedConversations
           }
+          } // end creatingConversationForUserRef guard
 
           
 
@@ -2292,7 +2300,15 @@ function ChatPageContent() {
 
           
 
-          setConversations(enrichedWithPreservedRead)
+          // CRITICAL FIX: Use functional update to preserve optimistically added conversations
+          setConversations(prev => {
+            const enrichedIds = new Set(enrichedWithPreservedRead.map(c => c.id))
+            const preservedOptimistic = prev.filter(c => !enrichedIds.has(c.id))
+            if (preservedOptimistic.length > 0) {
+              return [...preservedOptimistic, ...enrichedWithPreservedRead]
+            }
+            return enrichedWithPreservedRead
+          })
 
           markConversationsLoaded(userId, workspaceId)
 
@@ -2560,7 +2576,10 @@ function ChatPageContent() {
           // IMPORTANT: Check if direct conversations are with deleted contacts
           // Auto-cleanup: If a direct conversation's other user is not in contacts, mark it as deleted
           // OPTIMIZED: Use cached contacts to avoid frequent API calls
-          if (typeof window !== 'undefined' && userId) {
+          // GUARD: Skip auto-cleanup if conversation creation is in progress
+          if (creatingConversationForUserRef.current) {
+            // Skip cleanup during creation
+          } else if (typeof window !== 'undefined' && userId) {
             try {
               console.log('🚦 Contacts cleanup starting...')
               let contactUserIds: Set<string> = new Set([userId]) // 默认只包含自己，保证最严清理
@@ -3580,8 +3599,6 @@ function ChatPageContent() {
 
   const isManualSelectionRef = useRef<boolean>(false)
 
-  const creatingConversationForUserRef = useRef<string | null>(null)
-
   
 
   useEffect(() => {
@@ -4502,6 +4519,9 @@ function ChatPageContent() {
 
                 const newIds = new Set(ordered.map(c => c.id))
 
+                // CRITICAL FIX: Preserve optimistically added conversations
+                const optimisticConvs = prev.filter(c => !newIds.has(c.id))
+
                 // DEBUG: Log comparison
                 console.log('🔍 [POLL] Comparing conversations:', {
                   prevCount: prev.length,
@@ -4527,10 +4547,9 @@ function ChatPageContent() {
                   return conv
                 })
 
-                // Check if lists are different
-                if (prevIds.size !== newIds.size || 
-
-                    !Array.from(prevIds).every(id => newIds.has(id)) ||
+                // Check if lists are different (account for optimistic convos)
+                const totalExpected = newIds.size + optimisticConvs.length
+                if (prevIds.size !== totalExpected || 
 
                     !Array.from(newIds).every(id => prevIds.has(id))) {
 
@@ -4547,7 +4566,7 @@ function ChatPageContent() {
 
                   }
 
-                  return orderedWithPreservedRead
+                  return [...optimisticConvs, ...orderedWithPreservedRead]
 
                 }
 
@@ -4571,7 +4590,7 @@ function ChatPageContent() {
 
                   }
 
-                  return orderedWithPreservedRead
+                  return [...optimisticConvs, ...orderedWithPreservedRead]
 
                 }
 
@@ -4600,7 +4619,7 @@ function ChatPageContent() {
 
                   }
 
-                  return orderedWithPreservedRead
+                  return [...optimisticConvs, ...orderedWithPreservedRead]
 
                 }
 
