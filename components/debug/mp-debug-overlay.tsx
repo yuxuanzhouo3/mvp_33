@@ -87,6 +87,23 @@ export function MpDebugOverlay() {
 
     refresh()
 
+    // 🔧 CRITICAL: Global error handlers to catch ANY uncaught JS error
+    const origOnError = window.onerror
+    window.onerror = function(msg, source, lineno, colno, error) {
+      pushDebug('💥JS错误', `${msg}`)
+      if (source) pushDebug('💥位置', `${source.split('/').pop()}:${lineno}:${colno}`)
+      if (error?.stack) pushDebug('💥堆栈', error.stack.split('\n')[1]?.trim()?.substring(0, 80) || '')
+      if (origOnError) return (origOnError as any).call(this, msg, source, lineno, colno, error)
+      return false
+    }
+
+    window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
+      const reason = event.reason
+      const msg = reason?.message || reason?.toString() || 'unknown'
+      pushDebug('💥Promise错误', msg.substring(0, 100))
+      if (reason?.stack) pushDebug('💥堆栈', reason.stack.split('\n')[1]?.trim()?.substring(0, 80) || '')
+    })
+
     // Listen for updates
     window.addEventListener('__debug_log_update', refresh)
 

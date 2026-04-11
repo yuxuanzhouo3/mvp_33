@@ -3678,7 +3678,19 @@ function ChatPageContent() {
 
     }
 
-    loadUserData()
+    loadUserData().catch((err) => {
+      console.error('[loadUserData] 顶层未捕获错误:', err)
+      // 🔧 DEBUG: Log to visible panel
+      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+        (window as any).__mpDebug('💥CRASH', `loadUserData崩溃: ${err?.message || err}`)
+        if (err?.stack) {
+          (window as any).__mpDebug('💥堆栈', err.stack.split('\n')[1]?.trim()?.substring(0, 80) || '')
+        }
+      }
+      // CRITICAL: Reset loading state to prevent infinite Loading...
+      setIsLoadingConversations(false)
+      setIsRefreshingConversations(false)
+    })
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
 
