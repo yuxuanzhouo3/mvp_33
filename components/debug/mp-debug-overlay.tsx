@@ -21,8 +21,8 @@ function pushDebug(tag: string, msg: string) {
   const now = new Date()
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
   _debugLog.push({ time, tag, msg })
-  // Keep only last 30 entries
-  if (_debugLog.length > 30) _debugLog.shift()
+  // Keep only last 50 entries
+  if (_debugLog.length > 50) _debugLog.shift()
   // Dispatch update event
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('__debug_log_update'))
@@ -61,7 +61,7 @@ export function MpDebugOverlay() {
     if (user) {
       try {
         const u = JSON.parse(user)
-        pushDebug('INIT', `user.id=${u.id?.substring(0, 12)}...`)
+        pushDebug('INIT', `user.id=${u.id?.substring(0, 16)}...`)
         pushDebug('INIT', `user.name=${u.full_name || u.username || '?'}`)
       } catch {}
     }
@@ -77,7 +77,7 @@ export function MpDebugOverlay() {
         const parts = token.split('.')
         if (parts.length === 3) {
           const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
-          pushDebug('JWT', `sub=${payload.sub?.substring(0, 12)}...`)
+          pushDebug('JWT', `sub=${payload.sub?.substring(0, 16)}...`)
           pushDebug('JWT', `exp=${new Date(payload.exp * 1000).toLocaleString()}`)
           const isExpired = payload.exp * 1000 < Date.now()
           pushDebug('JWT', `已过期=${isExpired ? '⚠️是' : '✅否'}`)
@@ -90,10 +90,33 @@ export function MpDebugOverlay() {
     // Listen for updates
     window.addEventListener('__debug_log_update', refresh)
 
-    // Intercept fetch to log API auth status
-    const origFetch = (window as any).__origDebugFetch || window.fetch
-    ;(window as any).__origDebugFetch = origFetch
+    // Monitor navigation changes (detect when router.push/replace fires)
+    const origPushState = history.pushState.bind(history)
+    const origReplaceState = history.replaceState.bind(history)
+    
+    history.pushState = function(...args: any) {
+      const url = args[2] || ''
+      pushDebug('🔀NAV', `pushState → ${url}`)
+      return origPushState.apply(this, args as any)
+    }
+    history.replaceState = function(...args: any) {
+      const url = args[2] || ''
+      // Don't log URL cleanup (same path)
+      const newPath = typeof url === 'string' ? new URL(url, location.origin).pathname : ''
+      if (newPath && newPath !== location.pathname) {
+        pushDebug('🔀NAV', `replaceState → ${newPath}`)
+      }
+      return origReplaceState.apply(this, args as any)
+    }
 
+    // Intercept fetch to log API auth status
+    // IMPORTANT: We need to check auth status CORRECTLY
+    // The auth interceptor adds headers inside its wrapper.
+    // We wrap OUTSIDE the auth interceptor, so we check:
+    // 1. Does localStorage have a token? (means interceptor WILL add it)
+    // 2. Does the call already have explicit auth headers?
+    const currentFetch = window.fetch
+    
     const patchedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       let url = ''
       if (typeof input === 'string') url = input
@@ -103,34 +126,69 @@ export function MpDebugOverlay() {
       const isApi = url.startsWith('/api/') || url.includes('/api/')
 
       if (isApi) {
-        const shortUrl = url.replace(/^.*\/api\//, '/api/').substring(0, 50)
+        const shortUrl = url.replace(/^.*\/api\//, '/api/').split('?')[0].substring(0, 40)
         const headers = new Headers(init?.headers || {})
-        const hasAuth = headers.has('x-cloudbase-session') || headers.has('Authorization') || headers.has('authorization')
-        pushDebug('FETCH', `${init?.method || 'GET'} ${shortUrl} auth=${hasAuth ? '✅' : '❌无'}`)
-      }
-
-      const response = await origFetch(input, init)
-
-      if (isApi) {
-        const shortUrl = url.replace(/^.*\/api\//, '/api/').substring(0, 50)
-        if (response.status === 401) {
-          pushDebug('🚨401', `${shortUrl} → 未授权!`)
-        } else if (response.status >= 400) {
-          pushDebug('⚠️ERR', `${shortUrl} → ${response.status}`)
+        const hasExplicitAuth = headers.has('x-cloudbase-session') || headers.has('Authorization') || headers.has('authorization')
+        const hasToken = !!localStorage.getItem('chat_app_token')
+        
+        let authLabel: string
+        if (hasExplicitAuth) {
+          authLabel = '✅显式'
+        } else if (hasToken) {
+          authLabel = '🔧拦截器注入'
+        } else {
+          authLabel = '❌无token!'
         }
+        
+        pushDebug('FETCH', `${init?.method || 'GET'} ${shortUrl} auth=${authLabel}`)
       }
 
-      return response
+      try {
+        const response = await currentFetch(input, init)
+
+        if (isApi) {
+          const shortUrl = url.replace(/^.*\/api\//, '/api/').split('?')[0].substring(0, 40)
+          if (response.status === 401) {
+            pushDebug('🚨401', `${shortUrl} → 未授权! 服务器拒绝了token!`)
+            // Try to read error body for more info
+            try {
+              const cloned = response.clone()
+              const errBody = await cloned.text()
+              pushDebug('🚨401', `响应: ${errBody.substring(0, 100)}`)
+            } catch {}
+          } else if (response.status >= 400) {
+            pushDebug('⚠️ERR', `${shortUrl} → ${response.status}`)
+            try {
+              const cloned = response.clone()
+              const errBody = await cloned.text()
+              pushDebug('⚠️ERR', `响应: ${errBody.substring(0, 80)}`)
+            } catch {}
+          } else if (isApi && (url.includes('/conversations') || url.includes('/subscription'))) {
+            // Log success for key APIs
+            pushDebug('✅API', `${shortUrl} → ${response.status} OK`)
+          }
+        }
+
+        return response
+      } catch (fetchError: any) {
+        if (isApi) {
+          const shortUrl = url.replace(/^.*\/api\//, '/api/').split('?')[0].substring(0, 40)
+          pushDebug('🚨ERR', `${shortUrl} → 网络错误: ${fetchError.message}`)
+        }
+        throw fetchError
+      }
     }
 
-    // Only patch if not already patched by debug overlay
-    if (!(window.fetch as any).__debugPatched) {
-      ;(patchedFetch as any).__debugPatched = true
+    // Only patch if not already patched
+    if (!(window.fetch as any).__debugPatched2) {
+      ;(patchedFetch as any).__debugPatched2 = true
       window.fetch = patchedFetch as typeof fetch
     }
 
     return () => {
       window.removeEventListener('__debug_log_update', refresh)
+      history.pushState = origPushState
+      history.replaceState = origReplaceState
     }
   }, [refresh])
 
@@ -194,7 +252,7 @@ export function MpDebugOverlay() {
         }}
       >
         <span style={{ fontWeight: 'bold', color: '#ff0' }}>
-          🔧 MP登录调试面板
+          🔧 MP登录调试面板 v2
         </span>
         <div style={{ display: 'flex', gap: 8 }}>
           <span
@@ -228,8 +286,10 @@ export function MpDebugOverlay() {
             padding: '2px 0',
             color: e.tag.includes('🚨') ? '#f44' 
               : e.tag.includes('⚠️') ? '#fa0' 
+              : e.tag.includes('🔀') ? '#f0f'
               : e.tag === 'JWT' ? '#0ff'
               : e.tag === 'FETCH' ? '#aaf'
+              : e.tag.includes('✅') ? '#0f0'
               : '#0f0'
           }}>
             <span style={{ color: '#888' }}>{e.time}</span>
