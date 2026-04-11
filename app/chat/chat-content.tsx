@@ -3334,6 +3334,11 @@ function ChatPageContent() {
 
       console.log('✅ [CHAT PAGE] User and workspace verified, continuing to load chat data')
 
+      // 🔧 DEBUG STEP 1
+      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+        (window as any).__mpDebug('🔍STEP1', `验证通过，开始设置user和workspace`)
+      }
+
       // Set user and workspace immediately so UI can render
 
       // This allows conversations to start loading right away
@@ -3378,6 +3383,11 @@ function ChatPageContent() {
       const skipFullReload = conversationsLoadedRef.current && forcedReloadDone
 
       const hasExistingConversations = conversationsRef.current.length > 0 || conversations.length > 0
+
+      // 🔧 DEBUG STEP 2
+      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+        (window as any).__mpDebug('🔍STEP2', `skipFullReload=${skipFullReload} hasExisting=${hasExistingConversations} convLoaded=${conversationsLoadedRef.current} forcedDone=${forcedReloadDone}`)
+      }
 
       // IMPORTANT: Check cache first, even if we skip loading
 
@@ -3460,6 +3470,11 @@ function ChatPageContent() {
 
         console.log('✅ Conversations already loaded, skipping forced reload')
 
+        // 🔧 DEBUG
+        if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+          (window as any).__mpDebug('⚠️SKIP', `跳过加载! skipFullReload=true hasExisting=true`)
+        }
+
         hasForcedInitialReloadRef.current = true
 
         setIsLoadingConversations(false)
@@ -3467,6 +3482,11 @@ function ChatPageContent() {
 
         return
 
+      }
+
+      // 🔧 DEBUG STEP 3
+      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+        (window as any).__mpDebug('🔍STEP3', `未跳过，准备加载conversations...`)
       }
 
       hasForcedInitialReloadRef.current = true
