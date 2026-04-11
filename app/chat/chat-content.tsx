@@ -1882,7 +1882,17 @@ function ChatPageContent() {
 
         console.log('🔄 Loading conversations for user (background update):', userId, 'workspace:', workspaceId)
 
+        // 🔧 DEBUG
+        if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+          (window as any).__mpDebug('🌐CONV', `开始请求 /api/conversations?workspaceId=${workspaceId.substring(0,12)}...`)
+        }
+
         const response = await fetch(`/api/conversations?workspaceId=${workspaceId}`)
+
+        // 🔧 DEBUG
+        if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+          (window as any).__mpDebug('🌐CONV', `响应: status=${response.status}`)
+        }
 
         // Handle 401 before parsing
         if (response.status === 401) {
@@ -3509,11 +3519,20 @@ function ChatPageContent() {
 
   const loadOnce = async () => {
 
+    // 🔧 DEBUG
+    if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+      (window as any).__mpDebug('📋LOAD', `loadOnce开始 user=${user.id.substring(0,12)}...`)
+    }
+
     // Check both the ref flag and the pending promise
 
     if (isLoadingConversationsListRef.current || pendingConversationsListRef.current) {
 
       console.log('Conversations already loading, skipping...')
+      // 🔧 DEBUG
+      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+        (window as any).__mpDebug('⚠️LOAD', `已在加载中，跳过! isLoading=${isLoadingConversationsListRef.current} pending=${!!pendingConversationsListRef.current}`)
+      }
 
       return
 
@@ -3527,11 +3546,35 @@ function ChatPageContent() {
 
       // This ensures newly created conversations (even without messages) are loaded
 
-      await loadConversations(user.id, workspace.id, true) // skipCache = true
+      // 🔧 DEBUG
+      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+        (window as any).__mpDebug('📋LOAD', `调用loadConversations(skipCache=true)...`)
+      }
+
+      // Add timeout protection - don't hang forever
+      const timeoutMs = 20000
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`loadConversations超时(${timeoutMs/1000}秒)`)), timeoutMs)
+      })
+
+      await Promise.race([
+        loadConversations(user.id, workspace.id, true), // skipCache = true
+        timeoutPromise,
+      ])
+
+      // 🔧 DEBUG
+      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+        (window as any).__mpDebug('✅LOAD', `conversations加载完成!`)
+      }
 
     } catch (error: any) {
 
       console.error('Failed to load conversations:', error)
+
+      // 🔧 DEBUG
+      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+        (window as any).__mpDebug('🚨LOAD', `加载失败: ${error?.message || error}`)
+      }
 
       // Handle 401 Unauthorized - redirect to login
       if (error?.isUnauthorized || error?.details?.status === 401) {
@@ -3543,6 +3586,10 @@ function ChatPageContent() {
         router.push('/login')
         return
       }
+
+      // CRITICAL FIX: Reset loading state on error so page doesn't stay stuck
+      setIsLoadingConversations(false)
+      setIsRefreshingConversations(false)
 
     } finally {
 
@@ -3562,8 +3609,17 @@ function ChatPageContent() {
 
         // Load conversations
 
-        // Load conversations immediately (removed 100ms delay for faster loading)
-        loadOnce().catch(() => {}), // Catch errors silently, already handled in loadOnce
+        // CRITICAL FIX: Don't silently swallow errors - log them and ensure UI recovers
+        loadOnce().catch((err) => {
+          console.error('[loadOnce] Unhandled error:', err)
+          // 🔧 DEBUG
+          if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+            (window as any).__mpDebug('🚨LOAD', `未捕获错误: ${err?.message || err}`)
+          }
+          // Reset loading state to prevent infinite Loading...
+          setIsLoadingConversations(false)
+          setIsRefreshingConversations(false)
+        }),
 
         // Load user profile in parallel
 
