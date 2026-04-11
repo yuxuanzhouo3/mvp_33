@@ -1,5 +1,14 @@
 'use client'
 
+// 🔧 Safe debug wrapper - prevents crashes when __mpDebug is not a function
+function _safeDebug(tag: string, msg: string) {
+  try {
+    if (typeof window !== 'undefined' && typeof (window as any).__mpDebug === 'function') {
+      (window as any).__mpDebug(tag, msg)
+    }
+  } catch {}
+}
+
 import { useEffect, useLayoutEffect, useState, useCallback, useRef, Suspense } from 'react'
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
@@ -1883,26 +1892,24 @@ function ChatPageContent() {
         console.log('🔄 Loading conversations for user (background update):', userId, 'workspace:', workspaceId)
 
         // 🔧 DEBUG
-        if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-          (window as any).__mpDebug('🌐CONV', `开始请求 /api/conversations?workspaceId=${workspaceId.substring(0,12)}...`)
+        { _safeDebug('🌐CONV', `开始请求 /api/conversations?workspaceId=${workspaceId.substring(0,12)}...`)
         }
 
         const response = await fetch(`/api/conversations?workspaceId=${workspaceId}`)
 
         // 🔧 DEBUG
-        if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-          (window as any).__mpDebug('🌐CONV', `响应: status=${response.status}`)
+        { _safeDebug('🌐CONV', `响应: status=${response.status}`)
         }
 
         // Handle 401 before parsing
         if (response.status === 401) {
           console.error('Unauthorized (401) - redirecting to login')
           // 🔧 DEBUG: Log 401 to visible panel
-          if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+          {
             const tkn = localStorage.getItem('chat_app_token')
-            (window as any).__mpDebug('🚨401', `conversations API返回401!`)
-            (window as any).__mpDebug('🚨401', `token=${tkn ? '有(' + tkn.length + '字符)' : '无!'}`)
-            (window as any).__mpDebug('🚨401', `即将清除auth并跳转/login`)
+            _safeDebug('🚨401', `conversations API返回401!`)
+            _safeDebug('🚨401', `token=${tkn ? '有(' + tkn.length + '字符)' : '无!'}`)
+            _safeDebug('🚨401', `即将清除auth并跳转/login`)
           }
           // Clear mock auth state to avoid redirect loop between /chat and /login
           if (typeof window !== 'undefined') {
@@ -3312,10 +3319,8 @@ function ChatPageContent() {
       })
 
       // 🔧 DEBUG: Log to visible panel
-      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-        (window as any).__mpDebug('CHAT', `user=${user ? '✅' + user.id?.substring(0,8) : '❌无'}, ws=${workspace ? '✅' + workspace.name : '❌无'}`)
-        (window as any).__mpDebug('CHAT', `token=${localStorage.getItem('chat_app_token') ? '✅有' : '❌无'}`)
-      }
+      _safeDebug('CHAT', `user=${user ? '✅' + user.id?.substring(0,8) : '❌无'}, ws=${workspace ? '✅' + workspace.name : '❌无'}`)
+      _safeDebug('CHAT', `token=${localStorage.getItem('chat_app_token') ? '✅有' : '❌无'}`)
 
       if (!user || !workspace) {
         console.error('❌ [CHAT PAGE] Missing user or workspace, redirecting to login:', {
@@ -3323,8 +3328,7 @@ function ChatPageContent() {
           hasWorkspace: !!workspace
         })
         // 🔧 DEBUG
-        if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-          (window as any).__mpDebug('🚨CHAT', `缺少${!user ? 'user' : ''}${!workspace ? 'workspace' : ''} → 跳转/login`)
+        { _safeDebug('🚨CHAT', `缺少${!user ? 'user' : ''}${!workspace ? 'workspace' : ''} → 跳转/login`)
         }
         router.push('/login')
 
@@ -3335,8 +3339,7 @@ function ChatPageContent() {
       console.log('✅ [CHAT PAGE] User and workspace verified, continuing to load chat data')
 
       // 🔧 DEBUG STEP 1
-      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-        (window as any).__mpDebug('🔍STEP1', `验证通过，开始设置user和workspace`)
+      { _safeDebug('🔍STEP1', `验证通过，开始设置user和workspace`)
       }
 
       // Set user and workspace immediately so UI can render
@@ -3385,8 +3388,7 @@ function ChatPageContent() {
       const hasExistingConversations = conversationsRef.current.length > 0 || conversations.length > 0
 
       // 🔧 DEBUG STEP 2
-      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-        (window as any).__mpDebug('🔍STEP2', `skipFullReload=${skipFullReload} hasExisting=${hasExistingConversations} convLoaded=${conversationsLoadedRef.current} forcedDone=${forcedReloadDone}`)
+      { _safeDebug('🔍STEP2', `skipFullReload=${skipFullReload} hasExisting=${hasExistingConversations} convLoaded=${conversationsLoadedRef.current} forcedDone=${forcedReloadDone}`)
       }
 
       // IMPORTANT: Check cache first, even if we skip loading
@@ -3471,8 +3473,7 @@ function ChatPageContent() {
         console.log('✅ Conversations already loaded, skipping forced reload')
 
         // 🔧 DEBUG
-        if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-          (window as any).__mpDebug('⚠️SKIP', `跳过加载! skipFullReload=true hasExisting=true`)
+        { _safeDebug('⚠️SKIP', `跳过加载! skipFullReload=true hasExisting=true`)
         }
 
         hasForcedInitialReloadRef.current = true
@@ -3485,8 +3486,7 @@ function ChatPageContent() {
       }
 
       // 🔧 DEBUG STEP 3
-      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-        (window as any).__mpDebug('🔍STEP3', `未跳过，准备加载conversations...`)
+      { _safeDebug('🔍STEP3', `未跳过，准备加载conversations...`)
       }
 
       hasForcedInitialReloadRef.current = true
@@ -3540,8 +3540,7 @@ function ChatPageContent() {
   const loadOnce = async () => {
 
     // 🔧 DEBUG
-    if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-      (window as any).__mpDebug('📋LOAD', `loadOnce开始 user=${user.id.substring(0,12)}...`)
+    { _safeDebug('📋LOAD', `loadOnce开始 user=${user.id.substring(0,12)}...`)
     }
 
     // Check both the ref flag and the pending promise
@@ -3550,8 +3549,7 @@ function ChatPageContent() {
 
       console.log('Conversations already loading, skipping...')
       // 🔧 DEBUG
-      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-        (window as any).__mpDebug('⚠️LOAD', `已在加载中，跳过! isLoading=${isLoadingConversationsListRef.current} pending=${!!pendingConversationsListRef.current}`)
+      { _safeDebug('⚠️LOAD', `已在加载中，跳过! isLoading=${isLoadingConversationsListRef.current} pending=${!!pendingConversationsListRef.current}`)
       }
 
       return
@@ -3567,8 +3565,7 @@ function ChatPageContent() {
       // This ensures newly created conversations (even without messages) are loaded
 
       // 🔧 DEBUG
-      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-        (window as any).__mpDebug('📋LOAD', `调用loadConversations(skipCache=true)...`)
+      { _safeDebug('📋LOAD', `调用loadConversations(skipCache=true)...`)
       }
 
       // Add timeout protection - don't hang forever
@@ -3583,8 +3580,7 @@ function ChatPageContent() {
       ])
 
       // 🔧 DEBUG
-      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-        (window as any).__mpDebug('✅LOAD', `conversations加载完成!`)
+      { _safeDebug('✅LOAD', `conversations加载完成!`)
       }
 
     } catch (error: any) {
@@ -3592,8 +3588,7 @@ function ChatPageContent() {
       console.error('Failed to load conversations:', error)
 
       // 🔧 DEBUG
-      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-        (window as any).__mpDebug('🚨LOAD', `加载失败: ${error?.message || error}`)
+      { _safeDebug('🚨LOAD', `加载失败: ${error?.message || error}`)
       }
 
       // Handle 401 Unauthorized - redirect to login
@@ -3633,8 +3628,7 @@ function ChatPageContent() {
         loadOnce().catch((err) => {
           console.error('[loadOnce] Unhandled error:', err)
           // 🔧 DEBUG
-          if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-            (window as any).__mpDebug('🚨LOAD', `未捕获错误: ${err?.message || err}`)
+          { _safeDebug('🚨LOAD', `未捕获错误: ${err?.message || err}`)
           }
           // Reset loading state to prevent infinite Loading...
           setIsLoadingConversations(false)
@@ -3681,11 +3675,9 @@ function ChatPageContent() {
     loadUserData().catch((err) => {
       console.error('[loadUserData] 顶层未捕获错误:', err)
       // 🔧 DEBUG: Log to visible panel
-      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-        (window as any).__mpDebug('💥CRASH', `loadUserData崩溃: ${err?.message || err}`)
-        if (err?.stack) {
-          (window as any).__mpDebug('💥堆栈', err.stack.split('\n')[1]?.trim()?.substring(0, 80) || '')
-        }
+      _safeDebug('💥CRASH', `loadUserData崩溃: ${err?.message || err}`)
+      if (err?.stack) {
+        _safeDebug('💥堆栈', err.stack.split('\n')[1]?.trim()?.substring(0, 80) || '')
       }
       // CRITICAL: Reset loading state to prevent infinite Loading...
       setIsLoadingConversations(false)
