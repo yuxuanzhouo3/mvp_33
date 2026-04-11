@@ -6,7 +6,9 @@ import { Toaster } from '@/components/ui/toaster';
 import { Toaster as SonnerToaster } from '@/components/ui/sonner';
 import { DEFAULT_LANGUAGE } from '@/config';
 import { ClientErrorLogger } from '@/components/debug/client-error-logger';
+import { AuthFetchInstaller } from '@/components/auth/auth-fetch-installer';
 import { MpLoginBridge } from '@/components/auth/mp-login-bridge';
+import { MpDebugOverlay } from '@/components/debug/mp-debug-overlay';
 
 export const metadata: Metadata = {
   title: "Enterprise Chat - Company Communication Platform",
@@ -31,10 +33,12 @@ export default function RootLayout({
         <RegionProvider>
           <SettingsProvider>
             <ClientErrorLogger />
+            <AuthFetchInstaller />
             <MpLoginBridge />
             {children}
             <Toaster />
             <SonnerToaster position="top-center" richColors />
+            <MpDebugOverlay />
           </SettingsProvider>
         </RegionProvider>
       </body>

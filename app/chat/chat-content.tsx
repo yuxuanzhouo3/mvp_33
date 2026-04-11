@@ -1887,6 +1887,13 @@ function ChatPageContent() {
         // Handle 401 before parsing
         if (response.status === 401) {
           console.error('Unauthorized (401) - redirecting to login')
+          // 🔧 DEBUG: Log 401 to visible panel
+          if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+            const tkn = localStorage.getItem('chat_app_token')
+            (window as any).__mpDebug('🚨401', `conversations API返回401!`)
+            (window as any).__mpDebug('🚨401', `token=${tkn ? '有(' + tkn.length + '字符)' : '无!'}`)
+            (window as any).__mpDebug('🚨401', `即将清除auth并跳转/login`)
+          }
           // Clear mock auth state to avoid redirect loop between /chat and /login
           if (typeof window !== 'undefined') {
             mockAuth.logout()
@@ -3294,11 +3301,21 @@ function ChatPageContent() {
         workspaceName: workspace?.name
       })
 
+      // 🔧 DEBUG: Log to visible panel
+      if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+        (window as any).__mpDebug('CHAT', `user=${user ? '✅' + user.id?.substring(0,8) : '❌无'}, ws=${workspace ? '✅' + workspace.name : '❌无'}`)
+        (window as any).__mpDebug('CHAT', `token=${localStorage.getItem('chat_app_token') ? '✅有' : '❌无'}`)
+      }
+
       if (!user || !workspace) {
         console.error('❌ [CHAT PAGE] Missing user or workspace, redirecting to login:', {
           hasUser: !!user,
           hasWorkspace: !!workspace
         })
+        // 🔧 DEBUG
+        if (typeof window !== 'undefined' && (window as any).__mpDebug) {
+          (window as any).__mpDebug('🚨CHAT', `缺少${!user ? 'user' : ''}${!workspace ? 'workspace' : ''} → 跳转/login`)
+        }
         router.push('/login')
 
         return
