@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -289,14 +289,6 @@ export default function LoginPageClient({ initialStep = 'login' }: LoginPageClie
 
     // Use replace instead of push to avoid adding to history
     console.log('🚀 [WORKSPACE SELECT] Redirecting to', redirectTarget, 'with workspace:', workspace.id)
-    // DEBUG: visible panel
-    if (typeof window !== 'undefined' && (window as any).__mpDebug) {
-      const u = mockAuth.getCurrentUser()
-      const w = mockAuth.getCurrentWorkspace()
-      const t = localStorage.getItem('chat_app_token')
-      ;(window as any).__mpDebug('WS_JUMP', 'to=' + redirectTarget)
-      ;(window as any).__mpDebug('WS_JUMP', 'user=' + (u ? 'YES_' + u.id?.substring(0,8) : 'NO') + ' ws=' + (w ? 'YES_' + w.name : 'NO') + ' token=' + (t ? 'YES' : 'NO'))
-    }
     router.replace(redirectTarget)
   }
 

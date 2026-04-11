@@ -45,11 +45,6 @@ export function installAuthFetchInterceptor() {
   if (_installed) return
   _installed = true
 
-  // 🔧 DEBUG: confirm interceptor is active
-  if ((window as any).__mpDebug) {
-    (window as any).__mpDebug('拦截器', '✅ fetch拦截器已安装')
-  }
-
   const originalFetch = window.fetch.bind(window)
 
   window.fetch = async (
