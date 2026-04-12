@@ -227,76 +227,69 @@ export function SmartImportDialog({
     }
   }, [step, handleOcrImage, tryParseText, tr])
 
-  // ─── Clipboard monitoring (paste + auto-detect on focus) ───
+  // ─── Clipboard reading (callable from user gesture or focus event) ───
+  const lastClipHashRef = useRef('')
+  const checkClipboard = useCallback(async () => {
+    try {
+      if (!navigator.clipboard?.read) {
+        console.log('[SmartImport] Clipboard API not available')
+        return
+      }
+      console.log('[SmartImport] Checking clipboard...')
+      const items = await navigator.clipboard.read()
+      for (const item of items) {
+        console.log('[SmartImport] Clipboard item types:', item.types)
+        // Check for images
+        const imgType = item.types.find(t => t.startsWith('image/'))
+        if (imgType) {
+          const blob = await item.getType(imgType)
+          const hash = `${blob.size}-${blob.type}`
+          if (hash === lastClipHashRef.current) {
+            console.log('[SmartImport] Same image already processed, skipping')
+            return
+          }
+          lastClipHashRef.current = hash
+          console.log('[SmartImport] ✅ New image detected! Size:', blob.size, 'bytes')
+          setScanStatus('detected')
+
+          const reader = new FileReader()
+          reader.onload = (ev) => {
+            const dataUrl = ev.target?.result as string
+            if (dataUrl) handleOcrImage(dataUrl)
+          }
+          reader.readAsDataURL(blob)
+          return
+        }
+        // Check for text
+        if (item.types.includes('text/plain')) {
+          const blob = await item.getType('text/plain')
+          const text = await blob.text()
+          const hash = `text-${text.length}-${text.slice(0, 20)}`
+          if (hash === lastClipHashRef.current) return
+          lastClipHashRef.current = hash
+          if (text.trim().length > 10) {
+            console.log('[SmartImport] ✅ New text detected! Length:', text.length)
+            setScanStatus('detected')
+            tryParseText(text)
+          }
+          return
+        }
+      }
+    } catch (err) {
+      console.log('[SmartImport] Clipboard read error (may need permission):', err)
+    }
+  }, [handleOcrImage, tryParseText])
+
+  // ─── Paste + focus listeners ───
   useEffect(() => {
     if (step !== 'guide' || typeof window === 'undefined') return
 
-    // 1. Listen for manual paste events
     document.addEventListener('paste', handlePaste)
 
-    // 2. Auto-detect clipboard images when user switches back to this window
-    let lastClipHash = ''
-    const checkClipboard = async () => {
-      try {
-        if (!navigator.clipboard?.read) {
-          console.log('[SmartImport] Clipboard API not available')
-          return
-        }
-        console.log('[SmartImport] Checking clipboard...')
-        const items = await navigator.clipboard.read()
-        for (const item of items) {
-          console.log('[SmartImport] Clipboard item types:', item.types)
-          // Check for images in clipboard
-          const imgType = item.types.find(t => t.startsWith('image/'))
-          if (imgType) {
-            const blob = await item.getType(imgType)
-            // Simple hash to avoid re-processing the same image
-            const hash = `${blob.size}-${blob.type}`
-            if (hash === lastClipHash) {
-              console.log('[SmartImport] Same image already processed, skipping')
-              return
-            }
-            lastClipHash = hash
-            console.log('[SmartImport] ✅ New image detected! Size:', blob.size, 'bytes')
-            setScanStatus('detected')
-
-            const reader = new FileReader()
-            reader.onload = (ev) => {
-              const dataUrl = ev.target?.result as string
-              if (dataUrl) handleOcrImage(dataUrl)
-            }
-            reader.readAsDataURL(blob)
-            return
-          }
-          // Check for text in clipboard
-          if (item.types.includes('text/plain')) {
-            const blob = await item.getType('text/plain')
-            const text = await blob.text()
-            const hash = `text-${text.length}-${text.slice(0, 20)}`
-            if (hash === lastClipHash) return
-            lastClipHash = hash
-            if (text.trim().length > 10) {
-              console.log('[SmartImport] ✅ New text detected! Length:', text.length)
-              setScanStatus('detected')
-              tryParseText(text)
-            }
-            return
-          }
-        }
-      } catch (err) {
-        console.log('[SmartImport] Clipboard read error (may need permission):', err)
-      }
-    }
-
-    // Check clipboard when window regains focus
-    const onFocus = () => {
-      // Small delay to ensure clipboard is updated
-      setTimeout(checkClipboard, 300)
-    }
+    // Try auto-detect on focus (may fail without user gesture)
+    const onFocus = () => setTimeout(checkClipboard, 300)
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        setTimeout(checkClipboard, 300)
-      }
+      if (document.visibilityState === 'visible') setTimeout(checkClipboard, 300)
     }
 
     window.addEventListener('focus', onFocus)
@@ -307,7 +300,7 @@ export function SmartImportDialog({
       window.removeEventListener('focus', onFocus)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [step, handlePaste, handleOcrImage, tryParseText])
+  }, [step, handlePaste, checkClipboard])
 
   // ─── Drag and drop ───
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -603,44 +596,46 @@ export function SmartImportDialog({
                 </div>
               )}
 
-              {/* Subtle action area — no copy/paste language */}
-              <div className="rounded-xl border bg-gradient-to-b from-muted/30 to-muted/10 p-4">
-                <p className="text-xs font-medium text-center text-muted-foreground mb-3">
-                  {tr('💡 数据采集方式', '💡 Data Collection Methods')}
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {/* Auto-detect card */}
-                  <div
-                    ref={pasteAreaRef}
-                    className="rounded-lg border border-purple-200/60 dark:border-purple-800/60 bg-white/60 dark:bg-background/60 p-3 text-center cursor-pointer hover:border-purple-400 transition-all hover:shadow-sm group"
-                    onClick={() => pasteAreaRef.current?.focus()}
-                    tabIndex={0}
-                  >
-                    <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center mx-auto mb-2 group-hover:scale-110 transition-transform">
-                      <ImageIcon className="h-4 w-4 text-white" />
-                    </div>
-                    <p className="text-xs font-medium">{tr('截图识别', 'Screenshot AI')}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{tr('自动 OCR 解析', 'Auto OCR Parse')}</p>
+              {/* Primary action — click triggers clipboard read with user gesture */}
+              <button
+                onClick={checkClipboard}
+                className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white p-4 text-center transition-all hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] group"
+              >
+                <div className="flex items-center justify-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Sparkles className="h-5 w-5 text-white" />
                   </div>
+                  <div className="text-left">
+                    <p className="text-sm font-bold">{tr('已截图？点击立即识别', 'Taken screenshot? Click to detect')}</p>
+                    <p className="text-xs text-white/70 mt-0.5">{tr('AI 自动读取剪贴板并解析聊天内容', 'AI reads clipboard and parses chat content')}</p>
+                  </div>
+                </div>
+              </button>
 
-                  {/* Upload card */}
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="rounded-lg border border-emerald-200/60 dark:border-emerald-800/60 bg-white/60 dark:bg-background/60 p-3 text-center hover:border-emerald-400 transition-all hover:shadow-sm group"
-                  >
-                    <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center mx-auto mb-2 group-hover:scale-110 transition-transform">
-                      <Upload className="h-4 w-4 text-white" />
-                    </div>
-                    <p className="text-xs font-medium">{tr('文件导入', 'File Import')}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{tr('图片/文本文件', 'Image/Text File')}</p>
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*,.txt,.csv,.text"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
+              {/* Secondary options */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-muted-foreground/20 bg-muted/30 p-2.5 text-xs text-muted-foreground hover:bg-muted/60 transition-colors"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  {tr('上传图片/文件', 'Upload Image/File')}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,.txt,.csv,.text"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <div
+                  ref={pasteAreaRef}
+                  tabIndex={0}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-muted-foreground/20 bg-muted/30 p-2.5 text-xs text-muted-foreground hover:bg-muted/60 transition-colors cursor-pointer"
+                  onClick={() => pasteAreaRef.current?.focus()}
+                >
+                  <Monitor className="h-3.5 w-3.5" />
+                  {tr('Ctrl+V 粘贴', 'Ctrl+V Paste')}
                 </div>
               </div>
 
