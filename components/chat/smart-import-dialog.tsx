@@ -59,11 +59,12 @@ export function SmartImportDialog({
   const [importing, setImporting] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
   const [ocrProcessing, setOcrProcessing] = useState(false)
-  const [scanStatus, setScanStatus] = useState<string | null>(null) // e.g. 'detected', 'reading'
+  const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'detected' | 'error'>('idle')
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pasteAreaRef = useRef<HTMLDivElement>(null)
   const clipboardCheckIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
   const resetState = useCallback(() => {
     setStep('select-platform')
@@ -75,10 +76,14 @@ export function SmartImportDialog({
     setImporting(false)
     setIsDragOver(false)
     setOcrProcessing(false)
-    setScanStatus(null)
+    setScanStatus('idle')
     if (clipboardCheckIntervalRef.current) {
       clearInterval(clipboardCheckIntervalRef.current)
       clipboardCheckIntervalRef.current = null
+    }
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
     }
   }, [])
 
@@ -227,80 +232,90 @@ export function SmartImportDialog({
     }
   }, [step, handleOcrImage, tryParseText, tr])
 
-  // ─── Clipboard reading (callable from user gesture or focus event) ───
+  // ─── Clipboard reading (returns true if permission was granted) ───
   const lastClipHashRef = useRef('')
-  const checkClipboard = useCallback(async () => {
+  const checkClipboard = useCallback(async (): Promise<boolean> => {
     try {
       if (!navigator.clipboard?.read) {
         console.log('[SmartImport] Clipboard API not available')
-        return
+        return false
       }
-      console.log('[SmartImport] Checking clipboard...')
       const items = await navigator.clipboard.read()
       for (const item of items) {
-        console.log('[SmartImport] Clipboard item types:', item.types)
         // Check for images
         const imgType = item.types.find(t => t.startsWith('image/'))
         if (imgType) {
           const blob = await item.getType(imgType)
           const hash = `${blob.size}-${blob.type}`
-          if (hash === lastClipHashRef.current) {
-            console.log('[SmartImport] Same image already processed, skipping')
-            return
-          }
+          if (hash === lastClipHashRef.current) return true // permission OK, same content
           lastClipHashRef.current = hash
           console.log('[SmartImport] ✅ New image detected! Size:', blob.size, 'bytes')
           setScanStatus('detected')
-
           const reader = new FileReader()
           reader.onload = (ev) => {
             const dataUrl = ev.target?.result as string
             if (dataUrl) handleOcrImage(dataUrl)
           }
           reader.readAsDataURL(blob)
-          return
+          return true
         }
         // Check for text
         if (item.types.includes('text/plain')) {
           const blob = await item.getType('text/plain')
           const text = await blob.text()
           const hash = `text-${text.length}-${text.slice(0, 20)}`
-          if (hash === lastClipHashRef.current) return
+          if (hash === lastClipHashRef.current) return true
           lastClipHashRef.current = hash
           if (text.trim().length > 10) {
             console.log('[SmartImport] ✅ New text detected! Length:', text.length)
             setScanStatus('detected')
             tryParseText(text)
           }
-          return
+          return true
         }
       }
+      return true // permission OK, nothing actionable
     } catch (err) {
-      console.log('[SmartImport] Clipboard read error (may need permission):', err)
+      console.log('[SmartImport] Clipboard read denied:', err)
+      return false
     }
   }, [handleOcrImage, tryParseText])
 
-  // ─── Paste + focus listeners ───
+  // ─── Start continuous polling (called after first user-gesture grant) ───
+  const startContinuousScanning = useCallback(async () => {
+    // First call with user gesture to get permission
+    const granted = await checkClipboard()
+    if (!granted) {
+      setScanStatus('error')
+      return
+    }
+    setScanStatus('scanning')
+    console.log('[SmartImport] 🔄 Permission granted! Starting continuous scan...')
+
+    // Clear any existing polling
+    if (pollingRef.current) clearInterval(pollingRef.current)
+
+    // Start 2-second polling
+    pollingRef.current = setInterval(async () => {
+      if (document.visibilityState !== 'visible') return
+      await checkClipboard()
+    }, 2000)
+  }, [checkClipboard])
+
+  // ─── Paste listener + cleanup ───
   useEffect(() => {
     if (step !== 'guide' || typeof window === 'undefined') return
 
     document.addEventListener('paste', handlePaste)
 
-    // Try auto-detect on focus (may fail without user gesture)
-    const onFocus = () => setTimeout(checkClipboard, 300)
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') setTimeout(checkClipboard, 300)
-    }
-
-    window.addEventListener('focus', onFocus)
-    document.addEventListener('visibilitychange', onVisibilityChange)
-
     return () => {
       document.removeEventListener('paste', handlePaste)
-      window.removeEventListener('focus', onFocus)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
     }
-  }, [step, handlePaste, checkClipboard])
+  }, [step, handlePaste])
 
   // ─── Drag and drop ───
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -531,61 +546,96 @@ export function SmartImportDialog({
           {step === 'guide' && platform && (
             <div className="p-5 space-y-4">
               {/* AI Scanning Animation */}
-              <div className="relative flex flex-col items-center justify-center py-6">
-                {/* Radar rings */}
-                <div className="relative w-32 h-32 flex items-center justify-center">
-                  <div className="absolute inset-0 rounded-full border-2 border-purple-300/30 dark:border-purple-600/30 animate-ping" style={{ animationDuration: '2s' }} />
-                  <div className="absolute inset-2 rounded-full border-2 border-purple-400/40 dark:border-purple-500/40 animate-ping" style={{ animationDuration: '2.5s', animationDelay: '0.3s' }} />
-                  <div className="absolute inset-4 rounded-full border-2 border-purple-500/50 dark:border-purple-400/50 animate-ping" style={{ animationDuration: '3s', animationDelay: '0.6s' }} />
+              <div className="relative flex flex-col items-center justify-center py-4">
+                {/* Radar rings — active when scanning */}
+                <div className="relative w-28 h-28 flex items-center justify-center">
+                  {scanStatus === 'scanning' && (
+                    <>
+                      <div className="absolute inset-0 rounded-full border-2 border-green-400/30 animate-ping" style={{ animationDuration: '2s' }} />
+                      <div className="absolute inset-2 rounded-full border-2 border-green-500/40 animate-ping" style={{ animationDuration: '2.5s', animationDelay: '0.3s' }} />
+                      <div className="absolute inset-4 rounded-full border-2 border-green-600/50 animate-ping" style={{ animationDuration: '3s', animationDelay: '0.6s' }} />
+                    </>
+                  )}
+                  {scanStatus === 'idle' && (
+                    <>
+                      <div className="absolute inset-0 rounded-full border-2 border-purple-300/20 animate-pulse" style={{ animationDuration: '3s' }} />
+                      <div className="absolute inset-3 rounded-full border-2 border-purple-400/15 animate-pulse" style={{ animationDuration: '4s' }} />
+                    </>
+                  )}
                   {/* Center icon */}
                   <div className={cn(
-                    "relative z-10 w-16 h-16 rounded-2xl bg-gradient-to-br flex items-center justify-center text-3xl shadow-xl",
+                    "relative z-10 w-14 h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center text-2xl shadow-xl",
+                    scanStatus === 'scanning' ? 'ring-4 ring-green-400/30 ring-offset-2 ring-offset-background' : '',
                     PLATFORMS.find(p => p.id === platform)?.color
                   )}>
                     {PLATFORMS.find(p => p.id === platform)?.icon}
                   </div>
                 </div>
 
-                {/* Scanning status text */}
-                <div className="mt-5 text-center">
-                  {scanStatus === 'detected' ? (
+                {/* Status text — changes based on scanStatus */}
+                <div className="mt-4 text-center">
+                  {scanStatus === 'detected' && (
                     <div className="animate-in zoom-in-95 fade-in duration-300">
                       <p className="text-base font-semibold flex items-center gap-2 justify-center text-green-600 dark:text-green-400">
                         <CheckCircle2 className="h-5 w-5" />
-                        {tr('✅ 检测到截图！正在分析...', '✅ Screenshot detected! Analyzing...')}
+                        {tr('检测到新内容！AI 正在分析...', 'New content detected! AI analyzing...')}
                       </p>
                     </div>
-                  ) : (
+                  )}
+                  {scanStatus === 'scanning' && (
                     <>
-                      <p className="text-base font-semibold flex items-center gap-2 justify-center">
-                        <Sparkles className="h-4 w-4 text-purple-500 animate-pulse" />
-                        {tr('AI 智能扫描中...', 'AI Smart Scanning...')}
+                      <p className="text-sm font-semibold flex items-center gap-2 justify-center text-green-600 dark:text-green-400">
+                        <div className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" /><span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" /></div>
+                        {tr('持续扫描中 — 截图后自动识别', 'Live scanning — auto-detects screenshots')}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-2 max-w-[300px] mx-auto leading-relaxed">
+                      <p className="text-xs text-muted-foreground mt-1.5">
                         {tr(
-                          `请切换到${PLATFORMS.find(p => p.id === platform)?.name.zh}，截图聊天记录后切回此窗口，AI 将自动识别`,
-                          `Switch to ${PLATFORMS.find(p => p.id === platform)?.name.en}, screenshot the chat, then switch back — AI auto-detects`
+                          `现在可以切到${PLATFORMS.find(p => p.id === platform)?.name.zh}截图，AI 会自动检测`,
+                          `Switch to ${PLATFORMS.find(p => p.id === platform)?.name.en} and screenshot — AI auto-detects`
                         )}
+                      </p>
+                    </>
+                  )}
+                  {scanStatus === 'idle' && (
+                    <>
+                      <p className="text-sm font-semibold flex items-center gap-2 justify-center">
+                        <Sparkles className="h-4 w-4 text-purple-500" />
+                        {tr('AI 智能扫描', 'AI Smart Scan')}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1.5 max-w-[280px] mx-auto">
+                        {tr('点击下方按钮启动扫描，之后每次截图都将自动识别', 'Click below to start scanning — every screenshot will be auto-detected')}
+                      </p>
+                    </>
+                  )}
+                  {scanStatus === 'error' && (
+                    <>
+                      <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">
+                        {tr('剪贴板权限被拒绝', 'Clipboard permission denied')}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        {tr('请使用 Ctrl+V 粘贴或上传文件', 'Please use Ctrl+V to paste or upload a file')}
                       </p>
                     </>
                   )}
                 </div>
 
-                {/* Animated scanning indicators */}
-                <div className="flex items-center gap-4 mt-5">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-xs text-muted-foreground">{tr('监听中', 'Listening')}</span>
+                {/* Scanning indicators — only show when scanning */}
+                {scanStatus === 'scanning' && (
+                  <div className="flex items-center gap-4 mt-4">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                      <span className="text-[11px] text-muted-foreground">{tr('实时监听', 'Live')}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" style={{ animationDelay: '0.5s' }} />
+                      <span className="text-[11px] text-muted-foreground">{tr('图像就绪', 'Image AI')}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" style={{ animationDelay: '1s' }} />
+                      <span className="text-[11px] text-muted-foreground">{tr('文字就绪', 'Text AI')}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" style={{ animationDelay: '0.5s' }} />
-                    <span className="text-xs text-muted-foreground">{tr('图像识别就绪', 'Image AI Ready')}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" style={{ animationDelay: '1s' }} />
-                    <span className="text-xs text-muted-foreground">{tr('文字解析就绪', 'Text Parser Ready')}</span>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Error display */}
@@ -596,21 +646,30 @@ export function SmartImportDialog({
                 </div>
               )}
 
-              {/* Primary action — click triggers clipboard read with user gesture */}
-              <button
-                onClick={checkClipboard}
-                className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white p-4 text-center transition-all hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] group"
-              >
-                <div className="flex items-center justify-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <Sparkles className="h-5 w-5 text-white" />
+              {/* Primary action — changes based on scan state */}
+              {scanStatus === 'idle' || scanStatus === 'error' ? (
+                <button
+                  onClick={startContinuousScanning}
+                  className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white p-4 text-center transition-all hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] group"
+                >
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Sparkles className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-bold">{tr('🚀 启动智能扫描', '🚀 Start Smart Scan')}</p>
+                      <p className="text-xs text-white/70 mt-0.5">{tr('授权后自动持续监控剪贴板', 'Auto-monitors clipboard after authorization')}</p>
+                    </div>
                   </div>
-                  <div className="text-left">
-                    <p className="text-sm font-bold">{tr('已截图？点击立即识别', 'Taken screenshot? Click to detect')}</p>
-                    <p className="text-xs text-white/70 mt-0.5">{tr('AI 自动读取剪贴板并解析聊天内容', 'AI reads clipboard and parses chat content')}</p>
-                  </div>
+                </button>
+              ) : scanStatus === 'scanning' ? (
+                <div className="w-full rounded-xl bg-gradient-to-r from-green-600/10 to-emerald-600/10 border-2 border-green-500/30 p-3 text-center">
+                  <p className="text-sm font-medium text-green-700 dark:text-green-400 flex items-center justify-center gap-2">
+                    <div className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" /></div>
+                    {tr('扫描运行中 — 截图后自动处理', 'Scanning active — screenshots auto-processed')}
+                  </p>
                 </div>
-              </button>
+              ) : null}
 
               {/* Secondary options */}
               <div className="flex items-center gap-2">
@@ -619,7 +678,7 @@ export function SmartImportDialog({
                   className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-muted-foreground/20 bg-muted/30 p-2.5 text-xs text-muted-foreground hover:bg-muted/60 transition-colors"
                 >
                   <Upload className="h-3.5 w-3.5" />
-                  {tr('上传图片/文件', 'Upload Image/File')}
+                  {tr('上传文件', 'Upload File')}
                 </button>
                 <input
                   ref={fileInputRef}
