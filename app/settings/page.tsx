@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { useSubscription } from '@/hooks/use-subscription'
 import { SubscriptionBadge } from '@/components/subscription/subscription-badge'
-import { ArrowRight, ArrowLeft, Bell, Gift } from 'lucide-react'
+import { ArrowRight, ArrowLeft, Bell, Gift, Download, Sparkles } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AppNavigation } from '@/components/layout/app-navigation'
@@ -149,6 +149,20 @@ export default function SettingsPage() {
               {tr('邀请有奖', 'Invite Rewards')}
             </span>
             <ArrowRight className="h-4 w-4" />
+          </Button>
+          <Button
+            onClick={() => router.push('/chat?action=import')}
+            variant="outline"
+            className="w-full justify-between border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20 hover:from-violet-100 hover:to-purple-100 dark:hover:from-violet-950/30 dark:hover:to-purple-950/30"
+          >
+            <span className="inline-flex items-center gap-2">
+              <div className="h-5 w-5 rounded bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center">
+                <Download className="h-3 w-3 text-white" />
+              </div>
+              <span className="font-medium">{tr('一键导入聊天记录', 'One-Click Import Chat History')}</span>
+              <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+            </span>
+            <ArrowRight className="h-4 w-4 text-violet-500" />
           </Button>
         </CardContent>
       </Card>

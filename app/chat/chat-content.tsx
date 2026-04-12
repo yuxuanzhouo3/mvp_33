@@ -22,6 +22,7 @@ import { ChatTopBannerAd } from '@/components/chat/chat-top-banner-ad'
 
 import { ChatHeader } from '@/components/chat/chat-header'
 import { ChatImportDialog } from '@/components/chat/chat-import-dialog'
+import { SmartImportDialog } from '@/components/chat/smart-import-dialog'
 import { ConversationMetaSkeleton } from '@/components/chat/conversation-meta-skeleton'
 
 import { ChatTabs } from '@/components/chat/chat-tabs'
@@ -273,6 +274,7 @@ function ChatPageContent() {
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('list')
   const [groupInfoOpen, setGroupInfoOpen] = useState(false) // Group info panel state
   const [showImportDialog, setShowImportDialog] = useState(false) // Chat import dialog state
+  const [showSmartImport, setShowSmartImport] = useState(false) // Smart one-click import dialog state
   const [announcementDrawerOpen, setAnnouncementDrawerOpen] = useState(false) // Announcement drawer state
   const [activeTab, setActiveTab] = useState('messages') // Chat tabs state
   const [activeChannel, setActiveChannel] = useState<'none' | 'announcement' | 'blind'>('none') // Global announcement & blind zone state
@@ -511,6 +513,19 @@ function ChatPageContent() {
       setMobileView('detail')
     }
   }, [isMobile, activeChannel, searchParams])
+
+  // Handle ?action=import URL parameter (from settings page)
+  useEffect(() => {
+    const action = searchParams.get('action')
+    if (action === 'import' && selectedConversationId) {
+      setShowSmartImport(true)
+      // Remove the action param from URL
+      const nextParams = new URLSearchParams(searchParams.toString())
+      nextParams.delete('action')
+      const nextQuery = nextParams.toString()
+      router.replace(nextQuery ? `/chat?${nextQuery}` : '/chat')
+    }
+  }, [searchParams, selectedConversationId, router])
 
   useLayoutEffect(() => {
     if (!selectedConversationId) return
@@ -8791,7 +8806,7 @@ function ChatPageContent() {
                     onToggleSidebar={isMobile ? () => setMobileView('list') : undefined}
                     mobileBackLabel={language === 'zh' ? '返回会话列表' : 'Back to conversations'}
                     onToggleGroupInfo={() => setGroupInfoOpen(prev => !prev)}
-                    onImportChat={() => setShowImportDialog(true)}
+                    onImportChat={() => setShowSmartImport(true)}
                   />
 
                   {displayConversation.type === 'group' && (
@@ -9101,6 +9116,22 @@ function ChatPageContent() {
       <ChatImportDialog
         open={showImportDialog}
         onOpenChange={setShowImportDialog}
+        conversationId={displayConversation.id}
+        conversationType={displayConversation.type as 'direct' | 'group' | 'channel'}
+        currentUserName={currentUser?.full_name || currentUser?.username || ''}
+        onImportComplete={() => {
+          if (displayConversation?.id) {
+            loadMessages(displayConversation.id)
+          }
+        }}
+      />
+    )}
+
+    {/* Smart One-Click Import Dialog */}
+    {displayConversation && (
+      <SmartImportDialog
+        open={showSmartImport}
+        onOpenChange={setShowSmartImport}
         conversationId={displayConversation.id}
         conversationType={displayConversation.type as 'direct' | 'group' | 'channel'}
         currentUserName={currentUser?.full_name || currentUser?.username || ''}
