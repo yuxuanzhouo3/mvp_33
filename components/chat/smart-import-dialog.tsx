@@ -155,7 +155,6 @@ export function SmartImportDialog({
   // ─── OCR Screenshot ───
   const handleOcrImage = useCallback(async (dataUrl: string) => {
     setOcrProcessing(true)
-    setScanStatus(null)
     setStep('parsing')
     setError(null)
     console.log('[SmartImport] Starting OCR analysis, image size:', Math.round(dataUrl.length / 1024), 'KB')
@@ -185,11 +184,14 @@ export function SmartImportDialog({
       } else {
         setError(data.error || tr('AI 未能从截图中识别到聊天消息，请截取包含聊天对话的区域', 'AI could not identify chat messages in the screenshot. Please capture an area with chat conversations.'))
         setStep('guide')
+        // Restore scanning state if polling is still active
+        if (pollingRef.current) setScanStatus('scanning')
       }
     } catch (err) {
       console.error('[SmartImport] OCR fetch error:', err)
       setError(tr('网络错误，请重试', 'Network error, please retry'))
       setStep('guide')
+      if (pollingRef.current) setScanStatus('scanning')
     } finally {
       setOcrProcessing(false)
     }
