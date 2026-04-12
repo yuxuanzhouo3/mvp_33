@@ -517,7 +517,7 @@ function ChatPageContent() {
   // Handle ?action=import URL parameter (from settings page)
   useEffect(() => {
     const action = searchParams.get('action')
-    if (action === 'import' && selectedConversationId) {
+    if (action === 'import') {
       setShowSmartImport(true)
       // Remove the action param from URL
       const nextParams = new URLSearchParams(searchParams.toString())
@@ -525,7 +525,7 @@ function ChatPageContent() {
       const nextQuery = nextParams.toString()
       router.replace(nextQuery ? `/chat?${nextQuery}` : '/chat')
     }
-  }, [searchParams, selectedConversationId, router])
+  }, [searchParams, router])
 
   useLayoutEffect(() => {
     if (!selectedConversationId) return
@@ -9128,20 +9128,18 @@ function ChatPageContent() {
     )}
 
     {/* Smart One-Click Import Dialog */}
-    {displayConversation && (
-      <SmartImportDialog
-        open={showSmartImport}
-        onOpenChange={setShowSmartImport}
-        conversationId={displayConversation.id}
-        conversationType={displayConversation.type as 'direct' | 'group' | 'channel'}
-        currentUserName={currentUser?.full_name || currentUser?.username || ''}
-        onImportComplete={() => {
-          if (displayConversation?.id) {
-            loadMessages(displayConversation.id)
-          }
-        }}
-      />
-    )}
+    <SmartImportDialog
+      open={showSmartImport}
+      onOpenChange={setShowSmartImport}
+      conversationId={displayConversation?.id || ''}
+      conversationType={(displayConversation?.type as 'direct' | 'group' | 'channel') || 'direct'}
+      currentUserName={currentUser?.full_name || currentUser?.username || ''}
+      onImportComplete={() => {
+        if (displayConversation?.id) {
+          loadMessages(displayConversation.id)
+        }
+      }}
+    />
     </>
   )
 
