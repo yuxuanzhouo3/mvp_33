@@ -91,7 +91,29 @@ export function SmartImportDialog({
     setStep('connecting')
     setConnectProgress(0)
 
-    // Fake connecting animation
+    // Try to open desktop app via URL scheme (deep link)
+    const urlSchemes: Record<Platform, string> = {
+      wechat: 'weixin://',
+      feishu: 'https://applink.feishu.cn/',
+      dingtalk: 'dingtalk://'
+    }
+    const scheme = urlSchemes[p]
+    if (scheme) {
+      try {
+        // Use a hidden iframe for desktop to silently attempt the launch
+        const iframe = document.createElement('iframe')
+        iframe.style.display = 'none'
+        iframe.src = scheme
+        document.body.appendChild(iframe)
+        setTimeout(() => {
+          try { document.body.removeChild(iframe) } catch {}
+        }, 2000)
+      } catch {
+        // Silently ignore if the app isn't installed
+      }
+    }
+
+    // Connecting animation (runs simultaneously with app launch)
     const duration = 2500
     const interval = 50
     let elapsed = 0
@@ -393,7 +415,7 @@ export function SmartImportDialog({
                 </h2>
                 <p className="text-white/70 text-xs mt-0.5">
                   {step === 'select-platform' && tr('选择你要导入的平台', 'Select the platform to import from')}
-                  {step === 'connecting' && tr('正在连接...', 'Connecting...')}
+                  {step === 'connecting' && tr('正在打开应用...', 'Opening app...')}
                   {step === 'guide' && tr('按照引导完成导入', 'Follow the guide to import')}
                   {step === 'parsing' && tr('AI 正在识别截图内容...', 'AI is recognizing screenshot...')}
                   {step === 'preview' && tr('确认导入内容', 'Confirm import content')}
@@ -455,10 +477,16 @@ export function SmartImportDialog({
               )}>
                 {PLATFORMS.find(p => p.id === platform)?.icon}
               </div>
-              <p className="text-base font-semibold mb-4">
+              <p className="text-base font-semibold mb-1">
                 {tr(
-                  `正在连接${PLATFORMS.find(p => p.id === platform)?.name.zh}...`,
-                  `Connecting to ${PLATFORMS.find(p => p.id === platform)?.name.en}...`
+                  `正在打开${PLATFORMS.find(p => p.id === platform)?.name.zh}...`,
+                  `Opening ${PLATFORMS.find(p => p.id === platform)?.name.en}...`
+                )}
+              </p>
+              <p className="text-xs text-muted-foreground mb-4">
+                {tr(
+                  '如果应用未自动打开，请手动切换到对应应用',
+                  'If the app did not open, please switch to it manually'
                 )}
               </p>
               <div className="w-full max-w-xs">
