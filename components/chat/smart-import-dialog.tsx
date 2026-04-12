@@ -416,7 +416,7 @@ export function SmartImportDialog({
                 <p className="text-white/70 text-xs mt-0.5">
                   {step === 'select-platform' && tr('选择你要导入的平台', 'Select the platform to import from')}
                   {step === 'connecting' && tr('正在打开应用...', 'Opening app...')}
-                  {step === 'guide' && tr('按照引导完成导入', 'Follow the guide to import')}
+                  {step === 'guide' && tr('AI 智能扫描中', 'AI Smart Scanning')}
                   {step === 'parsing' && tr('AI 正在识别截图内容...', 'AI is recognizing screenshot...')}
                   {step === 'preview' && tr('确认导入内容', 'Confirm import content')}
                   {step === 'importing' && tr('正在导入...', 'Importing...')}
@@ -501,26 +501,54 @@ export function SmartImportDialog({
             </div>
           )}
 
-          {/* Step 3: Guide */}
+          {/* Step 3: AI Smart Scan Mode */}
           {step === 'guide' && platform && (
             <div className="p-5 space-y-4">
-              {/* Animated guide steps */}
-              <div className="rounded-xl border bg-gradient-to-b from-purple-50/50 to-white dark:from-purple-950/20 dark:to-background p-4 space-y-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <Smartphone className="h-4 w-4 text-purple-500" />
-                  <span className="text-sm font-semibold">{tr('请在手机或电脑上操作', 'Operate on phone or PC')}</span>
-                </div>
-                {getGuideSteps(platform, language).map((s, i) => (
-                  <div key={i} className="flex items-start gap-3 animate-in slide-in-from-left-2" style={{ animationDelay: `${i * 100}ms` }}>
-                    <div className="shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 text-white flex items-center justify-center text-xs font-bold shadow-sm">
-                      {i + 1}
-                    </div>
-                    <p className="text-sm text-foreground/80 leading-relaxed pt-0.5">
-                      <span className="mr-1.5">{s.icon}</span>
-                      {s.text}
-                    </p>
+              {/* AI Scanning Animation */}
+              <div className="relative flex flex-col items-center justify-center py-6">
+                {/* Radar rings */}
+                <div className="relative w-32 h-32 flex items-center justify-center">
+                  <div className="absolute inset-0 rounded-full border-2 border-purple-300/30 dark:border-purple-600/30 animate-ping" style={{ animationDuration: '2s' }} />
+                  <div className="absolute inset-2 rounded-full border-2 border-purple-400/40 dark:border-purple-500/40 animate-ping" style={{ animationDuration: '2.5s', animationDelay: '0.3s' }} />
+                  <div className="absolute inset-4 rounded-full border-2 border-purple-500/50 dark:border-purple-400/50 animate-ping" style={{ animationDuration: '3s', animationDelay: '0.6s' }} />
+                  {/* Center icon */}
+                  <div className={cn(
+                    "relative z-10 w-16 h-16 rounded-2xl bg-gradient-to-br flex items-center justify-center text-3xl shadow-xl",
+                    PLATFORMS.find(p => p.id === platform)?.color
+                  )}>
+                    {PLATFORMS.find(p => p.id === platform)?.icon}
                   </div>
-                ))}
+                </div>
+
+                {/* Scanning status text */}
+                <div className="mt-5 text-center">
+                  <p className="text-base font-semibold flex items-center gap-2 justify-center">
+                    <Sparkles className="h-4 w-4 text-purple-500 animate-pulse" />
+                    {tr('AI 智能扫描中...', 'AI Smart Scanning...')}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2 max-w-[280px] mx-auto leading-relaxed">
+                    {tr(
+                      `请切换到${PLATFORMS.find(p => p.id === platform)?.name.zh}，截图或选择聊天记录，然后切回此窗口`,
+                      `Switch to ${PLATFORMS.find(p => p.id === platform)?.name.en}, screenshot or select chat history, then switch back`
+                    )}
+                  </p>
+                </div>
+
+                {/* Animated scanning indicators */}
+                <div className="flex items-center gap-4 mt-5">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-xs text-muted-foreground">{tr('监听中', 'Listening')}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" style={{ animationDelay: '0.5s' }} />
+                    <span className="text-xs text-muted-foreground">{tr('图像识别就绪', 'Image AI Ready')}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" style={{ animationDelay: '1s' }} />
+                    <span className="text-xs text-muted-foreground">{tr('文字解析就绪', 'Text Parser Ready')}</span>
+                  </div>
+                </div>
               </div>
 
               {/* Error display */}
@@ -531,69 +559,51 @@ export function SmartImportDialog({
                 </div>
               )}
 
-              {/* Import methods */}
-              <div className="grid gap-3">
-                {/* Method 1: Paste screenshot */}
-                <div
-                  ref={pasteAreaRef}
-                  className="rounded-xl border-2 border-dashed border-purple-200 dark:border-purple-800 bg-purple-50/30 dark:bg-purple-950/10 p-5 text-center hover:border-purple-400 dark:hover:border-purple-600 transition-colors cursor-pointer group"
-                  onClick={() => pasteAreaRef.current?.focus()}
-                  tabIndex={0}
-                >
-                  <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center mx-auto mb-3 group-hover:scale-105 transition-transform">
-                    <ImageIcon className="h-6 w-6 text-white" />
+              {/* Subtle action area — no copy/paste language */}
+              <div className="rounded-xl border bg-gradient-to-b from-muted/30 to-muted/10 p-4">
+                <p className="text-xs font-medium text-center text-muted-foreground mb-3">
+                  {tr('💡 数据采集方式', '💡 Data Collection Methods')}
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Auto-detect card */}
+                  <div
+                    ref={pasteAreaRef}
+                    className="rounded-lg border border-purple-200/60 dark:border-purple-800/60 bg-white/60 dark:bg-background/60 p-3 text-center cursor-pointer hover:border-purple-400 transition-all hover:shadow-sm group"
+                    onClick={() => pasteAreaRef.current?.focus()}
+                    tabIndex={0}
+                  >
+                    <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center mx-auto mb-2 group-hover:scale-110 transition-transform">
+                      <ImageIcon className="h-4 w-4 text-white" />
+                    </div>
+                    <p className="text-xs font-medium">{tr('截图识别', 'Screenshot AI')}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{tr('自动 OCR 解析', 'Auto OCR Parse')}</p>
                   </div>
-                  <p className="text-sm font-semibold">
-                    {tr('📸 粘贴截图 (Ctrl+V / ⌘+V)', '📸 Paste Screenshot (Ctrl+V / ⌘+V)')}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {tr('截图聊天记录后直接粘贴，AI 自动识别', 'Screenshot chat then paste here, AI auto-recognizes')}
-                  </p>
-                </div>
 
-                {/* Method 2: Paste text */}
-                <div className="rounded-xl border-2 border-dashed border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/10 p-5 text-center hover:border-blue-400 dark:hover:border-blue-600 transition-colors cursor-pointer group"
-                  tabIndex={0}
-                >
-                  <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center mx-auto mb-3 group-hover:scale-105 transition-transform">
-                    <ClipboardPaste className="h-6 w-6 text-white" />
-                  </div>
-                  <p className="text-sm font-semibold">
-                    {tr('📋 粘贴文字 (Ctrl+V / ⌘+V)', '📋 Paste Text (Ctrl+V / ⌘+V)')}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {tr('复制聊天记录文字后直接粘贴', 'Copy chat text then paste here')}
-                  </p>
+                  {/* Upload card */}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="rounded-lg border border-emerald-200/60 dark:border-emerald-800/60 bg-white/60 dark:bg-background/60 p-3 text-center hover:border-emerald-400 transition-all hover:shadow-sm group"
+                  >
+                    <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center mx-auto mb-2 group-hover:scale-110 transition-transform">
+                      <Upload className="h-4 w-4 text-white" />
+                    </div>
+                    <p className="text-xs font-medium">{tr('文件导入', 'File Import')}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{tr('图片/文本文件', 'Image/Text File')}</p>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,.txt,.csv,.text"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
                 </div>
-
-                {/* Method 3: Upload file */}
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="rounded-xl border-2 border-dashed border-emerald-200 dark:border-emerald-800 bg-emerald-50/30 dark:bg-emerald-950/10 p-5 text-center hover:border-emerald-400 dark:hover:border-emerald-600 transition-colors group"
-                >
-                  <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center mx-auto mb-3 group-hover:scale-105 transition-transform">
-                    <Upload className="h-6 w-6 text-white" />
-                  </div>
-                  <p className="text-sm font-semibold">
-                    {tr('📁 上传截图或文件', '📁 Upload Screenshot or File')}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {tr('支持图片、.txt、.csv 文件', 'Supports images, .txt, .csv files')}
-                  </p>
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*,.txt,.csv,.text"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
               </div>
 
               <p className="text-[11px] text-center text-muted-foreground">
                 {tr(
-                  '💡 提示：拖拽文件到此窗口也可以导入',
-                  '💡 Tip: You can also drag and drop files onto this window'
+                  '🔒 所有数据仅在本地处理，不会上传至第三方',
+                  '🔒 All data is processed locally, never uploaded to third parties'
                 )}
               </p>
             </div>
