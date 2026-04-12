@@ -88,8 +88,8 @@ export function SmartImportDialog({
   // ─── Platform Selection ───
   const handleSelectPlatform = useCallback((p: Platform) => {
     setPlatform(p)
-    setStep('connecting')
-    setConnectProgress(0)
+    // Skip animation — go directly to AI scan mode
+    setStep('guide')
 
     // Try to open desktop app via URL scheme (deep link)
     const urlSchemes: Record<Platform, string> = {
@@ -100,7 +100,6 @@ export function SmartImportDialog({
     const scheme = urlSchemes[p]
     if (scheme) {
       try {
-        // Use a hidden iframe for desktop to silently attempt the launch
         const iframe = document.createElement('iframe')
         iframe.style.display = 'none'
         iframe.src = scheme
@@ -109,23 +108,9 @@ export function SmartImportDialog({
           try { document.body.removeChild(iframe) } catch {}
         }, 2000)
       } catch {
-        // Silently ignore if the app isn't installed
+        // Silently ignore if app not installed
       }
     }
-
-    // Connecting animation (runs simultaneously with app launch)
-    const duration = 2500
-    const interval = 50
-    let elapsed = 0
-    const timer = setInterval(() => {
-      elapsed += interval
-      const progress = Math.min(100, Math.round((elapsed / duration) * 100))
-      setConnectProgress(progress)
-      if (elapsed >= duration) {
-        clearInterval(timer)
-        setStep('guide')
-      }
-    }, interval)
   }, [])
 
   // ─── Try parse text content ───
@@ -236,13 +221,75 @@ export function SmartImportDialog({
     }
   }, [step, handleOcrImage, tryParseText, tr])
 
-  // ─── Clipboard monitoring ───
+  // ─── Clipboard monitoring (paste + auto-detect on focus) ───
   useEffect(() => {
     if (step !== 'guide' || typeof window === 'undefined') return
 
+    // 1. Listen for manual paste events
     document.addEventListener('paste', handlePaste)
-    return () => document.removeEventListener('paste', handlePaste)
-  }, [step, handlePaste])
+
+    // 2. Auto-detect clipboard images when user switches back to this window
+    let lastClipHash = ''
+    const checkClipboard = async () => {
+      try {
+        if (!navigator.clipboard?.read) return
+        const items = await navigator.clipboard.read()
+        for (const item of items) {
+          // Check for images in clipboard
+          const imgType = item.types.find(t => t.startsWith('image/'))
+          if (imgType) {
+            const blob = await item.getType(imgType)
+            // Simple hash to avoid re-processing the same image
+            const hash = `${blob.size}-${blob.type}`
+            if (hash === lastClipHash) return
+            lastClipHash = hash
+
+            const reader = new FileReader()
+            reader.onload = (ev) => {
+              const dataUrl = ev.target?.result as string
+              if (dataUrl) handleOcrImage(dataUrl)
+            }
+            reader.readAsDataURL(blob)
+            return
+          }
+          // Check for text in clipboard
+          if (item.types.includes('text/plain')) {
+            const blob = await item.getType('text/plain')
+            const text = await blob.text()
+            const hash = `text-${text.length}-${text.slice(0, 20)}`
+            if (hash === lastClipHash) return
+            lastClipHash = hash
+            if (text.trim().length > 10) {
+              tryParseText(text)
+            }
+            return
+          }
+        }
+      } catch {
+        // Clipboard API may be denied — silently ignore
+      }
+    }
+
+    // Check clipboard when window regains focus
+    const onFocus = () => {
+      // Small delay to ensure clipboard is updated
+      setTimeout(checkClipboard, 300)
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setTimeout(checkClipboard, 300)
+      }
+    }
+
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
+    return () => {
+      document.removeEventListener('paste', handlePaste)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [step, handlePaste, handleOcrImage, tryParseText])
 
   // ─── Drag and drop ───
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -415,7 +462,7 @@ export function SmartImportDialog({
                 </h2>
                 <p className="text-white/70 text-xs mt-0.5">
                   {step === 'select-platform' && tr('选择你要导入的平台', 'Select the platform to import from')}
-                  {step === 'connecting' && tr('正在打开应用...', 'Opening app...')}
+
                   {step === 'guide' && tr('AI 智能扫描中', 'AI Smart Scanning')}
                   {step === 'parsing' && tr('AI 正在识别截图内容...', 'AI is recognizing screenshot...')}
                   {step === 'preview' && tr('确认导入内容', 'Confirm import content')}
@@ -468,38 +515,6 @@ export function SmartImportDialog({
             </div>
           )}
 
-          {/* Step 2: Connecting Animation */}
-          {step === 'connecting' && (
-            <div className="p-8 flex flex-col items-center justify-center min-h-[260px]">
-              <div className={cn(
-                "h-20 w-20 rounded-2xl bg-gradient-to-br flex items-center justify-center text-4xl shadow-xl mb-6 animate-pulse",
-                PLATFORMS.find(p => p.id === platform)?.color
-              )}>
-                {PLATFORMS.find(p => p.id === platform)?.icon}
-              </div>
-              <p className="text-base font-semibold mb-1">
-                {tr(
-                  `正在打开${PLATFORMS.find(p => p.id === platform)?.name.zh}...`,
-                  `Opening ${PLATFORMS.find(p => p.id === platform)?.name.en}...`
-                )}
-              </p>
-              <p className="text-xs text-muted-foreground mb-4">
-                {tr(
-                  '如果应用未自动打开，请手动切换到对应应用',
-                  'If the app did not open, please switch to it manually'
-                )}
-              </p>
-              <div className="w-full max-w-xs">
-                <div className="h-2 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-100 ease-linear"
-                    style={{ width: `${connectProgress}%` }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground text-center mt-2">{connectProgress}%</p>
-              </div>
-            </div>
-          )}
 
           {/* Step 3: AI Smart Scan Mode */}
           {step === 'guide' && platform && (
