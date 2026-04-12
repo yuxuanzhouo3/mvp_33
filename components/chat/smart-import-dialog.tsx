@@ -59,6 +59,7 @@ export function SmartImportDialog({
   const [importing, setImporting] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
   const [ocrProcessing, setOcrProcessing] = useState(false)
+  const [scanStatus, setScanStatus] = useState<string | null>(null) // e.g. 'detected', 'reading'
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pasteAreaRef = useRef<HTMLDivElement>(null)
@@ -74,6 +75,7 @@ export function SmartImportDialog({
     setImporting(false)
     setIsDragOver(false)
     setOcrProcessing(false)
+    setScanStatus(null)
     if (clipboardCheckIntervalRef.current) {
       clearInterval(clipboardCheckIntervalRef.current)
       clipboardCheckIntervalRef.current = null
@@ -148,8 +150,10 @@ export function SmartImportDialog({
   // ─── OCR Screenshot ───
   const handleOcrImage = useCallback(async (dataUrl: string) => {
     setOcrProcessing(true)
+    setScanStatus(null)
     setStep('parsing')
     setError(null)
+    console.log('[SmartImport] Starting OCR analysis, image size:', Math.round(dataUrl.length / 1024), 'KB')
 
     try {
       const res = await fetch('/api/messages/ocr-parse', {
@@ -158,6 +162,7 @@ export function SmartImportDialog({
         body: JSON.stringify({ image: dataUrl }),
       })
       const data = await res.json()
+      console.log('[SmartImport] OCR result:', data.success, 'messages:', data.messages?.length, 'error:', data.error)
 
       if (data.success && data.messages?.length > 0) {
         setParsedMessages(data.messages)
@@ -173,10 +178,11 @@ export function SmartImportDialog({
         }
         setStep('preview')
       } else {
-        setError(data.error || tr('识别失败，请尝试更清晰的截图', 'Recognition failed, try a clearer screenshot'))
+        setError(data.error || tr('AI 未能从截图中识别到聊天消息，请截取包含聊天对话的区域', 'AI could not identify chat messages in the screenshot. Please capture an area with chat conversations.'))
         setStep('guide')
       }
     } catch (err) {
+      console.error('[SmartImport] OCR fetch error:', err)
       setError(tr('网络错误，请重试', 'Network error, please retry'))
       setStep('guide')
     } finally {
@@ -232,17 +238,27 @@ export function SmartImportDialog({
     let lastClipHash = ''
     const checkClipboard = async () => {
       try {
-        if (!navigator.clipboard?.read) return
+        if (!navigator.clipboard?.read) {
+          console.log('[SmartImport] Clipboard API not available')
+          return
+        }
+        console.log('[SmartImport] Checking clipboard...')
         const items = await navigator.clipboard.read()
         for (const item of items) {
+          console.log('[SmartImport] Clipboard item types:', item.types)
           // Check for images in clipboard
           const imgType = item.types.find(t => t.startsWith('image/'))
           if (imgType) {
             const blob = await item.getType(imgType)
             // Simple hash to avoid re-processing the same image
             const hash = `${blob.size}-${blob.type}`
-            if (hash === lastClipHash) return
+            if (hash === lastClipHash) {
+              console.log('[SmartImport] Same image already processed, skipping')
+              return
+            }
             lastClipHash = hash
+            console.log('[SmartImport] ✅ New image detected! Size:', blob.size, 'bytes')
+            setScanStatus('detected')
 
             const reader = new FileReader()
             reader.onload = (ev) => {
@@ -260,13 +276,15 @@ export function SmartImportDialog({
             if (hash === lastClipHash) return
             lastClipHash = hash
             if (text.trim().length > 10) {
+              console.log('[SmartImport] ✅ New text detected! Length:', text.length)
+              setScanStatus('detected')
               tryParseText(text)
             }
             return
           }
         }
-      } catch {
-        // Clipboard API may be denied — silently ignore
+      } catch (err) {
+        console.log('[SmartImport] Clipboard read error (may need permission):', err)
       }
     }
 
@@ -537,16 +555,27 @@ export function SmartImportDialog({
 
                 {/* Scanning status text */}
                 <div className="mt-5 text-center">
-                  <p className="text-base font-semibold flex items-center gap-2 justify-center">
-                    <Sparkles className="h-4 w-4 text-purple-500 animate-pulse" />
-                    {tr('AI 智能扫描中...', 'AI Smart Scanning...')}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-2 max-w-[280px] mx-auto leading-relaxed">
-                    {tr(
-                      `请切换到${PLATFORMS.find(p => p.id === platform)?.name.zh}，截图或选择聊天记录，然后切回此窗口`,
-                      `Switch to ${PLATFORMS.find(p => p.id === platform)?.name.en}, screenshot or select chat history, then switch back`
-                    )}
-                  </p>
+                  {scanStatus === 'detected' ? (
+                    <div className="animate-in zoom-in-95 fade-in duration-300">
+                      <p className="text-base font-semibold flex items-center gap-2 justify-center text-green-600 dark:text-green-400">
+                        <CheckCircle2 className="h-5 w-5" />
+                        {tr('✅ 检测到截图！正在分析...', '✅ Screenshot detected! Analyzing...')}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-base font-semibold flex items-center gap-2 justify-center">
+                        <Sparkles className="h-4 w-4 text-purple-500 animate-pulse" />
+                        {tr('AI 智能扫描中...', 'AI Smart Scanning...')}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-2 max-w-[300px] mx-auto leading-relaxed">
+                        {tr(
+                          `请切换到${PLATFORMS.find(p => p.id === platform)?.name.zh}，截图聊天记录后切回此窗口，AI 将自动识别`,
+                          `Switch to ${PLATFORMS.find(p => p.id === platform)?.name.en}, screenshot the chat, then switch back — AI auto-detects`
+                        )}
+                      </p>
+                    </>
+                  )}
                 </div>
 
                 {/* Animated scanning indicators */}
