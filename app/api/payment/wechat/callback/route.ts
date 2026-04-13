@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDatabaseClientForUser } from '@/lib/database-router'
 import { updateUserSubscriptionAfterPayment } from '@/lib/payment/subscription-update'
-import { getCloudBaseDb } from '@/lib/cloudbase/client'
+import { handleInviteeFirstPaidOrder } from '@/lib/market/invite-program'
+import { markCouponUsedFromOrder } from '@/lib/payment/coupon-tracking'
+import { handleMarketingAttributedOrderPaid } from '@/lib/payment/marketing-attribution'
 
 /**
  * WeChat payment callback handler
@@ -121,6 +123,28 @@ export async function POST(request: NextRequest) {
 
       // If payment is successful, update user subscription
       if (payment_status === 'paid' && order.user_id) {
+        if (order.coupon_id) {
+          try {
+            await markCouponUsedFromOrder({
+              dbType: dbClient.type,
+              couponId: order.coupon_id,
+              orderNo: order_no,
+              userId: String(order.user_id),
+            })
+          } catch (couponError) {
+            console.error('[WeChat Callback] Failed to update coupon status:', couponError)
+          }
+        }
+
+        try {
+          await handleMarketingAttributedOrderPaid({
+            order,
+            orderNo: order_no,
+          })
+        } catch (commissionError) {
+          console.error('[WeChat Callback] Failed to record partner commission:', commissionError)
+        }
+
         try {
           // Extract plan description from order
           const planDescription = order.description || 
@@ -145,6 +169,15 @@ export async function POST(request: NextRequest) {
         } catch (updateSubError: any) {
           // Log error but don't fail the callback
           console.error('[WeChat Callback] Subscription update error:', updateSubError)
+        }
+
+        try {
+          await handleInviteeFirstPaidOrder({
+            userId: String(order.user_id),
+            orderNo: order_no,
+          })
+        } catch (inviteError) {
+          console.error('[WeChat Callback] Invite first-order reward error:', inviteError)
         }
       }
     } else {

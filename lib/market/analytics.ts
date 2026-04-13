@@ -1,6 +1,8 @@
 import { getDatabase } from "@/lib/database/cloudbase-service"
 import { resolveDeploymentRegion } from "@/lib/config/deployment-region"
 import { getSupabaseAdminForDownloads } from "@/lib/downloads/supabase-admin"
+import { getAnalysisDashboard } from "@/lib/admin/analysis/service"
+import type { AnalysisDashboardSummary } from "@/lib/admin/types"
 
 type DeploymentRegion = "CN" | "INTL"
 
@@ -157,6 +159,7 @@ export interface MarketAnalyticsData {
     recency: MarketAnalyticsSegment[]
     frequency30d: MarketAnalyticsSegment[]
   }
+  userAnalysis: AnalysisDashboardSummary
 }
 
 function toRate(numerator: number, denominator: number) {
@@ -253,6 +256,40 @@ function missingCloudbaseCollection(error: any) {
   )
 }
 
+function buildEmptyUserAnalysis(days: number): AnalysisDashboardSummary {
+  const end = new Date()
+  const start = addUtcDays(end, -Math.max(1, days))
+  return {
+    generated_at: new Date().toISOString(),
+    range_start: start.toISOString(),
+    range_end: end.toISOString(),
+    total_events: 0,
+    active_users: 0,
+    new_users: 0,
+    dormant_users: 0,
+    feedback_count: 0,
+    register_event_count: 0,
+    login_event_count: 0,
+    logout_event_count: 0,
+    registration_sources: [],
+    login_sources: [],
+    logout_sources: [],
+    top_features: [],
+    churn_features: [],
+    feedback: {
+      total_feedback: 0,
+      pending_feedback: 0,
+      analyzed_feedback: 0,
+      resolved_feedback: 0,
+      top_pros: [],
+      top_cons: [],
+      by_version: [],
+      by_day: [],
+    },
+    clusters: [],
+  }
+}
+
 async function safeCloudbaseCollectionGet(db: any, collection: string) {
   try {
     const result = await db.collection(collection).get()
@@ -336,6 +373,7 @@ function buildMarketAnalyticsData(params: {
   days: number
   users: AnalyticsUser[]
   usageEvents: UsageEvent[]
+  userAnalysis: AnalysisDashboardSummary
 }): MarketAnalyticsData {
   const days = parseDays(params.days)
   const now = new Date()
@@ -736,18 +774,31 @@ function buildMarketAnalyticsData(params: {
       recency,
       frequency30d,
     },
+    userAnalysis: params.userAnalysis,
   }
 }
 
 export async function getMarketAdminAnalytics(input?: { days?: number | string }): Promise<MarketAnalyticsData> {
   const days = parseDays(input?.days)
   const region: DeploymentRegion = resolveDeploymentRegion() === "INTL" ? "INTL" : "CN"
+  let userAnalysis = buildEmptyUserAnalysis(days)
+
+  try {
+    userAnalysis = await getAnalysisDashboard({
+      rangeDays: days,
+      featureLimit: 8,
+      clusterLimit: 8,
+      churnWindowDays: 7,
+    })
+  } catch (error) {
+    console.warn("[MarketAnalytics] user analysis fallback applied:", error)
+  }
 
   if (region === "INTL") {
     const data = await loadIntlUsersAndEvents()
-    return buildMarketAnalyticsData({ region, days, users: data.users, usageEvents: data.usageEvents })
+    return buildMarketAnalyticsData({ region, days, users: data.users, usageEvents: data.usageEvents, userAnalysis })
   }
 
   const data = await loadCnUsersAndEvents()
-  return buildMarketAnalyticsData({ region, days, users: data.users, usageEvents: data.usageEvents })
+  return buildMarketAnalyticsData({ region, days, users: data.users, usageEvents: data.usageEvents, userAnalysis })
 }

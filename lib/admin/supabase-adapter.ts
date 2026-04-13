@@ -51,6 +51,22 @@ import type {
   AiJobFilters,
   AiAsset,
   CreateAiAssetData,
+  Coupon,
+  CouponSummary,
+  CouponStatus,
+  CreateCouponData,
+  CouponFilters,
+  UserFeedback,
+  CreateFeedbackData,
+  FeedbackFilters,
+  ProductIteration,
+  CreateIterationData,
+  UserBehaviorEvent,
+  CreateUserBehaviorEventData,
+  BehaviorEventFilters,
+  FeedbackCluster,
+  CreateFeedbackClusterData,
+  FeedbackClusterFilters,
 } from "./types";
 import { handleDatabaseError, toISOString } from "./database";
 
@@ -1389,13 +1405,15 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
       throw new Error(`获取广告统计失败: ${error.message}`);
     }
 
+    const rows = (data || []) as Array<{ status?: string; type?: string }>;
+
     const stats: AdStats = {
-      total: data?.length || 0,
-      active: data?.filter(ad => ad.status === 'active').length || 0,
-      inactive: data?.filter(ad => ad.status === 'inactive').length || 0,
+      total: rows.length,
+      active: rows.filter((ad) => ad.status === 'active').length,
+      inactive: rows.filter((ad) => ad.status === 'inactive').length,
       byType: {
-        image: data?.filter(ad => ad.type === 'image').length || 0,
-        video: data?.filter(ad => ad.type === 'video').length || 0,
+        image: rows.filter((ad) => ad.type === 'image').length,
+        video: rows.filter((ad) => ad.type === 'video').length,
       },
     };
 
@@ -1539,6 +1557,223 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
     }
 
     console.log('[SupabaseAdapter] 排序更新成功');
+  }
+
+  // ==================== 优惠券管理 ====================
+
+  /**
+   * 获取优惠券列表
+   */
+  async getCoupons(filters?: CouponFilters): Promise<{ items: Coupon[]; total: number }> {
+    console.log('[SupabaseAdapter] 获取优惠券列表:', filters);
+
+    let query = this.supabase.from('coupons').select('*', { count: 'exact' });
+
+    if (filters?.status) {
+      query = query.eq('status', filters.status);
+    }
+
+    if (filters?.user_id) {
+      query = query.eq('issued_to_user_id', filters.user_id);
+    }
+
+    if (filters?.search) {
+      query = query.ilike('code', `%${filters.search}%`);
+    }
+
+    query = query.order('created_at', { ascending: false });
+
+    if (filters?.limit) {
+      query = query.limit(filters.limit);
+    }
+
+    if (filters?.offset) {
+      const limit = filters.limit || 10;
+      query = query.range(filters.offset, filters.offset + limit - 1);
+    }
+
+    const { data, count, error } = await query;
+
+    if (error) {
+      console.error('[SupabaseAdapter] 获取优惠券列表失败:', error);
+      throw handleDatabaseError(error);
+    }
+
+    return {
+      items: (data || []).map((item: any) => this.mapCouponRow(item)),
+      total: count || 0,
+    };
+  }
+
+  async getCouponSummary(filters?: CouponFilters): Promise<CouponSummary> {
+    console.log('[SupabaseAdapter] 获取优惠券汇总:', filters);
+
+    const buildCountQuery = (status?: CouponStatus, onlyBound = false) => {
+      let query = this.supabase.from('coupons').select('id', { count: 'exact', head: true });
+
+      if (filters?.user_id) {
+        query = query.eq('issued_to_user_id', filters.user_id);
+      }
+
+      if (filters?.search) {
+        query = query.ilike('code', `%${filters.search}%`);
+      }
+
+      if (status) {
+        query = query.eq('status', status);
+      }
+
+      if (onlyBound) {
+        query = query.not('issued_to_user_id', 'is', null);
+      }
+
+      return query;
+    };
+
+    const [totalResult, usedResult, unusedResult, expiredResult, boundResult] = await Promise.all([
+      buildCountQuery(),
+      buildCountQuery('used'),
+      buildCountQuery('active'),
+      buildCountQuery('expired'),
+      buildCountQuery(undefined, true),
+    ]);
+
+    for (const result of [totalResult, usedResult, unusedResult, expiredResult, boundResult]) {
+      if (result.error) {
+        console.error('[SupabaseAdapter] 获取优惠券汇总失败:', result.error);
+        throw handleDatabaseError(result.error);
+      }
+    }
+
+    const totalIssued = totalResult.count || 0;
+    const usedCount = usedResult.count || 0;
+    const unusedCount = unusedResult.count || 0;
+    const expiredCount = expiredResult.count || 0;
+    const boundCount = boundResult.count || 0;
+
+    return {
+      totalIssued,
+      usedCount,
+      unusedCount,
+      expiredCount,
+      boundCount,
+      unboundCount: Math.max(0, totalIssued - boundCount),
+    };
+  }
+
+  /**
+   * 根据优惠码获取优惠券
+   */
+  async getCouponByCode(code: string): Promise<Coupon | null> {
+    console.log('[SupabaseAdapter] 根据优惠码获取优惠券:', code);
+
+    const { data, error } = await this.supabase
+      .from('coupons')
+      .select('*')
+      .eq('code', code)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      throw handleDatabaseError(error);
+    }
+
+    return data ? this.mapCouponRow(data) : null;
+  }
+
+  /**
+   * 创建优惠券
+   */
+  async createCoupon(data: CreateCouponData): Promise<Coupon> {
+    console.log('[SupabaseAdapter] 创建优惠券:', data);
+
+    const issuedToUserId = data.issued_to_user_id || data.user_id;
+
+    const couponData = {
+      code: data.code || `CPN${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+      discount_ratio: data.discount_ratio,
+      user_id: issuedToUserId,
+      issued_to_user_id: issuedToUserId,
+      issued_by_admin_id: data.issued_by_admin_id,
+      status: 'active',
+      created_at: toISOString(new Date()),
+      updated_at: toISOString(new Date()),
+      expires_at: data.expires_at,
+    };
+
+    const { data: result, error } = await this.supabase
+      .from('coupons')
+      .insert(couponData)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[SupabaseAdapter] 创建优惠券失败:', error);
+      throw handleDatabaseError(error);
+    }
+
+    return this.mapCouponRow(result);
+  }
+
+  /**
+   * 更新优惠券状态
+   */
+  async updateCouponStatus(id: string, status: CouponStatus, orderNo?: string, usedByUserId?: string): Promise<boolean> {
+    console.log('[SupabaseAdapter] 更新优惠券状态:', id, status, orderNo, usedByUserId);
+
+    const updateData: any = {
+      status,
+      updated_at: toISOString(new Date()),
+    };
+
+    if (status === 'used') {
+      updateData.used_at = toISOString(new Date());
+      if (orderNo) updateData.order_no = orderNo;
+      if (usedByUserId) updateData.used_by_user_id = usedByUserId;
+    }
+
+    let query = this.supabase
+      .from('coupons')
+      .update(updateData)
+      .eq('id', id);
+
+    if (status === 'used') {
+      query = query.eq('status', 'active');
+    }
+
+    const { data, error } = await query
+      .select('id')
+      .maybeSingle();
+
+    if (error) {
+      console.error('[SupabaseAdapter] 更新优惠券状态失败:', error);
+      throw handleDatabaseError(error);
+    }
+
+    if (status === 'used' && !data?.id) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * 删除优惠券
+   */
+  async deleteCoupon(id: string): Promise<boolean> {
+    console.log('[SupabaseAdapter] 删除优惠券:', id);
+
+    const { error } = await this.supabase
+      .from('coupons')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('[SupabaseAdapter] 删除优惠券失败:', error);
+      throw handleDatabaseError(error);
+    }
+
+    return true;
   }
 
   // ==================== 版本发布管理操作 ====================
@@ -1880,7 +2115,7 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
       throw new Error(`获取文件列表失败: ${error.message}`);
     }
 
-    const files: StorageFile[] = (data || []).map(file => ({
+    const files: StorageFile[] = (data || []).map((file: any) => ({
       name: file.name,
       url: this.supabase.storage.from('admin-files').getPublicUrl(file.name).data.publicUrl,
       size: file.metadata?.size,
@@ -1954,6 +2189,413 @@ export class SupabaseAdminAdapter implements AdminDatabaseAdapter {
       data: base64,
       contentType: data.type,
       fileName: fileName,
+    };
+  }
+
+  // ==================== 用户反馈操作 ====================
+
+  async listFeedback(filters?: FeedbackFilters): Promise<UserFeedback[]> {
+    let query = this.supabase.from("user_feedback").select("*");
+
+    if (filters?.status) {
+      query = query.eq("status", filters.status);
+    }
+    if (filters?.source) {
+      query = query.eq("source", filters.source);
+    }
+    if (filters?.version) {
+      query = query.eq("version", filters.version);
+    }
+    if (filters?.feature_key) {
+      query = query.eq("feature_key", filters.feature_key);
+    }
+    if (filters?.start_date) {
+      query = query.gte("created_at", filters.start_date);
+    }
+    if (filters?.end_date) {
+      query = query.lte("created_at", filters.end_date);
+    }
+    if (filters?.search) {
+      query = query.or(`content.ilike.%${filters.search}%,email.ilike.%${filters.search}%`);
+    }
+
+    query = query.order("created_at", { ascending: false });
+
+    if (filters?.limit) {
+      const offset = filters.offset || 0;
+      query = query.range(offset, offset + filters.limit - 1);
+    }
+
+    const { data, error } = await query;
+    if (error) throw handleDatabaseError(error);
+
+    return (data || []).map(this.dbToFeedback);
+  }
+
+  async createFeedback(data: CreateFeedbackData): Promise<UserFeedback> {
+    const now = toISOString(new Date());
+    const insertData = {
+      user_id: data.user_id,
+      email: data.email,
+      content: data.content,
+      source: data.source || "web",
+      status: data.status || "pending",
+      images: data.images || [],
+      screenshot_urls: data.screenshot_urls || data.images || [],
+      version: data.version,
+      feature_key: data.feature_key,
+      pros: data.pros || [],
+      cons: data.cons || [],
+      metadata: data.metadata || {},
+      created_at: now,
+      updated_at: now,
+    };
+
+    const { data: created, error } = await this.supabase
+      .from("user_feedback")
+      .insert(insertData)
+      .select()
+      .single();
+
+    if (error) throw handleDatabaseError(error);
+    return this.dbToFeedback(created);
+  }
+
+  async countFeedback(filters?: FeedbackFilters): Promise<number> {
+    let query = this.supabase.from("user_feedback").select("*", { count: "exact", head: true });
+
+    if (filters?.status) query = query.eq("status", filters.status);
+    if (filters?.source) query = query.eq("source", filters.source);
+    if (filters?.version) query = query.eq("version", filters.version);
+    if (filters?.feature_key) query = query.eq("feature_key", filters.feature_key);
+    if (filters?.start_date) query = query.gte("created_at", filters.start_date);
+    if (filters?.end_date) query = query.lte("created_at", filters.end_date);
+
+    const { count, error } = await query;
+    if (error) throw handleDatabaseError(error);
+
+    return count || 0;
+  }
+
+  async getFeedbackById(id: string): Promise<UserFeedback | null> {
+    const { data, error } = await this.supabase
+      .from("user_feedback")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      throw handleDatabaseError(error);
+    }
+
+    return this.dbToFeedback(data);
+  }
+
+  async updateFeedback(id: string, data: Partial<UserFeedback>): Promise<UserFeedback> {
+    const updateData = {
+      ...data,
+      updated_at: toISOString(new Date()),
+    };
+    delete (updateData as any).id;
+    delete (updateData as any).created_at;
+
+    const { data: updated, error } = await this.supabase
+      .from("user_feedback")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw handleDatabaseError(error);
+    return this.dbToFeedback(updated);
+  }
+
+  async deleteFeedback(id: string): Promise<void> {
+    const { error } = await this.supabase
+      .from("user_feedback")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw handleDatabaseError(error);
+  }
+
+  private dbToFeedback(doc: any): UserFeedback {
+    return {
+      id: doc.id,
+      user_id: doc.user_id,
+      email: doc.email,
+      content: doc.content,
+      source: doc.source,
+      status: doc.status,
+      images: doc.images || [],
+      screenshot_urls: doc.screenshot_urls || doc.images || [],
+      version: doc.version,
+      feature_key: doc.feature_key,
+      pros: doc.pros || [],
+      cons: doc.cons || [],
+      metadata: doc.metadata || {},
+      created_at: doc.created_at,
+      updated_at: doc.updated_at,
+      admin_notes: doc.admin_notes,
+      analysis_result: doc.analysis_result,
+    };
+  }
+
+  async createBehaviorEvent(data: CreateUserBehaviorEventData): Promise<UserBehaviorEvent> {
+    const now = toISOString(new Date());
+    const insertData = {
+      user_id: data.user_id,
+      session_id: data.session_id,
+      event_type: data.event_type,
+      feature_key: data.feature_key,
+      page_path: data.page_path,
+      source: data.source,
+      duration_ms: data.duration_ms,
+      scroll_depth: data.scroll_depth,
+      properties: data.properties || {},
+      occurred_at: data.occurred_at || now,
+      created_at: now,
+    };
+
+    const { data: created, error } = await this.supabase
+      .from("user_behavior_events")
+      .insert(insertData)
+      .select()
+      .single();
+
+    if (error) throw handleDatabaseError(error);
+    return this.dbToBehaviorEvent(created);
+  }
+
+  async listBehaviorEvents(filters?: BehaviorEventFilters): Promise<UserBehaviorEvent[]> {
+    let query = this.supabase.from("user_behavior_events").select("*");
+
+    if (filters?.user_id) query = query.eq("user_id", filters.user_id);
+    if (filters?.session_id) query = query.eq("session_id", filters.session_id);
+    if (filters?.feature_key) query = query.eq("feature_key", filters.feature_key);
+    if (filters?.source) query = query.eq("source", filters.source);
+    if (filters?.start_date) query = query.gte("occurred_at", filters.start_date);
+    if (filters?.end_date) query = query.lte("occurred_at", filters.end_date);
+
+    if (Array.isArray(filters?.event_type)) {
+      query = query.in("event_type", filters.event_type);
+    } else if (filters?.event_type) {
+      query = query.eq("event_type", filters.event_type);
+    }
+
+    query = query.order("occurred_at", { ascending: false });
+
+    if (filters?.limit) {
+      const offset = filters.offset || 0;
+      query = query.range(offset, offset + filters.limit - 1);
+    }
+
+    const { data, error } = await query;
+    if (error) throw handleDatabaseError(error);
+
+    return (data || []).map(this.dbToBehaviorEvent);
+  }
+
+  async createFeedbackCluster(data: CreateFeedbackClusterData): Promise<FeedbackCluster> {
+    const now = toISOString(new Date());
+    const insertData = {
+      snapshot_key: data.snapshot_key,
+      topic: data.topic,
+      keywords: data.keywords || [],
+      frequency: data.frequency,
+      sentiment: data.sentiment,
+      suggestion: data.suggestion,
+      version: data.version,
+      feedback_ids: data.feedback_ids || [],
+      created_at: now,
+      updated_at: now,
+    };
+
+    const { data: created, error } = await this.supabase
+      .from("feedback_clusters")
+      .insert(insertData)
+      .select()
+      .single();
+
+    if (error) throw handleDatabaseError(error);
+    return this.dbToFeedbackCluster(created);
+  }
+
+  async listFeedbackClusters(filters?: FeedbackClusterFilters): Promise<FeedbackCluster[]> {
+    let query = this.supabase.from("feedback_clusters").select("*");
+
+    if (filters?.snapshot_key) query = query.eq("snapshot_key", filters.snapshot_key);
+    if (filters?.version) query = query.eq("version", filters.version);
+    if (filters?.start_date) query = query.gte("created_at", filters.start_date);
+    if (filters?.end_date) query = query.lte("created_at", filters.end_date);
+
+    query = query.order("created_at", { ascending: false }).order("frequency", { ascending: false });
+
+    if (filters?.limit) {
+      const offset = filters.offset || 0;
+      query = query.range(offset, offset + filters.limit - 1);
+    }
+
+    const { data, error } = await query;
+    if (error) throw handleDatabaseError(error);
+
+    return (data || []).map(this.dbToFeedbackCluster);
+  }
+
+  private dbToBehaviorEvent(doc: any): UserBehaviorEvent {
+    return {
+      id: doc.id,
+      user_id: doc.user_id,
+      session_id: doc.session_id,
+      event_type: doc.event_type,
+      feature_key: doc.feature_key,
+      page_path: doc.page_path,
+      source: doc.source,
+      duration_ms: doc.duration_ms,
+      scroll_depth: doc.scroll_depth,
+      properties: doc.properties || {},
+      occurred_at: doc.occurred_at,
+      created_at: doc.created_at,
+    };
+  }
+
+  private dbToFeedbackCluster(doc: any): FeedbackCluster {
+    return {
+      id: doc.id,
+      snapshot_key: doc.snapshot_key,
+      topic: doc.topic,
+      keywords: doc.keywords || [],
+      frequency: doc.frequency ?? 0,
+      sentiment: doc.sentiment,
+      suggestion: doc.suggestion,
+      version: doc.version,
+      feedback_ids: doc.feedback_ids || [],
+      created_at: doc.created_at,
+      updated_at: doc.updated_at,
+    };
+  }
+
+  private mapCouponRow(doc: any): Coupon {
+    const issuedToUserId = doc?.issued_to_user_id ?? doc?.user_id ?? undefined;
+    const usedByUserId =
+      doc?.used_by_user_id ?? (doc?.status === "used" ? issuedToUserId : undefined);
+
+    return {
+      id: doc.id,
+      code: doc.code,
+      discount_ratio: doc.discount_ratio,
+      user_id: issuedToUserId,
+      issued_to_user_id: issuedToUserId,
+      used_by_user_id: usedByUserId,
+      issued_by_admin_id: doc.issued_by_admin_id ?? undefined,
+      status: doc.status,
+      created_at: doc.created_at,
+      updated_at: doc.updated_at ?? undefined,
+      expires_at: doc.expires_at ?? undefined,
+      used_at: doc.used_at ?? undefined,
+      order_no: doc.order_no ?? undefined,
+    };
+  }
+
+  // ==================== 产品迭代操作 ====================
+
+  async listIterations(limit?: number, offset?: number): Promise<ProductIteration[]> {
+    let query = this.supabase.from("product_iterations").select("*").order("version", { ascending: false });
+
+    if (limit !== undefined) {
+      const start = offset || 0;
+      query = query.range(start, start + limit - 1);
+    }
+
+    const { data, error } = await query;
+    if (error) throw handleDatabaseError(error);
+
+    return (data || []).map(this.dbToIteration);
+  }
+
+  async countIterations(): Promise<number> {
+    const { count, error } = await this.supabase
+      .from("product_iterations")
+      .select("*", { count: "exact", head: true });
+
+    if (error) throw handleDatabaseError(error);
+    return count || 0;
+  }
+
+  async getIterationById(id: string): Promise<ProductIteration | null> {
+    const { data, error } = await this.supabase
+      .from("product_iterations")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      throw handleDatabaseError(error);
+    }
+
+    return this.dbToIteration(data);
+  }
+
+  async createIteration(data: CreateIterationData): Promise<ProductIteration> {
+    const now = toISOString(new Date());
+    const insertData = {
+      ...data,
+      status: data.status || "planned",
+      created_at: now,
+      updated_at: now,
+    };
+
+    const { data: created, error } = await this.supabase
+      .from("product_iterations")
+      .insert(insertData)
+      .select()
+      .single();
+
+    if (error) throw handleDatabaseError(error);
+    return this.dbToIteration(created);
+  }
+
+  async updateIteration(id: string, data: Partial<ProductIteration>): Promise<ProductIteration> {
+    const updateData = {
+      ...data,
+      updated_at: toISOString(new Date()),
+    };
+    delete (updateData as any).id;
+    delete (updateData as any).created_at;
+
+    const { data: updated, error } = await this.supabase
+      .from("product_iterations")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw handleDatabaseError(error);
+    return this.dbToIteration(updated);
+  }
+
+  async deleteIteration(id: string): Promise<void> {
+    const { error } = await this.supabase
+      .from("product_iterations")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw handleDatabaseError(error);
+  }
+
+  private dbToIteration(doc: any): ProductIteration {
+    return {
+      id: doc.id,
+      version: doc.version,
+      title: doc.title,
+      content: doc.content,
+      status: doc.status,
+      release_date: doc.release_date,
+      feedback_ids: doc.feedback_ids || [],
+      created_at: doc.created_at,
+      updated_at: doc.updated_at,
     };
   }
 }

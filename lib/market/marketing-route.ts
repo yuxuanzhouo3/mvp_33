@@ -3,7 +3,12 @@ import { verifyMarketAdminToken } from "@/lib/market/admin-auth"
 import type {
   MarketingAssetType,
   MarketingCampaignStatus,
+  MarketingCoupon,
+  MarketingCouponDiscountType,
+  MarketingCouponStatus,
   MarketingEventType,
+  MarketingInvitationCode,
+  MarketingInvitationStatus,
   MarketingProduct,
   MarketingRewardRecipient,
   MarketingTaskRecurrence,
@@ -13,6 +18,9 @@ import type {
 const MARKETING_PRODUCT_VALUES: readonly MarketingProduct[] = ["orbitchat", "ai", "ecommerce"] as const
 const MARKETING_CAMPAIGN_STATUS_VALUES: readonly MarketingCampaignStatus[] = ["draft", "active", "paused", "archived"] as const
 const MARKETING_TASK_STATUS_VALUES: readonly MarketingTaskStatus[] = ["draft", "active", "paused", "archived"] as const
+const MARKETING_INVITATION_STATUS_VALUES: readonly MarketingInvitationStatus[] = ["active", "expired", "exhausted", "revoked"] as const
+const MARKETING_COUPON_STATUS_VALUES: readonly MarketingCouponStatus[] = ["available", "used", "expired", "revoked"] as const
+const MARKETING_COUPON_DISCOUNT_TYPE_VALUES: readonly MarketingCouponDiscountType[] = ["percentage", "fixed"] as const
 const MARKETING_EVENT_TYPE_VALUES: readonly MarketingEventType[] = [
   "user.login",
   "referral.registered",
@@ -30,6 +38,8 @@ const MARKETING_REWARD_RECIPIENT_VALUES: readonly MarketingRewardRecipient[] = [
   "payload.userId",
 ] as const
 const MARKETING_TASK_RECURRENCE_VALUES: readonly MarketingTaskRecurrence[] = ["once", "daily", "repeatable", "streak"] as const
+const MARKETING_PARTNER_TIER_VALUES: readonly MarketingInvitationCode["partnerTier"][] = ["general", "partner_package", "blogger_partner"] as const
+const MARKETING_AUDIENCE_TYPE_VALUES: readonly MarketingCoupon["audienceType"][] = ["general", "linked_audience", "blogger_fans"] as const
 
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
@@ -65,6 +75,18 @@ export function parseMarketingTaskStatus(value: unknown) {
   return parseEnumValue(value, MARKETING_TASK_STATUS_VALUES)
 }
 
+export function parseMarketingInvitationStatus(value: unknown) {
+  return parseEnumValue(value, MARKETING_INVITATION_STATUS_VALUES)
+}
+
+export function parseMarketingCouponStatus(value: unknown) {
+  return parseEnumValue(value, MARKETING_COUPON_STATUS_VALUES)
+}
+
+export function parseMarketingCouponDiscountType(value: unknown) {
+  return parseEnumValue(value, MARKETING_COUPON_DISCOUNT_TYPE_VALUES)
+}
+
 export function parseMarketingEventType(value: unknown) {
   return parseEnumValue(value, MARKETING_EVENT_TYPE_VALUES)
 }
@@ -79,6 +101,18 @@ export function parseMarketingRewardRecipient(value: unknown) {
 
 export function parseMarketingTaskRecurrence(value: unknown) {
   return parseEnumValue(value, MARKETING_TASK_RECURRENCE_VALUES)
+}
+
+export function parseMarketingPartnerTier(value: unknown) {
+  const parsed = parseEnumValue(value, MARKETING_PARTNER_TIER_VALUES)
+  if (parsed === "blogger_partner") return "partner_package"
+  return parsed
+}
+
+export function parseMarketingCouponAudienceType(value: unknown) {
+  const parsed = parseEnumValue(value, MARKETING_AUDIENCE_TYPE_VALUES)
+  if (parsed === "blogger_fans") return "linked_audience"
+  return parsed
 }
 
 export function verifyMarketingAdmin(request: NextRequest) {

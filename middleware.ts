@@ -87,11 +87,16 @@ export async function middleware(request: NextRequest) {
   // ============================================================================
   const host = request.headers.get('host');
   const expectedRegion = process.env.DEPLOYMENT_REGION;
+  const isLocalHost = !!host && (
+    host.includes('localhost') ||
+    host.includes('127.0.0.1') ||
+    host.endsWith('.local')
+  );
 
-  if (expectedRegion === 'CN' && host && !host.includes('mornscience.top')) {
+  if (expectedRegion === 'CN' && host && !isLocalHost && !host.includes('mornscience.top')) {
     console.warn(`[DEPLOYMENT WARNING] CN build accessed via wrong domain: ${host}`);
   }
-  if (expectedRegion === 'INTL' && host && !host.includes('mornscience.work')) {
+  if (expectedRegion === 'INTL' && host && !isLocalHost && !host.includes('mornscience.work')) {
     console.warn(`[DEPLOYMENT WARNING] INTL build accessed via wrong domain: ${host}`);
   }
 

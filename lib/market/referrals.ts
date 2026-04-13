@@ -3,6 +3,8 @@ import type { NextRequest } from "next/server"
 import { getDatabase } from "@/lib/database/cloudbase-service"
 import { resolveDeploymentRegion } from "@/lib/config/deployment-region"
 import { getSupabaseAdminForDownloads } from "@/lib/downloads/supabase-admin"
+import { SupabaseAdminAdapter } from "@/lib/admin/supabase-adapter"
+import { CloudBaseAdminAdapter } from "@/lib/admin/cloudbase-adapter"
 
 export type ReferralRegion = "CN" | "INTL"
 
@@ -30,6 +32,10 @@ const REFERRAL_INVITER_SIGNUP_BONUS = parsePositiveInt(process.env.REFERRAL_INVI
 const REFERRAL_INVITED_SIGNUP_BONUS = parsePositiveInt(process.env.REFERRAL_INVITED_SIGNUP_BONUS, 20)
 const REFERRAL_INVITER_FIRST_USE_BONUS = parsePositiveInt(process.env.REFERRAL_INVITER_FIRST_USE_BONUS, 20)
 const REFERRAL_INVITED_FIRST_USE_BONUS = parsePositiveInt(process.env.REFERRAL_INVITED_FIRST_USE_BONUS, 10)
+
+// 推荐注册获得的优惠券折扣 (0.8 表示 8 折)
+const REFERRAL_INVITED_COUPON_DISCOUNT = Number(process.env.REFERRAL_INVITED_COUPON_DISCOUNT || "0.8")
+const REFERRAL_COUPON_EXPIRE_DAYS = parsePositiveInt(process.env.REFERRAL_COUPON_EXPIRE_DAYS, 30)
 
 function nowIso() {
   return new Date().toISOString()
@@ -973,7 +979,7 @@ async function grantReferralCredits(input: {
   return { granted: true, alreadyProcessed: false, newCredits: nextCredits }
 }
 
-async function recordReferralReward(input: {
+export async function recordReferralReward(input: {
   region: ReferralRegion
   relationId: string
   userId: string
@@ -1191,57 +1197,53 @@ export async function bindReferralFromRequest(input: {
     invitedUserId,
   }).catch(() => null)
 
-  const inviterReferenceId = `ref_signup_inviter_${relationId}`
-  const invitedReferenceId = `ref_signup_invited_${relationId}`
-
-  const inviterCreditResult = await grantReferralCredits({
-    region,
-    userId: referralOwner.creatorUserId,
-    amount: REFERRAL_INVITER_SIGNUP_BONUS,
-    referenceId: inviterReferenceId,
-    description: `Referral signup reward (inviter): ${invitedUserId}`,
-  })
-
-  const invitedCreditResult = await grantReferralCredits({
-    region,
-    userId: invitedUserId,
-    amount: REFERRAL_INVITED_SIGNUP_BONUS,
-    referenceId: invitedReferenceId,
-    description: `Referral signup reward (invited): ${referralOwner.creatorUserId}`,
-  })
-
-  if (inviterCreditResult.granted || inviterCreditResult.alreadyProcessed) {
-    await recordReferralReward({
-      region,
-      relationId,
-      userId: referralOwner.creatorUserId,
-      rewardType: "signup_inviter",
-      amount: REFERRAL_INVITER_SIGNUP_BONUS,
-      referenceId: inviterReferenceId,
-      status: "granted",
-    })
-  }
-
-  if (invitedCreditResult.granted || invitedCreditResult.alreadyProcessed) {
-    await recordReferralReward({
-      region,
-      relationId,
-      userId: invitedUserId,
-      rewardType: "signup_invited",
-      amount: REFERRAL_INVITED_SIGNUP_BONUS,
-      referenceId: invitedReferenceId,
-      status: "granted",
-    })
-  }
-
+  // 为被推荐人发放注册优惠券
   return {
     bound: true,
     relationId,
     shareCode: referralOwner.shareCode,
     inviterUserId: referralOwner.creatorUserId,
     invitedUserId,
-    inviterReward: REFERRAL_INVITER_SIGNUP_BONUS,
-    invitedReward: REFERRAL_INVITED_SIGNUP_BONUS,
+    inviterReward: 0,
+    invitedReward: 0,
+  }
+}
+
+/**
+ * 为被推荐人发放注册优惠券
+ */
+export async function grantReferralCoupon(input: {
+  region: ReferralRegion
+  userId: string
+}) {
+  const discount = REFERRAL_INVITED_COUPON_DISCOUNT
+  if (discount <= 0 || discount >= 1) {
+    return { granted: false, reason: "invalid_discount_config" }
+  }
+
+  const expiresAt = new Date()
+  expiresAt.setDate(expiresAt.getDate() + REFERRAL_COUPON_EXPIRE_DAYS)
+
+  try {
+    if (input.region === "INTL") {
+      const adapter = new SupabaseAdminAdapter()
+      await adapter.createCoupon({
+        user_id: input.userId,
+        discount_ratio: discount,
+        expires_at: expiresAt.toISOString(),
+      })
+    } else {
+      const adapter = new CloudBaseAdminAdapter()
+      await adapter.createCoupon({
+        user_id: input.userId,
+        discount_ratio: discount,
+        expires_at: expiresAt.toISOString(),
+      })
+    }
+    return { granted: true }
+  } catch (error) {
+    console.error("[Referrals] Failed to grant referral coupon:", error)
+    return { granted: false, reason: "adapter_error" }
   }
 }
 
@@ -2152,6 +2154,161 @@ export async function getMarketAdminRewards(input?: {
       relationId: row.relationId,
       userId: row.userId,
       userEmail: usersMap.get(row.userId)?.email || null,
+      rewardType: row.rewardType,
+      amount: row.amount,
+      status: row.status,
+      referenceId: row.referenceId,
+      createdAt: row.createdAt,
+      grantedAt: row.grantedAt,
+    })),
+  }
+}
+
+export async function getUserReferralRelations(input: {
+  userId: string
+  page?: number | string
+  limit?: number | string
+}): Promise<MarketListResult<MarketRelationRow>> {
+  const userId = normalizeUserId(input.userId)
+  if (!userId) throw new Error("userId is required")
+  const page = parsePage(input.page, 1)
+  const limit = parseLimit(input.limit, 20, 100)
+  const offset = (page - 1) * limit
+  const region = getRegion()
+
+  if (region === "INTL") {
+    const supabase = getSupabaseAdminForDownloads()
+    const [rowsResult, countResult] = await Promise.all([
+      supabase
+        .from("referral_relations")
+        .select("id,inviter_user_id,invited_user_id,share_code,tool_slug,first_tool_id,status,created_at,activated_at")
+        .eq("inviter_user_id", userId)
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1),
+      supabase
+        .from("referral_relations")
+        .select("id", { count: "exact", head: true })
+        .eq("inviter_user_id", userId),
+    ])
+
+    if (rowsResult.error) throw new Error(rowsResult.error.message)
+    if (countResult.error) throw new Error(countResult.error.message)
+
+    const rows = (rowsResult.data || []).map(mapIntlRelationRow)
+    const usersMap = await loadIntlUsersByIds(rows.map((row: any) => row.invitedUserId))
+
+    return {
+      page,
+      limit,
+      total: safeNumber(countResult.count),
+      rows: rows.map((row: any) => ({
+        relationId: row.id,
+        inviterUserId: row.inviterUserId,
+        inviterEmail: null,
+        invitedUserId: row.invitedUserId,
+        invitedEmail: usersMap.get(row.invitedUserId)?.email || null,
+        shareCode: row.shareCode,
+        toolSlug: row.toolSlug,
+        firstToolId: row.firstToolId,
+        status: row.status,
+        createdAt: row.createdAt,
+        activatedAt: row.activatedAt,
+      })),
+    }
+  }
+
+  const db = await getDatabase()
+  await ensureCloudbaseReferralCollections(db)
+  const relationResult = await db.collection(REFERRAL_RELATIONS_COLLECTION).where({ inviter_user_id: userId }).get()
+  const relationRows = (Array.isArray(relationResult?.data) ? relationResult.data : []).map(mapCnRelationRow)
+  const sorted = relationRows.sort((a: any, b: any) => (a.createdAt < b.createdAt ? 1 : -1))
+  const paged = sorted.slice(offset, offset + limit)
+  const usersMap = await loadCnUsersByIds(paged.map((row: any) => row.invitedUserId))
+
+  return {
+    page,
+    limit,
+    total: sorted.length,
+    rows: paged.map((row: any) => ({
+      relationId: row.id,
+      inviterUserId: row.inviterUserId,
+      inviterEmail: null,
+      invitedUserId: row.invitedUserId,
+      invitedEmail: usersMap.get(row.invitedUserId)?.email || null,
+      shareCode: row.shareCode,
+      toolSlug: row.toolSlug,
+      firstToolId: row.firstToolId,
+      status: row.status,
+      createdAt: row.createdAt,
+      activatedAt: row.activatedAt,
+    })),
+  }
+}
+
+export async function getUserReferralRewards(input: {
+  userId: string
+  page?: number | string
+  limit?: number | string
+}): Promise<MarketListResult<MarketRewardRow>> {
+  const userId = normalizeUserId(input.userId)
+  if (!userId) throw new Error("userId is required")
+  const page = parsePage(input.page, 1)
+  const limit = parseLimit(input.limit, 20, 100)
+  const offset = (page - 1) * limit
+  const region = getRegion()
+
+  if (region === "INTL") {
+    const supabase = getSupabaseAdminForDownloads()
+    const [rowsResult, countResult] = await Promise.all([
+      supabase
+        .from("referral_rewards")
+        .select("id,relation_id,user_id,reward_type,amount,status,reference_id,created_at,granted_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1),
+      supabase.from("referral_rewards").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    ])
+
+    if (rowsResult.error) throw new Error(rowsResult.error.message)
+    if (countResult.error) throw new Error(countResult.error.message)
+
+    const rows = (rowsResult.data || []).map(mapIntlRewardRow)
+
+    return {
+      page,
+      limit,
+      total: safeNumber(countResult.count),
+      rows: rows.map((row: any) => ({
+        rewardId: row.rewardId,
+        relationId: row.relationId,
+        userId: row.userId,
+        userEmail: null,
+        rewardType: row.rewardType,
+        amount: row.amount,
+        status: row.status,
+        referenceId: row.referenceId,
+        createdAt: row.createdAt,
+        grantedAt: row.grantedAt,
+      })),
+    }
+  }
+
+  const db = await getDatabase()
+  await ensureCloudbaseReferralCollections(db)
+  const rewardResult = await db.collection(REFERRAL_REWARDS_COLLECTION).where({ user_id: userId }).get()
+  const rewardRows = (Array.isArray(rewardResult?.data) ? rewardResult.data : []).map(mapCnRewardRow)
+  const sorted = rewardRows.sort((a: any, b: any) => (a.createdAt < b.createdAt ? 1 : -1))
+  const paged = sorted.slice(offset, offset + limit)
+
+  return {
+    page,
+    limit,
+    total: sorted.length,
+    rows: paged.map((row: any) => ({
+      rewardId: row.rewardId,
+      relationId: row.relationId,
+      userId: row.userId,
+      userEmail: null,
       rewardType: row.rewardType,
       amount: row.amount,
       status: row.status,

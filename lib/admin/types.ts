@@ -26,6 +26,7 @@ export type AdminStatus = "active" | "disabled";
 export interface AdminUser {
   id: string;
   username: string;
+  password_hash?: string;
   role: AdminRole;
   status: AdminStatus;
   created_at: string;
@@ -112,7 +113,8 @@ export type LogResourceType =
   | "ai_asset"
   | "ai_brief"
   | "config"
-  | "system";
+  | "system"
+  | "coupon";
 
 /**
  * 操作类型
@@ -156,7 +158,10 @@ export type LogAction =
   // 系统操作
   | "config.update"
   | "system.backup"
-  | "system.restore";
+  | "system.restore"
+  | "coupon.create"
+  | "coupon.update"
+  | "coupon.delete";
 
 /**
  * 系统操作日志
@@ -239,6 +244,64 @@ export interface UpdateConfigData {
   value: any;
   description?: string;
   category: ConfigCategory;
+}
+
+// ==================== 优惠券 ====================
+
+/**
+ * 优惠券状态
+ */
+export type CouponStatus = "active" | "used" | "expired";
+
+/**
+ * 优惠券
+ */
+export interface Coupon {
+  id: string;
+  code: string;
+  discount_ratio: number; // 0.8 表示 8 折
+  user_id?: string; // legacy alias of issued_to_user_id
+  issued_to_user_id?: string; // 发给哪个用户
+  used_by_user_id?: string; // 实际使用该券的用户
+  issued_by_admin_id?: string; // 哪个后台管理员发的
+  status: CouponStatus;
+  created_at: string;
+  updated_at?: string;
+  expires_at?: string;
+  used_at?: string;
+  order_no?: string; // 使用该优惠券的订单号
+}
+
+export interface CouponSummary {
+  totalIssued: number;
+  usedCount: number;
+  unusedCount: number;
+  expiredCount: number;
+  boundCount: number;
+  unboundCount: number;
+}
+
+/**
+ * 创建优惠券数据
+ */
+export interface CreateCouponData {
+  code?: string; // 如果不传，则自动生成
+  discount_ratio: number;
+  user_id?: string;
+  issued_to_user_id?: string;
+  issued_by_admin_id?: string;
+  expires_at?: string;
+}
+
+/**
+ * 优惠券列表过滤条件
+ */
+export interface CouponFilters {
+  status?: CouponStatus;
+  user_id?: string;
+  search?: string; // 搜索优惠码
+  limit?: number;
+  offset?: number;
 }
 
 // ==================== AI 创意中心 ====================
@@ -424,6 +487,16 @@ export interface CreateAiAssetData {
   metadata?: Record<string, any>;
 }
 
+export interface UpdateAiAssetData {
+  asset_type?: AiAssetType;
+  storage_provider?: AiStorageProvider;
+  storage_path?: string;
+  public_url?: string;
+  mime_type?: string;
+  size?: number;
+  metadata?: Record<string, any>;
+}
+
 export interface AiJobFilters {
   status?: AiJobStatus;
   job_type?: AiJobType;
@@ -494,6 +567,270 @@ export interface VideoGenerationRequest {
 export interface AssetRegenerateRequest {
   asset_id: string;
   supplemental_prompt: string;
+}
+
+// ==================== 用户反馈 & 产品迭代 ====================
+
+/**
+ * 反馈状态
+ */
+export type FeedbackStatus = "pending" | "processing" | "analyzed" | "resolved" | "ignored";
+
+/**
+ * 反馈来源
+ */
+export type FeedbackSource = "web" | "app" | "email" | "system";
+
+/**
+ * 用户反馈
+ */
+export interface UserFeedback {
+  id: string;
+  user_id?: string;
+  email?: string;
+  content: string;
+  source: FeedbackSource;
+  status: FeedbackStatus;
+  images?: string[];
+  screenshot_urls?: string[];
+  version?: string;
+  feature_key?: string;
+  pros?: string[];
+  cons?: string[];
+  metadata?: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+  admin_notes?: string;
+  analysis_result?: any; // AI 分析结果
+}
+
+/**
+ * 创建反馈数据
+ */
+export interface CreateFeedbackData {
+  user_id?: string;
+  email?: string;
+  content: string;
+  source?: FeedbackSource;
+  images?: string[];
+  screenshot_urls?: string[];
+  version?: string;
+  feature_key?: string;
+  pros?: string[];
+  cons?: string[];
+  metadata?: Record<string, any>;
+  status?: FeedbackStatus;
+}
+
+/**
+ * 反馈过滤条件
+ */
+export interface FeedbackFilters {
+  status?: FeedbackStatus;
+  source?: FeedbackSource;
+  version?: string;
+  feature_key?: string;
+  start_date?: string;
+  end_date?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * 产品迭代记录
+ */
+export interface ProductIteration {
+  id: string;
+  version: string;
+  title: string;
+  content: string; // 迭代内容描述
+  status: "planned" | "in_progress" | "completed";
+  release_date?: string;
+  feedback_ids?: string[]; // 关联的反馈 ID
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * 创建迭代数据
+ */
+export interface CreateIterationData {
+  version: string;
+  title: string;
+  content: string;
+  status?: "planned" | "in_progress" | "completed";
+  release_date?: string;
+  feedback_ids?: string[];
+}
+
+// ==================== 用户行为分析 ====================
+
+export type BehaviorEventType =
+  | "register"
+  | "login"
+  | "logout"
+  | "view"
+  | "click"
+  | "hover"
+  | "scroll"
+  | "dwell";
+
+export interface UserBehaviorEvent {
+  id: string;
+  user_id?: string;
+  session_id?: string;
+  event_type: BehaviorEventType;
+  feature_key: string;
+  page_path?: string;
+  source?: string;
+  duration_ms?: number;
+  scroll_depth?: number;
+  properties?: Record<string, any>;
+  occurred_at: string;
+  created_at: string;
+}
+
+export interface CreateUserBehaviorEventData {
+  user_id?: string;
+  session_id?: string;
+  event_type: BehaviorEventType;
+  feature_key: string;
+  page_path?: string;
+  source?: string;
+  duration_ms?: number;
+  scroll_depth?: number;
+  properties?: Record<string, any>;
+  occurred_at?: string;
+}
+
+export interface BehaviorEventFilters {
+  user_id?: string;
+  session_id?: string;
+  feature_key?: string;
+  source?: string;
+  event_type?: BehaviorEventType | BehaviorEventType[];
+  start_date?: string;
+  end_date?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface FeatureUsageMetrics {
+  feature_key: string;
+  usage_count: number;
+  unique_users: number;
+  average_dwell_ms: number;
+  user_coverage_rate: number;
+  click_count: number;
+  hover_count: number;
+  scroll_count: number;
+  last_used_at?: string;
+  page_paths: string[];
+}
+
+export interface FeatureChurnMetrics {
+  feature_key: string;
+  users: number;
+  eligible_users: number;
+  churned_users: number;
+  churn_rate: number;
+  churn_window_days: number;
+  last_feature_at?: string;
+}
+
+export interface AnalysisSourceMetric {
+  source: string;
+  count: number;
+  share: number;
+}
+
+export interface FeedbackTopicMetric {
+  topic: string;
+  count: number;
+}
+
+export interface FeedbackVersionMetric {
+  version: string;
+  total: number;
+  positive_mentions: number;
+  negative_mentions: number;
+  screenshot_count: number;
+}
+
+export interface FeedbackTimelineMetric {
+  date: string;
+  total: number;
+  positive_mentions: number;
+  negative_mentions: number;
+}
+
+export interface FeedbackAggregation {
+  total_feedback: number;
+  pending_feedback: number;
+  analyzed_feedback: number;
+  resolved_feedback: number;
+  top_pros: FeedbackTopicMetric[];
+  top_cons: FeedbackTopicMetric[];
+  by_version: FeedbackVersionMetric[];
+  by_day: FeedbackTimelineMetric[];
+}
+
+export type FeedbackClusterSentiment = "positive" | "negative" | "mixed";
+
+export interface FeedbackCluster {
+  id: string;
+  snapshot_key: string;
+  topic: string;
+  keywords: string[];
+  frequency: number;
+  sentiment: FeedbackClusterSentiment;
+  suggestion: string;
+  version?: string;
+  feedback_ids?: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateFeedbackClusterData {
+  snapshot_key: string;
+  topic: string;
+  keywords: string[];
+  frequency: number;
+  sentiment: FeedbackClusterSentiment;
+  suggestion: string;
+  version?: string;
+  feedback_ids?: string[];
+}
+
+export interface FeedbackClusterFilters {
+  snapshot_key?: string;
+  version?: string;
+  start_date?: string;
+  end_date?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AnalysisDashboardSummary {
+  generated_at: string;
+  range_start: string;
+  range_end: string;
+  total_events: number;
+  active_users: number;
+  new_users: number;
+  dormant_users: number;
+  feedback_count: number;
+  register_event_count: number;
+  login_event_count: number;
+  logout_event_count: number;
+  registration_sources: AnalysisSourceMetric[];
+  login_sources: AnalysisSourceMetric[];
+  logout_sources: AnalysisSourceMetric[];
+  top_features: FeatureUsageMetrics[];
+  churn_features: FeatureChurnMetrics[];
+  feedback: FeedbackAggregation;
+  clusters: FeedbackCluster[];
 }
 
 // ==================== 数据库适配器 ====================
@@ -793,6 +1130,106 @@ export interface AdminDatabaseAdapter {
    * 删除配置
    */
   deleteConfig(key: string): Promise<void>;
+
+  // ==================== 优惠券管理 ====================
+
+  /**
+   * 获取优惠券列表
+   */
+  getCoupons(filters?: CouponFilters): Promise<{ items: Coupon[]; total: number }>;
+
+  /**
+   * 获取优惠券汇总统计
+   */
+  getCouponSummary(filters?: CouponFilters): Promise<CouponSummary>;
+
+  /**
+   * 根据优惠码获取优惠券
+   */
+  getCouponByCode(code: string): Promise<Coupon | null>;
+
+  /**
+   * 创建优惠券
+   */
+  createCoupon(data: CreateCouponData): Promise<Coupon>;
+
+  /**
+   * 更新优惠券状态
+   */
+  updateCouponStatus(id: string, status: CouponStatus, orderNo?: string, usedByUserId?: string): Promise<boolean>;
+
+  /**
+   * 删除优惠券
+   */
+  deleteCoupon(id: string): Promise<boolean>;
+
+  // ==================== 用户反馈操作 ====================
+  /**
+   * 列出反馈
+   */
+  listFeedback(filters?: FeedbackFilters): Promise<UserFeedback[]>;
+
+  /**
+   * 创建反馈
+   */
+  createFeedback(data: CreateFeedbackData): Promise<UserFeedback>;
+
+  /**
+   * 统计反馈数量
+   */
+  countFeedback(filters?: FeedbackFilters): Promise<number>;
+
+  /**
+   * 根据 ID 获取反馈
+   */
+  getFeedbackById(id: string): Promise<UserFeedback | null>;
+
+  /**
+   * 更新反馈
+   */
+  updateFeedback(id: string, data: Partial<UserFeedback>): Promise<UserFeedback>;
+
+  /**
+   * 删除反馈
+   */
+  deleteFeedback(id: string): Promise<void>;
+
+  // ==================== 用户行为分析 ====================
+  createBehaviorEvent(data: CreateUserBehaviorEventData): Promise<UserBehaviorEvent>;
+  listBehaviorEvents(filters?: BehaviorEventFilters): Promise<UserBehaviorEvent[]>;
+  createFeedbackCluster(data: CreateFeedbackClusterData): Promise<FeedbackCluster>;
+  listFeedbackClusters(filters?: FeedbackClusterFilters): Promise<FeedbackCluster[]>;
+
+  // ==================== 产品迭代操作 ====================
+  /**
+   * 列出迭代记录
+   */
+  listIterations(limit?: number, offset?: number): Promise<ProductIteration[]>;
+
+  /**
+   * 统计迭代数量
+   */
+  countIterations(): Promise<number>;
+
+  /**
+   * 根据 ID 获取迭代记录
+   */
+  getIterationById(id: string): Promise<ProductIteration | null>;
+
+  /**
+   * 创建迭代记录
+   */
+  createIteration(data: CreateIterationData): Promise<ProductIteration>;
+
+  /**
+   * 更新迭代记录
+   */
+  updateIteration(id: string, data: Partial<ProductIteration>): Promise<ProductIteration>;
+
+  /**
+   * 删除迭代记录
+   */
+  deleteIteration(id: string): Promise<void>;
 
   // ==================== 健康检查 ====================
   /**

@@ -10,7 +10,7 @@ import { updateUser as updateCloudBaseUser } from '@/lib/database/cloudbase/user
 import { User } from '@/lib/types';
 import { recordDevice } from '@/lib/database/devices';
 import { buildDeviceFingerprint, parseDeviceInfo, getClientIP, getLocationFromIP } from '@/lib/utils/device-parser';
-import { bindReferralFromRequest } from '@/lib/market/referrals';
+import { applyInviteSignupFromRequest, handleInviteProgramLogin } from '@/lib/market/invite-program';
 
 const WORKSPACE_ID = '7746c6e86994694300e707d4734fa1ad';
 
@@ -236,13 +236,22 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      await bindReferralFromRequest({
+      await applyInviteSignupFromRequest({
         request,
         invitedUserId: responseUser.id,
         invitedEmail: responseUser.email,
       });
     } catch (bindError) {
       console.warn('[SMS VERIFY] Referral binding skipped:', bindError);
+    }
+
+    try {
+      await handleInviteProgramLogin({
+        userId: responseUser.id,
+        source: 'auth.sms_verify',
+      });
+    } catch (inviteError) {
+      console.warn('[SMS VERIFY] Invite program login processing skipped:', inviteError);
     }
 
     const response = NextResponse.json({

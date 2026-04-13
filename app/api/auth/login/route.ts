@@ -8,7 +8,7 @@ import { IS_DOMESTIC_VERSION } from '@/config'
 import { verifyPassword } from '@/lib/utils/password'
 import { recordDevice } from '@/lib/database/devices'
 import { buildDeviceFingerprint, parseDeviceInfo, getClientIP, getLocationFromIP } from '@/lib/utils/device-parser'
-import { bindReferralFromRequest } from '@/lib/market/referrals'
+import { applyInviteSignupFromRequest, handleInviteProgramLogin } from '@/lib/market/invite-program'
 
 interface DeviceRequestPayload {
   deviceModel?: string
@@ -435,13 +435,22 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      await bindReferralFromRequest({
+      await applyInviteSignupFromRequest({
         request,
         invitedUserId: updatedUser.id,
         invitedEmail: updatedUser.email,
       })
     } catch (bindError) {
       console.warn('[LOGIN] Referral binding skipped:', bindError)
+    }
+
+    try {
+      await handleInviteProgramLogin({
+        userId: updatedUser.id,
+        source: 'auth.login',
+      })
+    } catch (inviteError) {
+      console.warn('[LOGIN] Invite program login processing skipped:', inviteError)
     }
 
     return NextResponse.json({
@@ -592,13 +601,22 @@ async function handleCloudBaseLogin(
 
     // Create response with session cookie
     try {
-      await bindReferralFromRequest({
+      await applyInviteSignupFromRequest({
         request,
         invitedUserId: responseUser.id,
         invitedEmail: responseUser.email,
       })
     } catch (bindError) {
       console.warn('[LOGIN] CloudBase referral binding skipped:', bindError)
+    }
+
+    try {
+      await handleInviteProgramLogin({
+        userId: responseUser.id,
+        source: 'auth.login',
+      })
+    } catch (inviteError) {
+      console.warn('[LOGIN] CloudBase invite program login processing skipped:', inviteError)
     }
 
     const response = NextResponse.json({

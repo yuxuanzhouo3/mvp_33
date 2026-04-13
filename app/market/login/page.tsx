@@ -15,7 +15,7 @@ export default function MarketLoginPage() {
 
   useEffect(() => {
     const run = async () => {
-      const response = await fetch("/api/market/auth/session", { cache: "no-store" })
+      const response = await fetch("/api/market-admin/auth/session", { cache: "no-store" })
       if (response.ok) {
         router.replace("/market")
       }
@@ -30,7 +30,7 @@ export default function MarketLoginPage() {
     setError("")
 
     try {
-      const response = await fetch("/api/market/auth/login", {
+      const response = await fetch("/api/market-admin/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ username, password }),

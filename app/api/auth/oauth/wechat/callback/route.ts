@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserByWeChatId, createUser as createCloudBaseUser, updateUser as updateCloudBaseUser, getUserById } from '@/lib/database/cloudbase/users'
 import { createCloudBaseSession, setCloudBaseSessionCookie } from '@/lib/cloudbase/auth'
-import { bindReferralFromRequest } from '@/lib/market/referrals'
+import { applyInviteSignupFromRequest, handleInviteProgramLogin } from '@/lib/market/invite-program'
 
 const WECHAT_APP_ID = process.env.WECHAT_APP_ID || ''
 const WECHAT_APP_SECRET = process.env.WECHAT_APP_SECRET || ''
@@ -125,13 +125,22 @@ export async function GET(request: NextRequest) {
     })
 
     try {
-      await bindReferralFromRequest({
+      await applyInviteSignupFromRequest({
         request,
         invitedUserId: user.id,
         invitedEmail: user.email,
       })
     } catch (bindError) {
       console.warn('[WECHAT OAUTH] Referral binding skipped:', bindError)
+    }
+
+    try {
+      await handleInviteProgramLogin({
+        userId: user.id,
+        source: 'auth.oauth.wechat',
+      })
+    } catch (inviteError) {
+      console.warn('[WECHAT OAUTH] Invite program login processing skipped:', inviteError)
     }
 
     const redirectUrl = new URL(`${FRONTEND_URL}/login`)

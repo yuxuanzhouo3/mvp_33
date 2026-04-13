@@ -49,8 +49,25 @@ import type {
   AiJobFilters,
   AiAsset,
   CreateAiAssetData,
+  StorageFile,
+  Coupon,
+  CouponSummary,
+  CouponStatus,
+  CreateCouponData,
+  CouponFilters,
+  UserFeedback,
+  CreateFeedbackData,
+  FeedbackFilters,
+  ProductIteration,
+  CreateIterationData,
+  UserBehaviorEvent,
+  CreateUserBehaviorEventData,
+  BehaviorEventFilters,
+  FeedbackCluster,
+  CreateFeedbackClusterData,
+  FeedbackClusterFilters,
 } from "./types";
-import { handleDatabaseError, toISOString } from "./database";
+import { DatabaseError, handleDatabaseError, toISOString } from "./database";
 
 // ==================== CloudBase 适配器类 ====================
 
@@ -62,6 +79,8 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
   private connector: CloudBaseConnector;
   private initialized: boolean = false;
   private aiCollectionsReady: boolean = false;
+  private couponCollectionReady: boolean = false;
+  private analysisCollectionsReady: boolean = false;
 
   constructor() {
     this.connector = new CloudBaseConnector();
@@ -81,26 +100,36 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
   private async ensureAiCollections(): Promise<void> {
     if (this.aiCollectionsReady) return;
     await this.ensureInitialized();
-    const collections = [
+    await this.ensureCollections([
       "ai_project_analyses",
       "ai_creative_briefs",
       "ai_generation_jobs",
       "ai_assets",
-    ];
+    ]);
+
+    this.aiCollectionsReady = true;
+  }
+
+  private isMissingCollectionError(error: any): boolean {
+    const message = String(error?.message || "");
+    const code = String(error?.code || "");
+
+    return (
+      message.includes("Db or Table not exist") ||
+      message.includes("DATABASE_COLLECTION_NOT_EXIST") ||
+      code.includes("DATABASE_COLLECTION_NOT_EXIST")
+    );
+  }
+
+  private async ensureCollections(collections: string[]): Promise<void> {
+    await this.ensureInitialized();
 
     for (const name of collections) {
       try {
         await this.db.collection(name).limit(1).get();
       } catch (error: any) {
-        const message = String(error?.message || "");
-        const code = String(error?.code || "");
-        const missing =
-          message.includes("Db or Table not exist") ||
-          message.includes("DATABASE_COLLECTION_NOT_EXIST") ||
-          code.includes("DATABASE_COLLECTION_NOT_EXIST");
-
-        if (!missing) {
-          console.warn(`[CloudBaseAdapter] ensure AI collection failed: ${name}`, {
+        if (!this.isMissingCollectionError(error)) {
+          console.warn(`[CloudBaseAdapter] ensure collection failed: ${name}`, {
             code: error?.code,
             message: error?.message,
           });
@@ -109,9 +138,9 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
 
         try {
           await this.db.createCollection(name);
-          console.log(`[CloudBaseAdapter] ensured AI collection: ${name}`);
+          console.log(`[CloudBaseAdapter] ensured collection: ${name}`);
         } catch (createError: any) {
-          console.warn(`[CloudBaseAdapter] create AI collection failed: ${name}`, {
+          console.warn(`[CloudBaseAdapter] create collection failed: ${name}`, {
             code: createError?.code,
             message: createError?.message,
           });
@@ -119,8 +148,23 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
         }
       }
     }
+  }
 
-    this.aiCollectionsReady = true;
+  private async ensureCouponCollection(): Promise<void> {
+    if (this.couponCollectionReady) return;
+    await this.ensureCollections(["coupons"]);
+    this.couponCollectionReady = true;
+  }
+
+  private async ensureAnalysisCollections(): Promise<void> {
+    if (this.analysisCollectionsReady) return;
+    await this.ensureCollections([
+      "user_feedback",
+      "product_iterations",
+      "user_behavior_events",
+      "feedback_clusters",
+    ]);
+    this.analysisCollectionsReady = true;
   }
 
   /**
@@ -929,7 +973,7 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
     const where: any = {};
 
     if (filters?.user_id) {
-      where.user_id = filters.user_id;
+      where.issued_to_user_id = filters.user_id;
     }
 
     if (filters?.status) {
@@ -1592,6 +1636,202 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
     }
   }
 
+  // ==================== 优惠券管理 ====================
+
+  /**
+   * 获取优惠券列表
+   */
+  async getCoupons(filters?: CouponFilters): Promise<{ items: Coupon[]; total: number }> {
+    await this.ensureInitialized();
+    await this.ensureCouponCollection();
+    console.log('[CloudBaseAdapter] 获取优惠券列表:', filters);
+
+    const where: any = {};
+
+    if (filters?.status) {
+      where.status = filters.status;
+    }
+
+    if (filters?.user_id) {
+      where.user_id = filters.user_id;
+    }
+
+    if (filters?.search) {
+      where.code = this.db.command.regexp({
+        regexp: filters.search,
+        options: 'i',
+      });
+    }
+
+    try {
+      let query = this.db.collection("coupons");
+
+      if (Object.keys(where).length > 0) {
+        query = query.where(where);
+      }
+
+      const countQuery = query;
+      let total = 0;
+
+      try {
+        const countResult = await Promise.race([
+          countQuery.count(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+        ]);
+        total = countResult?.total || 0;
+      } catch (countError) {
+        console.warn('[CloudBaseAdapter] Failed to count coupons, fallback to page size', countError);
+      }
+
+      let listQuery = query.orderBy("created_at", "desc");
+
+      if (filters?.offset) {
+        listQuery = listQuery.skip(filters.offset);
+      }
+
+      if (filters?.limit) {
+        listQuery = listQuery.limit(filters.limit);
+      }
+
+      const result = await listQuery.get();
+      const items = result.data.map((doc: any) => this.dbToCoupon(doc));
+
+      if (total === 0 && items.length > 0) {
+        total = (filters?.offset || 0) + items.length;
+      }
+
+      return { items, total };
+    } catch (error: any) {
+      console.error('[CloudBaseAdapter] 获取优惠券列表失败:', error);
+      throw handleDatabaseError(error);
+    }
+  }
+
+  /**
+   * 根据优惠码获取优惠券
+   */
+  async getCouponByCode(code: string): Promise<Coupon | null> {
+    await this.ensureInitialized();
+    await this.ensureCouponCollection();
+    console.log('[CloudBaseAdapter] 根据优惠码获取优惠券:', code);
+
+    try {
+      const result = await this.db.collection("coupons").where({ code }).get();
+      if (!result.data || result.data.length === 0) {
+        return null;
+      }
+      return this.dbToCoupon(result.data[0]);
+    } catch (error: any) {
+      console.error('[CloudBaseAdapter] 获取优惠券失败:', error);
+      throw handleDatabaseError(error);
+    }
+  }
+
+  /**
+   * 创建优惠券
+   */
+  async createCoupon(data: CreateCouponData): Promise<Coupon> {
+    await this.ensureInitialized();
+    await this.ensureCouponCollection();
+    console.log('[CloudBaseAdapter] 创建优惠券:', data);
+    const now = new Date().toISOString();
+    const issuedToUserId = data.issued_to_user_id || data.user_id;
+    const doc: any = {
+      code: data.code || `CPN${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+      discount_ratio: data.discount_ratio,
+      user_id: issuedToUserId,
+      issued_to_user_id: issuedToUserId,
+      issued_by_admin_id: data.issued_by_admin_id,
+      status: 'active',
+      created_at: now,
+      updated_at: now,
+    };
+
+    if (data.expires_at) {
+      doc.expires_at = data.expires_at;
+    }
+
+    try {
+      const result = await this.db.collection("coupons").add(doc);
+      const id = result.id || (Array.isArray(result.ids) ? result.ids[0] : null);
+      const created = await this.db.collection("coupons").doc(id).get();
+      return this.dbToCoupon(created.data[0]);
+    } catch (error: any) {
+      console.error('[CloudBaseAdapter] 创建优惠券失败:', error);
+      throw handleDatabaseError(error);
+    }
+  }
+
+  /**
+   * 更新优惠券状态
+   */
+  async updateCouponStatus(id: string, status: CouponStatus, orderNo?: string, usedByUserId?: string): Promise<boolean> {
+    await this.ensureInitialized();
+    await this.ensureCouponCollection();
+    console.log('[CloudBaseAdapter] 更新优惠券状态:', id, status, orderNo);
+
+    const now = new Date().toISOString();
+    const update: any = {
+      status,
+      updated_at: now,
+    };
+
+    if (status === 'used') {
+      update.used_at = now;
+      if (orderNo) update.order_no = orderNo;
+      if (usedByUserId) update.used_by_user_id = usedByUserId;
+    }
+
+    try {
+      await this.db.collection("coupons").doc(id).update(update);
+      return true;
+    } catch (error: any) {
+      console.error('[CloudBaseAdapter] 更新优惠券状态失败:', error);
+      throw handleDatabaseError(error);
+    }
+  }
+
+  /**
+   * 删除优惠券
+   */
+  async deleteCoupon(id: string): Promise<boolean> {
+    await this.ensureInitialized();
+    await this.ensureCouponCollection();
+    console.log('[CloudBaseAdapter] 删除优惠券:', id);
+
+    try {
+      await this.db.collection("coupons").doc(id).remove();
+      return true;
+    } catch (error: any) {
+      console.error('[CloudBaseAdapter] 删除优惠券失败:', error);
+      throw handleDatabaseError(error);
+    }
+  }
+
+  /**
+   * 辅助方法：从数据库格式转换为 Coupon
+   */
+  private dbToCoupon(doc: any): Coupon {
+    const issuedToUserId = doc.issued_to_user_id || doc.user_id;
+    const usedByUserId = doc.used_by_user_id || (doc.status === 'used' ? issuedToUserId : undefined);
+
+    return {
+      id: doc._id || doc.id,
+      code: doc.code,
+      discount_ratio: doc.discount_ratio,
+      user_id: issuedToUserId,
+      issued_to_user_id: issuedToUserId,
+      used_by_user_id: usedByUserId,
+      issued_by_admin_id: doc.issued_by_admin_id,
+      status: doc.status,
+      created_at: doc.created_at,
+      updated_at: doc.updated_at,
+      expires_at: doc.expires_at,
+      used_at: doc.used_at,
+      order_no: doc.order_no,
+    };
+  }
+
   /**
    * 辅助方法：从数据库格式转换为 SocialLink
    */
@@ -2083,7 +2323,7 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
   /**
    * 获取存储文件列表
    */
-  async listStorageFiles(): Promise<Array<{ name: string; url: string; size?: number; lastModified?: string; source: string }>> {
+  async listStorageFiles(): Promise<StorageFile[]> {
     console.log('[CloudBaseAdapter] 获取存储文件列表 - 开始');
     try {
       await this.ensureInitialized();
@@ -2092,7 +2332,7 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
       console.log('[CloudBaseAdapter] app:', app?.constructor?.name);
 
       // CloudBase Storage API 列出文件
-      let files: Array<{ name: string; url: string; size?: number; lastModified?: string; source: string }> = [];
+      let files: StorageFile[] = [];
       try {
         console.log('[CloudBaseAdapter] 开始调用 listFiles API');
         const result = await app.listFiles({
@@ -2229,6 +2469,491 @@ export class CloudBaseAdminAdapter implements AdminDatabaseAdapter {
       console.error('[CloudBaseAdapter] 下载文件失败:', error);
       throw handleDatabaseError(error);
     }
+  }
+
+  // ==================== 用户反馈操作 ====================
+
+  async listFeedback(filters?: FeedbackFilters): Promise<UserFeedback[]> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      let query = db.collection('user_feedback');
+
+      const whereClause: any = {};
+      if (filters?.status) whereClause.status = filters.status;
+      if (filters?.source) whereClause.source = filters.source;
+      if (filters?.version) whereClause.version = filters.version;
+      if (filters?.feature_key) whereClause.feature_key = filters.feature_key;
+      if (filters?.search) {
+        whereClause.content = db.RegExp({
+          regexp: filters.search,
+          options: 'i',
+        });
+      }
+
+      let request = query.where(whereClause).orderBy('created_at', 'desc');
+      const startDate = filters?.start_date ? new Date(filters.start_date) : null;
+      const endDate = filters?.end_date ? new Date(filters.end_date) : null;
+
+      if (filters?.limit) {
+        request = request.skip(filters.offset || 0).limit(filters.limit);
+      }
+
+      const { data } = await request.get();
+      return (data || [])
+        .map(this.dbToFeedback)
+        .filter((item: UserFeedback) => {
+          const createdAt = new Date(item.created_at);
+          if (startDate && createdAt < startDate) return false;
+          if (endDate && createdAt > endDate) return false;
+          return true;
+        });
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  async getCouponSummary(filters?: CouponFilters): Promise<CouponSummary> {
+    await this.ensureInitialized();
+    await this.ensureCouponCollection();
+    console.log('[CloudBaseAdapter] 获取优惠券汇总:', filters);
+
+    const countWithWhere = async (where: any) => {
+      let query = this.db.collection("coupons");
+      if (Object.keys(where).length > 0) {
+        query = query.where(where);
+      }
+      const result = await query.count();
+      return result?.total || 0;
+    };
+
+    const buildWhere = (status?: CouponStatus, onlyBound = false) => {
+      const where: any = {};
+
+      if (filters?.user_id) {
+        where.issued_to_user_id = filters.user_id;
+      }
+
+      if (filters?.search) {
+        where.code = this.db.command.regexp({
+          regexp: filters.search,
+          options: 'i',
+        });
+      }
+
+      if (status) {
+        where.status = status;
+      }
+
+      if (onlyBound) {
+        where.issued_to_user_id = this.db.command.neq(null);
+      }
+
+      return where;
+    };
+
+    const [totalIssued, usedCount, unusedCount, expiredCount, boundCount] = await Promise.all([
+      countWithWhere(buildWhere()),
+      countWithWhere(buildWhere('used')),
+      countWithWhere(buildWhere('active')),
+      countWithWhere(buildWhere('expired')),
+      countWithWhere(buildWhere(undefined, true)),
+    ]);
+
+    return {
+      totalIssued,
+      usedCount,
+      unusedCount,
+      expiredCount,
+      boundCount,
+      unboundCount: Math.max(0, totalIssued - boundCount),
+    };
+  }
+
+  async createFeedback(data: CreateFeedbackData): Promise<UserFeedback> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      const now = toISOString(new Date());
+      const insertData = {
+        user_id: data.user_id,
+        email: data.email,
+        content: data.content,
+        source: data.source || "web",
+        status: data.status || "pending",
+        images: data.images || [],
+        screenshot_urls: data.screenshot_urls || data.images || [],
+        version: data.version,
+        feature_key: data.feature_key,
+        pros: data.pros || [],
+        cons: data.cons || [],
+        metadata: data.metadata || {},
+        created_at: now,
+        updated_at: now,
+      };
+
+      const result = await db.collection('user_feedback').add(insertData);
+      const id = this.getCloudBaseInsertedId(result);
+      const created = await this.getFeedbackById(id);
+      if (!created) throw new Error('Create failed');
+      return created;
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  async countFeedback(filters?: FeedbackFilters): Promise<number> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      let query = db.collection('user_feedback');
+
+      const whereClause: any = {};
+      if (filters?.status) whereClause.status = filters.status;
+      if (filters?.source) whereClause.source = filters.source;
+      if (filters?.version) whereClause.version = filters.version;
+      if (filters?.feature_key) whereClause.feature_key = filters.feature_key;
+
+      if (filters?.start_date || filters?.end_date) {
+        const rows = await this.listFeedback({ ...filters, limit: undefined, offset: undefined });
+        return rows.length;
+      }
+
+      const { total } = await query.where(whereClause).count();
+      return total || 0;
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  async getFeedbackById(id: string): Promise<UserFeedback | null> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      const { data } = await db.collection('user_feedback').doc(id).get();
+      if (!data || data.length === 0) return null;
+      return this.dbToFeedback(data[0]);
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  async updateFeedback(id: string, data: Partial<UserFeedback>): Promise<UserFeedback> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      const updateData = {
+        ...data,
+        updated_at: toISOString(new Date()),
+      };
+      delete (updateData as any)._id;
+      delete (updateData as any).id;
+      delete (updateData as any).created_at;
+
+      await db.collection('user_feedback').doc(id).update(updateData);
+      const updated = await this.getFeedbackById(id);
+      if (!updated) throw new Error('Update failed: feedback not found after update');
+      return updated;
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  async deleteFeedback(id: string): Promise<void> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      await db.collection('user_feedback').doc(id).remove();
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  private dbToFeedback(doc: any): UserFeedback {
+    return {
+      id: doc._id || doc.id,
+      user_id: doc.user_id,
+      email: doc.email,
+      content: doc.content,
+      source: doc.source,
+      status: doc.status,
+      images: doc.images || [],
+      screenshot_urls: doc.screenshot_urls || doc.images || [],
+      version: doc.version,
+      feature_key: doc.feature_key,
+      pros: doc.pros || [],
+      cons: doc.cons || [],
+      metadata: doc.metadata || {},
+      created_at: doc.created_at,
+      updated_at: doc.updated_at,
+      admin_notes: doc.admin_notes,
+      analysis_result: doc.analysis_result,
+    };
+  }
+
+  // ==================== 产品迭代操作 ====================
+
+  async listIterations(limit?: number, offset?: number): Promise<ProductIteration[]> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      let query = db.collection('product_iterations').orderBy('version', 'desc');
+
+      if (limit !== undefined) {
+        query = query.skip(offset || 0).limit(limit);
+      }
+
+      const { data } = await query.get();
+      return (data || []).map(this.dbToIteration);
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  async countIterations(): Promise<number> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      const { total } = await db.collection('product_iterations').count();
+      return total || 0;
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  async getIterationById(id: string): Promise<ProductIteration | null> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      const { data } = await db.collection('product_iterations').doc(id).get();
+      if (!data || data.length === 0) return null;
+      return this.dbToIteration(data[0]);
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  async createIteration(data: CreateIterationData): Promise<ProductIteration> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      const now = toISOString(new Date());
+      const insertData = {
+        ...data,
+        status: data.status || "planned",
+        created_at: now,
+        updated_at: now,
+      };
+
+      const { id } = await db.collection('product_iterations').add(insertData);
+      const created = await this.getIterationById(id);
+      if (!created) throw new Error('Create failed');
+      return created;
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  async updateIteration(id: string, data: Partial<ProductIteration>): Promise<ProductIteration> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      const updateData = {
+        ...data,
+        updated_at: toISOString(new Date()),
+      };
+      delete (updateData as any)._id;
+      delete (updateData as any).id;
+      delete (updateData as any).created_at;
+
+      await db.collection('product_iterations').doc(id).update(updateData);
+      const updated = await this.getIterationById(id);
+      if (!updated) throw new Error('Update failed');
+      return updated;
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  async deleteIteration(id: string): Promise<void> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      await db.collection('product_iterations').doc(id).remove();
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  private dbToIteration(doc: any): ProductIteration {
+    return {
+      id: doc._id || doc.id,
+      version: doc.version,
+      title: doc.title,
+      content: doc.content,
+      status: doc.status,
+      release_date: doc.release_date,
+      feedback_ids: doc.feedback_ids || [],
+      created_at: doc.created_at,
+      updated_at: doc.updated_at,
+    };
+  }
+
+  async createBehaviorEvent(data: CreateUserBehaviorEventData): Promise<UserBehaviorEvent> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      const now = toISOString(new Date());
+      const insertData = {
+        user_id: data.user_id,
+        session_id: data.session_id,
+        event_type: data.event_type,
+        feature_key: data.feature_key,
+        page_path: data.page_path,
+        source: data.source,
+        duration_ms: data.duration_ms,
+        scroll_depth: data.scroll_depth,
+        properties: data.properties || {},
+        occurred_at: data.occurred_at || now,
+        created_at: now,
+      };
+
+      const result = await db.collection('user_behavior_events').add(insertData);
+      return this.dbToBehaviorEvent({ _id: this.getCloudBaseInsertedId(result), ...insertData });
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  async listBehaviorEvents(filters?: BehaviorEventFilters): Promise<UserBehaviorEvent[]> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      const _ = db.command;
+      let query = db.collection('user_behavior_events');
+
+      const whereClause: any = {};
+      if (filters?.user_id) whereClause.user_id = filters.user_id;
+      if (filters?.session_id) whereClause.session_id = filters.session_id;
+      if (filters?.feature_key) whereClause.feature_key = filters.feature_key;
+      if (filters?.source) whereClause.source = filters.source;
+      if (Array.isArray(filters?.event_type) && filters.event_type.length) {
+        whereClause.event_type = _.in(filters.event_type);
+      } else if (filters?.event_type) {
+        whereClause.event_type = filters.event_type;
+      }
+
+      let request = query.where(whereClause).orderBy('occurred_at', 'desc');
+      if (filters?.limit) {
+        request = request.skip(filters.offset || 0).limit(filters.limit);
+      }
+
+      const { data } = await request.get();
+      const startDate = filters?.start_date ? new Date(filters.start_date) : null;
+      const endDate = filters?.end_date ? new Date(filters.end_date) : null;
+
+      return (data || [])
+        .map(this.dbToBehaviorEvent)
+        .filter((item: UserBehaviorEvent) => {
+          const occurredAt = new Date(item.occurred_at);
+          if (startDate && occurredAt < startDate) return false;
+          if (endDate && occurredAt > endDate) return false;
+          return true;
+        });
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  async createFeedbackCluster(data: CreateFeedbackClusterData): Promise<FeedbackCluster> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      const now = toISOString(new Date());
+      const insertData = {
+        snapshot_key: data.snapshot_key,
+        topic: data.topic,
+        keywords: data.keywords || [],
+        frequency: data.frequency,
+        sentiment: data.sentiment,
+        suggestion: data.suggestion,
+        version: data.version,
+        feedback_ids: data.feedback_ids || [],
+        created_at: now,
+        updated_at: now,
+      };
+
+      const result = await db.collection('feedback_clusters').add(insertData);
+      return this.dbToFeedbackCluster({ _id: this.getCloudBaseInsertedId(result), ...insertData });
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  async listFeedbackClusters(filters?: FeedbackClusterFilters): Promise<FeedbackCluster[]> {
+    try {
+      await this.ensureAnalysisCollections();
+      const db = this.connector.getDb();
+      let query = db.collection('feedback_clusters');
+
+      const whereClause: any = {};
+      if (filters?.snapshot_key) whereClause.snapshot_key = filters.snapshot_key;
+      if (filters?.version) whereClause.version = filters.version;
+
+      let request = query.where(whereClause).orderBy('created_at', 'desc');
+      if (filters?.limit) {
+        request = request.skip(filters.offset || 0).limit(filters.limit);
+      }
+
+      const { data } = await request.get();
+      const startDate = filters?.start_date ? new Date(filters.start_date) : null;
+      const endDate = filters?.end_date ? new Date(filters.end_date) : null;
+
+      return (data || [])
+        .map(this.dbToFeedbackCluster)
+        .filter((item: FeedbackCluster) => {
+          const createdAt = new Date(item.created_at);
+          if (startDate && createdAt < startDate) return false;
+          if (endDate && createdAt > endDate) return false;
+          return true;
+        })
+        .sort((a: FeedbackCluster, b: FeedbackCluster) => b.frequency - a.frequency);
+    } catch (error) {
+      throw handleDatabaseError(error);
+    }
+  }
+
+  private dbToBehaviorEvent(doc: any): UserBehaviorEvent {
+    return {
+      id: doc._id || doc.id,
+      user_id: doc.user_id,
+      session_id: doc.session_id,
+      event_type: doc.event_type,
+      feature_key: doc.feature_key,
+      page_path: doc.page_path,
+      source: doc.source,
+      duration_ms: doc.duration_ms,
+      scroll_depth: doc.scroll_depth,
+      properties: doc.properties || {},
+      occurred_at: doc.occurred_at,
+      created_at: doc.created_at,
+    };
+  }
+
+  private dbToFeedbackCluster(doc: any): FeedbackCluster {
+    return {
+      id: doc._id || doc.id,
+      snapshot_key: doc.snapshot_key,
+      topic: doc.topic,
+      keywords: doc.keywords || [],
+      frequency: doc.frequency ?? 0,
+      sentiment: doc.sentiment,
+      suggestion: doc.suggestion,
+      version: doc.version,
+      feedback_ids: doc.feedback_ids || [],
+      created_at: doc.created_at,
+      updated_at: doc.updated_at,
+    };
   }
 }
 

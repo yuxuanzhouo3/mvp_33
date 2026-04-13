@@ -1,0 +1,58 @@
+{
+  "provider": "approved-public-business-export",
+  "leads": [
+    {
+      "id": "sample-b2b-001",
+      "segment": "b2b",
+      "title": "AI collaboration buyer lead",
+      "platform": "linkedin",
+      "region": "INTL",
+      "audience": "120-person team",
+      "fit": 88,
+      "note": "Public business contact exported from an approved source.",
+      "organization": "Example Company",
+      "primaryContactId": "email-primary",
+      "contacts": [
+        {
+          "id": "email-primary",
+          "name": "Partnership Manager",
+          "role": "Business Development",
+          "channel": "email",
+          "value": "partnerships@example.com",
+          "isPrimary": true,
+          "isPublicContact": true
+        },
+        {
+          "id": "wechat-bd",
+          "name": "Partnership Manager",
+          "role": "Business Development",
+          "channel": "wechat",
+          "value": "example_bd_wechat",
+          "isPrimary": false,
+          "isPublicContact": true
+        },
+        {
+          "id": "telegram-bd",
+          "name": "Growth Lead",
+          "role": "International Partnerships",
+          "channel": "telegram",
+          "value": "@examplepartnerships",
+          "isPrimary": false,
+          "isPublicContact": true
+        },
+        {
+          "id": "agency-contact",
+          "name": "Agency Desk",
+          "role": "Agency / institution contact",
+          "channel": "institution",
+          "value": "https://example.com/partners/contact",
+          "isPrimary": false,
+          "isPublicContact": true
+        }
+      ],
+      "sourceLabel": "Public company partnership page",
+      "publicContactOnly": true,
+      "suggestedAngle": "Lead with the demo pack and a pilot proposal."
+    }
+  ]
+}

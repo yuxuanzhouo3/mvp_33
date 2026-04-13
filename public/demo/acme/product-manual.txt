@@ -1,0 +1,17 @@
+Product Manual
+
+MornChat Enterprise Workspace Product Manual
+
+1. Product Positioning
+MornChat unifies messaging, files, announcements, decisions, and AI summaries in one enterprise workspace.
+
+2. Core Capabilities
+1. Unified channels, direct messages, and threads.
+2. Fast search across messages, files, and knowledge.
+3. AI summaries that turn long discussions into actions.
+4. Ready for demos, handoff, and internal operations.
+
+3. Rollout Flow
+1. Create the organization and invite the initial team.
+2. Set up workspaces, channels, and docs.
+3. Use announcements and AI summaries to keep momentum visible.

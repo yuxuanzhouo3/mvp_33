@@ -1,11 +1,8 @@
-/**
- * 管理后台首页
- *
- * 重定向到仪表板
- */
-
-import { redirect } from "next/navigation";
+import { getDeploymentRegion } from "@/config";
+import AdminDemoPageClient from "./components/admin-demo-page-client";
 
 export default function AdminPage() {
-  redirect("/admin/dashboard");
+  const locale = getDeploymentRegion() === "CN" ? "zh" : "en";
+
+  return <AdminDemoPageClient locale={locale} />;
 }

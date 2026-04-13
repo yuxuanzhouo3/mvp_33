@@ -13,6 +13,7 @@ import type {
   PosterGenerationRequest,
   RepoAnalysisRequest,
   VideoGenerationRequest,
+  UserFeedback,
 } from '@/lib/admin/types'
 import { getDatabaseAdapter } from '@/lib/admin/database'
 import { buildRepoContextBundle } from './repo-context'
@@ -997,6 +998,41 @@ async function processVideoJob(job: AiGenerationJob): Promise<AiGenerationJob> {
   }
 
   return finalizeVideoJob(job, poll.remoteUrl, poll.bytes, poll.mimeType, mergePayload(outputPayload, { video_poll: poll.raw }))
+}
+
+/**
+ * 分析用户反馈
+ */
+export async function analyzeFeedback(feedback: UserFeedback): Promise<string> {
+  const language = 'zh-CN'; // 默认中文，可以根据需求从配置或 feedback 中获取
+  const region = resolveAiRegion();
+  const route = resolveAiProviderRoute(region);
+
+  const systemPrompt = isChineseLanguage(language)
+    ? "你是一个资深的产品经理和用户体验专家。请分析以下用户反馈，提取核心问题、用户痛点，并给出具体的产品改进建议。请使用 JSON 格式返回，包含 'summary' (核心总结), 'pain_points' (痛点列表), 'suggestions' (改进建议列表), 'priority' (优先级: low/medium/high)。"
+    : "You are a senior product manager and UX expert. Please analyze the following user feedback, extract core issues, user pain points, and provide specific product improvement suggestions. Return in JSON format containing 'summary', 'pain_points', 'suggestions', and 'priority' (low/medium/high).";
+
+  const userPrompt = `Feedback Content: ${feedback.content}\nEmail: ${feedback.email || 'N/A'}`;
+
+  try {
+    const analysis = await generateStructuredJson({
+      region,
+      language,
+      model: route.analysisModel,
+      systemPrompt,
+      userPrompt,
+    });
+    return JSON.stringify(analysis);
+  } catch (error) {
+    console.error('[Orchestrator] 分析反馈失败:', error);
+    return JSON.stringify({
+      summary: "分析失败",
+      pain_points: [],
+      suggestions: [],
+      priority: "medium",
+      error: String(error)
+    });
+  }
 }
 
 export async function createRepoAnalysisJob(input: RepoAnalysisRequest, createdBy: string) {

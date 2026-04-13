@@ -36,49 +36,23 @@ let adapterInstance: AdminDatabaseAdapter | null = null;
 
 export function getDatabaseAdapter(): AdminDatabaseAdapter {
   if (adapterInstance) {
-    console.log('[Database] 使用缓存的适配器实例');
     return adapterInstance;
   }
 
-  console.log('[Database] ========== 初始化数据库适配器 ==========');
   const isDomestic = IS_DOMESTIC_VERSION;
-  console.log('[Database] IS_DOMESTIC_VERSION:', isDomestic);
-  console.log('[Database] 区域配置:', isDomestic ? 'CN (国内)' : 'INTL (国际)');
-  console.log('[Database] 时间戳:', new Date().toISOString());
-  console.log('[Database] Node 环境:', process.env.NODE_ENV);
+  const adapter = isDomestic ? new CloudBaseAdminAdapter() : new SupabaseAdminAdapter();
+  adapterInstance = adapter;
+  return adapter;
+}
 
-  // 验证环境配置
-  console.log('[Database] 开始验证环境配置...');
-  const validation = validateEnvironmentConfig();
-  if (!validation.valid) {
-    console.error('[Database] ❌ 环境配置验证失败');
-    console.error('[Database] 错误详情:', validation.errors);
-    const error = new Error(
-      `环境配置错误: ${validation.errors.join('; ')}`
-    );
-    (error as any).code = 'INVALID_ENV';
-    throw error;
-  }
-  console.log('[Database] ✓ 环境配置验证通过');
-
-  try {
-    if (isDomestic) {
-      console.log('[Database] 创建 CloudBase 适配器...');
-      adapterInstance = new CloudBaseAdminAdapter();
-      console.log('[Database] ✓ CloudBase 适配器创建成功');
-    } else {
-      console.log('[Database] 创建 Supabase 适配器...');
-      adapterInstance = new SupabaseAdminAdapter();
-      console.log('[Database] ✓ Supabase 适配器创建成功');
-    }
-
-    console.log('[Database] 适配器类型:', adapterInstance.constructor.name);
-    console.log('[Database] ========== 数据库适配器初始化完成 ==========');
-    return adapterInstance;
-  } catch (error: any) {
-    console.error('[Database] ❌ 创建适配器失败:', error);
-    console.error('[Database] 错误堆栈:', error.stack);
-    throw error;
+/**
+ * 根据数据库类型获取适配器
+ */
+export function getAdminDatabase(type: 'cloudbase' | 'supabase'): AdminDatabaseAdapter {
+  if (type === 'cloudbase') {
+    return new CloudBaseAdminAdapter();
+  } else {
+    return new SupabaseAdminAdapter();
   }
 }
 

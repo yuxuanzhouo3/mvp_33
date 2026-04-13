@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getDatabaseClientForUser } from '@/lib/database-router'
+import { buildOrderCallbackData, resolveMarketingOrderPricing } from '@/lib/payment/marketing-attribution'
 
 // Generate order number
 const generateOrderNo = () => {
@@ -10,7 +11,7 @@ const generateOrderNo = () => {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { amount, currency, payment_method, region, description } = body
+    const { amount, currency, payment_method, region, description, couponCode } = body
 
     // Validate parameters
     if (!amount || !payment_method) {
@@ -53,6 +54,92 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
+
+    // --- Coupon Validation & Discount Calculation ---
+    const originalAmount = Number(amount)
+    let finalAmount = originalAmount
+    let couponId: string | undefined
+    let callbackData: Record<string, unknown> | null = null
+
+    if (couponCode) {
+      try {
+        const normalizedCouponCode = String(couponCode || '').trim()
+        if (!normalizedCouponCode) {
+          throw new Error('Empty coupon code')
+        }
+
+        const { getAdminDatabase } = await import('@/lib/admin/database')
+        const adminDb = getAdminDatabase(dbClient.type)
+        const coupon = await adminDb.getCouponByCode(normalizedCouponCode)
+
+        if (coupon) {
+          if (coupon.status === 'active') {
+            const issuedToUserId = coupon.issued_to_user_id || coupon.user_id
+            // Check if the coupon belongs to the user or is generic
+            if (!issuedToUserId || issuedToUserId === user.id) {
+              // Check expiration
+              const isExpired = coupon.expires_at && new Date(coupon.expires_at) < new Date()
+              if (!isExpired) {
+                finalAmount = Math.round(originalAmount * coupon.discount_ratio * 100) / 100
+                couponId = coupon.id
+                console.log(`[Payment] Applied admin coupon ${normalizedCouponCode}: ${amount} -> ${finalAmount}`)
+              } else {
+                console.warn(`[Payment] Admin coupon ${normalizedCouponCode} has expired`)
+              }
+            } else {
+              console.warn(`[Payment] Admin coupon ${normalizedCouponCode} does not belong to user ${user.id}`)
+            }
+          } else {
+            console.warn(`[Payment] Admin coupon ${normalizedCouponCode} is not active`)
+          }
+        } else {
+          const { getMarketingCouponByCode } = await import('@/lib/market/marketing')
+          const marketingCoupon = await getMarketingCouponByCode(normalizedCouponCode)
+
+          if (marketingCoupon) {
+            const marketingPricing = await resolveMarketingOrderPricing({
+              dbClient,
+              userId: user.id,
+              amount: originalAmount,
+              couponCode: normalizedCouponCode,
+            })
+
+            finalAmount = marketingPricing.finalAmount
+            couponId = marketingPricing.couponId
+            callbackData = buildOrderCallbackData(marketingPricing.marketingAttribution)
+
+            if (marketingPricing.reason === 'coupon_discount_applied') {
+              console.log(`[Payment] Applied marketing coupon ${normalizedCouponCode}: ${amount} -> ${finalAmount}`)
+            } else if (marketingPricing.reason === 'coupon_repeat_commission_only') {
+              console.log(`[Payment] Reused marketing attribution ${normalizedCouponCode}: buyer pays full price ${finalAmount}, partner commission remains active`)
+            } else {
+              console.warn(`[Payment] Marketing coupon ${normalizedCouponCode} not applied: ${marketingPricing.reason}`)
+            }
+          } else {
+            console.warn(`[Payment] Coupon ${normalizedCouponCode} is invalid`)
+          }
+        }
+      } catch (err) {
+        console.error('[Payment] Coupon validation error:', err)
+      }
+    } else {
+      try {
+        const marketingPricing = await resolveMarketingOrderPricing({
+          dbClient,
+          userId: user.id,
+          amount: originalAmount,
+        })
+
+        if (marketingPricing.marketingAttribution) {
+          finalAmount = marketingPricing.finalAmount
+          callbackData = buildOrderCallbackData(marketingPricing.marketingAttribution)
+          console.log(`[Payment] Applied repeat marketing attribution for ${user.id}: ${marketingPricing.reason}`)
+        }
+      } catch (marketingError) {
+        console.error('[Payment] Repeat attribution lookup error:', marketingError)
+      }
+    }
+    // -------------------------------------------------
     
     // Validate payment method based on region
     // China region: only allow WeChat Pay and Alipay
@@ -95,13 +182,16 @@ export async function POST(request: NextRequest) {
         const result = await db.collection('orders').add({
           order_no,
           user_id: user.id,
-          amount,
+          amount: finalAmount,
+          original_amount: originalAmount,
+          coupon_id: couponId,
           currency,
           payment_method,
           region: dbClient.region,
           description,
           status: 'pending',
           payment_status: 'pending',
+          callback_data: callbackData,
           created_at: new Date()
         })
         order = { id: result.id, ...result.data, order_no }
@@ -114,13 +204,16 @@ export async function POST(request: NextRequest) {
       const orderPayload = {
         order_no,
         user_id: user.id,
-        amount,
+        amount: finalAmount,
+        original_amount: originalAmount,
+        coupon_id: couponId,
         currency,
         payment_method,
         region: dbClient.region,
         description,
         status: 'pending',
         payment_status: 'pending',
+        callback_data: callbackData,
         created_at: new Date().toISOString(),
       }
 
@@ -133,6 +226,17 @@ export async function POST(request: NextRequest) {
       // 兼容尚未添加 payment_status 列的旧表结构
       if (error && String(error.message || '').toLowerCase().includes('payment_status')) {
         const { payment_status, ...legacyPayload } = orderPayload
+        const retry = await dbClient.supabase
+          .from('orders')
+          .insert(legacyPayload)
+          .select()
+          .single()
+        data = retry.data
+        error = retry.error
+      }
+
+      if (error && String(error.message || '').toLowerCase().includes('callback_data')) {
+        const { callback_data, ...legacyPayload } = orderPayload
         const retry = await dbClient.supabase
           .from('orders')
           .insert(legacyPayload)
@@ -167,7 +271,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            amount,
+            amount: finalAmount,
             currency,
             order_no,
             user_id: user.id,
@@ -202,7 +306,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            amount,
+            amount: finalAmount,
             currency,
             order_no,
             description
@@ -234,7 +338,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            amount,
+            amount: finalAmount,
             currency,
             order_no,
             description
@@ -268,7 +372,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            amount,
+            amount: finalAmount,
             currency,
             order_no,
             description

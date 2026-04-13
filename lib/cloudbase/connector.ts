@@ -39,6 +39,10 @@ export class CloudBaseConnector {
     return this.db;
   }
 
+  getDb(): any {
+    return this.getClient();
+  }
+
   getApp(): any {
     if (!this.initialized) {
       throw new Error("CloudBase 未初始化");

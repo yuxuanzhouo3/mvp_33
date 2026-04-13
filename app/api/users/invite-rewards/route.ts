@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { verifyCloudBaseSession } from "@/lib/cloudbase/auth"
 import { IS_DOMESTIC_VERSION } from "@/config"
-import { getUserInviteCenterData } from "@/lib/market/referrals"
+import {
+  getInviteProgramCenterData,
+  getInviteProgramRelationProgress,
+  getInviteProgramRewardHistory,
+} from "@/lib/market/invite-program"
 
 export const runtime = "nodejs"
 
@@ -29,12 +33,26 @@ export async function GET(request: NextRequest) {
       userId = user.id
     }
 
-    const inviteRewards = await getUserInviteCenterData({
-      userId,
-      origin: process.env.NEXT_PUBLIC_SITE_URL || request.nextUrl.origin,
-    })
+    const searchParams = request.nextUrl.searchParams
+    const page = searchParams.get("page") || "1"
+    const limit = searchParams.get("limit") || "50"
+    const language = searchParams.get("lang") === "en" ? "en" : "zh"
 
-    return NextResponse.json({ success: true, inviteRewards })
+    const [inviteRewards, relations, rewards] = await Promise.all([
+      getInviteProgramCenterData({
+        userId,
+        origin: process.env.NEXT_PUBLIC_SITE_URL || request.nextUrl.origin,
+      }),
+      getInviteProgramRelationProgress({ userId, page, limit }),
+      getInviteProgramRewardHistory({ userId, page, limit, language }),
+    ])
+
+    return NextResponse.json({
+      success: true,
+      inviteRewards,
+      relations,
+      rewards
+    })
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error?.message || "Failed to load invite rewards" },

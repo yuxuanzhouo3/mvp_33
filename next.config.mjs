@@ -36,6 +36,14 @@ const nextConfig = {
     // Next.js 16+ 使用 proxyClientMaxBodySize 替代 middlewareClientMaxBodySize
     proxyClientMaxBodySize: '500mb',
   },
+  async rewrites() {
+    return [
+      {
+        source: '/api/market/:path*',
+        destination: '/api/market-admin/:path*',
+      },
+    ]
+  },
 }
 
 export default nextConfig

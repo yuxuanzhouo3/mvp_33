@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { bindReferralFromRequest } from '@/lib/market/referrals'
+import { applyInviteSignupFromRequest, handleInviteProgramLogin } from '@/lib/market/invite-program'
 
 function resolveAppOrigin(request: NextRequest): string {
   const envUrl =
@@ -135,13 +135,22 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      await bindReferralFromRequest({
+      await applyInviteSignupFromRequest({
         request,
         invitedUserId: userData.id,
         invitedEmail: userData.email,
       })
     } catch (bindError) {
       console.warn('[GOOGLE OAUTH] Referral binding skipped:', bindError)
+    }
+
+    try {
+      await handleInviteProgramLogin({
+        userId: userData.id,
+        source: 'auth.oauth.google',
+      })
+    } catch (inviteError) {
+      console.warn('[GOOGLE OAUTH] Invite program login processing skipped:', inviteError)
     }
 
     // Store session token. Device will be recorded once on /login client side

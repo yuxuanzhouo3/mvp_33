@@ -326,7 +326,7 @@ export function MarketDashboardClient({ region }: { region: "CN" | "INTL" }) {
                 onSubmit={(event) => {
                   event.preventDefault()
                   void runMutation(t("marketAssetAdjustAction"), async () => {
-                    await requestJson("/api/market/admin/marketing/accounts/adjust", {
+                    await requestJson("/api/market-admin/admin/marketing/accounts/adjust", {
                       method: "POST",
                       body: JSON.stringify({
                         userId: adjustForm.userId,
@@ -480,7 +480,7 @@ export function MarketDashboardClient({ region }: { region: "CN" | "INTL" }) {
                 onSubmit={(event) => {
                   event.preventDefault()
                   void runMutation(t("marketSettingsSaveAction"), async () => {
-                    await requestJson("/api/market/admin/marketing/settings", {
+                    await requestJson("/api/market-admin/admin/marketing/settings", {
                       method: "POST",
                       body: JSON.stringify({
                         key: settingForm.key,
@@ -534,7 +534,7 @@ export function MarketDashboardClient({ region }: { region: "CN" | "INTL" }) {
                 onSubmit={(event) => {
                   event.preventDefault()
                   void runMutation(t("marketCampaignsSaveAction"), async () => {
-                    await requestJson("/api/market/admin/marketing/campaigns", {
+                    await requestJson("/api/market-admin/admin/marketing/campaigns", {
                       method: "POST",
                       body: JSON.stringify({
                         slug: campaignForm.slug,
@@ -648,7 +648,7 @@ export function MarketDashboardClient({ region }: { region: "CN" | "INTL" }) {
                 onSubmit={(event) => {
                   event.preventDefault()
                   void runMutation(t("marketTasksSaveAction"), async () => {
-                    await requestJson("/api/market/admin/marketing/task-templates", {
+                    await requestJson("/api/market-admin/admin/marketing/task-templates", {
                       method: "POST",
                       body: JSON.stringify({
                         slug: taskForm.slug,
@@ -922,7 +922,7 @@ export function MarketDashboardClient({ region }: { region: "CN" | "INTL" }) {
                 onSubmit={(event) => {
                   event.preventDefault()
                   void runMutation(t("marketWithdrawalsCreateAction"), async () => {
-                    await requestJson("/api/market/admin/marketing/withdrawals", {
+                    await requestJson("/api/market-admin/admin/marketing/withdrawals", {
                       method: "POST",
                       body: JSON.stringify({
                         userId: withdrawalForm.userId,
@@ -982,7 +982,7 @@ export function MarketDashboardClient({ region }: { region: "CN" | "INTL" }) {
                           disabled={row.status !== "pending"}
                           onClick={() =>
                             void runMutation(t("marketWithdrawalsApprove"), async () => {
-                              await requestJson(`/api/market/admin/marketing/withdrawals/${row.id}/review`, {
+                              await requestJson(`/api/market-admin/admin/marketing/withdrawals/${row.id}/review`, {
                                 method: "POST",
                                 body: JSON.stringify({ status: "approved", reviewNote: "approved via marketing console" }),
                               })
@@ -997,7 +997,7 @@ export function MarketDashboardClient({ region }: { region: "CN" | "INTL" }) {
                           disabled={row.status !== "pending"}
                           onClick={() =>
                             void runMutation(t("marketWithdrawalsReject"), async () => {
-                              await requestJson(`/api/market/admin/marketing/withdrawals/${row.id}/review`, {
+                              await requestJson(`/api/market-admin/admin/marketing/withdrawals/${row.id}/review`, {
                                 method: "POST",
                                 body: JSON.stringify({ status: "rejected", reviewNote: "rejected via marketing console" }),
                               })
@@ -1012,7 +1012,7 @@ export function MarketDashboardClient({ region }: { region: "CN" | "INTL" }) {
                           disabled={row.status !== "pending"}
                           onClick={() =>
                             void runMutation(t("marketWithdrawalsFreeze"), async () => {
-                              await requestJson(`/api/market/admin/marketing/withdrawals/${row.id}/review`, {
+                              await requestJson(`/api/market-admin/admin/marketing/withdrawals/${row.id}/review`, {
                                 method: "POST",
                                 body: JSON.stringify({ status: "frozen", reviewNote: "frozen for manual review" }),
                               })
@@ -1046,7 +1046,7 @@ export function MarketDashboardClient({ region }: { region: "CN" | "INTL" }) {
                 onSubmit={(event) => {
                   event.preventDefault()
                   void runMutation(t("marketRiskSaveList"), async () => {
-                    await requestJson("/api/market/admin/marketing/risk-lists", {
+                    await requestJson("/api/market-admin/admin/marketing/risk-lists", {
                       method: "POST",
                       body: JSON.stringify({
                         listType: riskListForm.listType,
@@ -1135,7 +1135,7 @@ export function MarketDashboardClient({ region }: { region: "CN" | "INTL" }) {
                           variant="outline"
                           onClick={() =>
                             void runMutation(t("marketRiskResolve"), async () => {
-                              await requestJson(`/api/market/admin/marketing/risk-events/${row.id}/resolve`, {
+                              await requestJson(`/api/market-admin/admin/marketing/risk-events/${row.id}/resolve`, {
                                 method: "POST",
                                 body: JSON.stringify({ status: "resolved", reviewNote: "resolved via marketing console" }),
                               })
@@ -1149,7 +1149,7 @@ export function MarketDashboardClient({ region }: { region: "CN" | "INTL" }) {
                           variant="outline"
                           onClick={() =>
                             void runMutation(t("marketRiskDismiss"), async () => {
-                              await requestJson(`/api/market/admin/marketing/risk-events/${row.id}/resolve`, {
+                              await requestJson(`/api/market-admin/admin/marketing/risk-events/${row.id}/resolve`, {
                                 method: "POST",
                                 body: JSON.stringify({ status: "dismissed", reviewNote: "dismissed via marketing console" }),
                               })
@@ -1183,7 +1183,7 @@ export function MarketDashboardClient({ region }: { region: "CN" | "INTL" }) {
                 onSubmit={(event) => {
                   event.preventDefault()
                   void runMutation(t("marketSimulationRun"), async () => {
-                    const result = await requestJson("/api/market/admin/marketing/simulate", {
+                    const result = await requestJson("/api/market-admin/admin/marketing/simulate", {
                       method: "POST",
                       body: JSON.stringify({
                         product: simulationForm.product,
@@ -1403,7 +1403,7 @@ export function MarketDashboardClient({ region }: { region: "CN" | "INTL" }) {
     setLoading(true)
     setError("")
     try {
-      const result = await requestJson("/api/market/admin/marketing/bootstrap")
+      const result = await requestJson("/api/market-admin/admin/marketing/bootstrap")
       startTransition(() => {
         setBootstrap(result.bootstrap as MarketingBootstrapData)
       })
@@ -1435,7 +1435,7 @@ export function MarketDashboardClient({ region }: { region: "CN" | "INTL" }) {
   }, [])
 
   async function logout() {
-    await fetch("/api/market/auth/logout", { method: "POST" }).catch(() => null)
+    await fetch("/api/market-admin/auth/logout", { method: "POST" }).catch(() => null)
     router.replace("/market/login")
   }
 

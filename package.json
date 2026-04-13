@@ -4,13 +4,19 @@
     "private": true,
     "scripts": {
         "admin:create": "tsx scripts/create-initial-admin.ts",
+        "admin:analysis:init": "node scripts/init-admin-analysis.js",
+        "admin:analysis:init:cloudbase": "node scripts/init-admin-analysis.js --target=cloudbase",
+        "admin:analysis:init:supabase": "node scripts/init-admin-analysis.js --target=supabase",
+        "admin:analysis:init:both": "node scripts/init-admin-analysis.js --target=both",
         "build": "next build",
-        "build:cn": "cross-env-shell \"cp .env.cn .env.local && next build\"",
-        "build:intl": "cross-env-shell \"cp .env.intl .env.local && next build\"",
-        "dev:cn": "cross-env-shell \"cp .env.cn .env.local && TURBOPACK=0 next dev -p 3000\"",
-        "dev:intl": "cross-env-shell \"cp .env.intl .env.local && TURBOPACK=0 next dev -p 3000\"",
+        "build:cn": "cross-env DEPLOYMENT_REGION=CN NEXT_PUBLIC_DEPLOYMENT_REGION=CN next build",
+        "build:intl": "cross-env DEPLOYMENT_REGION=INTL NEXT_PUBLIC_DEPLOYMENT_REGION=INTL next build",
+        "dev:cn": "cross-env DEPLOYMENT_REGION=CN NEXT_PUBLIC_DEPLOYMENT_REGION=CN TURBOPACK=0 next dev -p 3000",
+        "dev:intl": "cross-env DEPLOYMENT_REGION=INTL NEXT_PUBLIC_DEPLOYMENT_REGION=INTL TURBOPACK=0 next dev -p 3000",
         "dev": "cross-env TURBOPACK=0 next dev -p 3000",
+        "env:check": "node scripts/check-dev-env.js",
         "lint": "eslint .",
+        "setup:dev": "node scripts/setup-dev-env.js",
         "start": "next start"
     },
     "dependencies": {

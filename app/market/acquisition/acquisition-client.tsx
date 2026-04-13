@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
@@ -26,6 +26,7 @@ import type {
 } from "@/lib/market/acquisition-types"
 
 type TabKey = "bloggers" | "b2b" | "vc" | "ads"
+type MarketLocale = "zh" | "en"
 
 // ==========================================
 // Helper: Handshake icon
@@ -262,7 +263,7 @@ function EmailComposeModal({ info, onClose, showToast }: { info: EmailComposeInf
     }
     setSending(true)
     try {
-      const response = await fetch("/api/market/admin/acquisition", {
+      const response = await fetch("/api/market-admin/admin/acquisition", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-admin-key": "orbitchat-admin" },
         body: JSON.stringify({ action: "send_email", to: email, subject, body }),
@@ -591,7 +592,8 @@ function BloggerTab({ data, showToast, onAddClick, onShowEmailList, onShowFilter
 // ==========================================
 // Tab 2: 企业采购 (B2B)
 // ==========================================
-function B2BTab({ data, showToast, onContractClick, onAddClick, onUpdateStatus, onSendEmail }: {
+function B2BTab({ locale, data, showToast, onContractClick, onAddClick, onUpdateStatus, onSendEmail }: {
+  locale: MarketLocale
   data: AcquisitionB2BLead[]
   showToast: (msg: string) => void
   onContractClick: () => void
@@ -601,10 +603,38 @@ function B2BTab({ data, showToast, onContractClick, onAddClick, onUpdateStatus, 
 }) {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <StatCard title="总企业线索" value={data.length + 120} icon={<Building2 className="h-5 w-5 text-blue-500" />} />
         <StatCard title="国内政企网络" value="手工维护中" icon={<Globe className="h-5 w-5 text-indigo-500" />} />
-        <StatCard title="爬虫任务" value="待接入" icon={<Cpu className="h-5 w-5 text-muted-foreground" />} />
+        <Link
+          id="crawler-task-panel"
+          href="/market/acquisition/distribution"
+          className="rounded-xl border bg-background p-5 text-left shadow-sm transition hover:bg-muted/20"
+        >
+          <div className="flex h-full flex-col justify-between gap-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="rounded-lg border bg-muted/40 p-3">
+                <Cpu className="h-5 w-5 text-slate-600" />
+              </div>
+              <Badge variant="default">
+                {locale === "zh" ? "打开页面" : "Open page"}
+              </Badge>
+            </div>
+            <div className="space-y-2">
+              <div className="text-sm text-muted-foreground">{locale === "zh" ? "爬虫任务" : "Crawler task"}</div>
+              <div className="text-2xl font-bold">{locale === "zh" ? "进入工作区" : "Open workspace page"}</div>
+              <p className="text-sm text-muted-foreground">
+                {locale === "zh"
+                  ? "点击后直接跳转到独立的爬虫任务页面，在新界面里运行爬虫、读取 /demo 素材和一键发送。"
+                  : "Jump to a dedicated crawler page for lead capture, /demo asset reading, and one-click sending."}
+              </p>
+            </div>
+            <div className="flex items-center justify-between text-sm font-medium">
+              <span>{locale === "zh" ? "打开独立页面" : "Open dedicated page"}</span>
+              <ArrowRight className="h-4 w-4" />
+            </div>
+          </div>
+        </Link>
       </div>
 
       <div className="flex justify-between items-center">
@@ -945,7 +975,7 @@ function AdsTab({ data, showToast, onAddClick, onShowSettings, onShowData }: {
 // ==========================================
 // Main Client Component
 // ==========================================
-export function AcquisitionClient() {
+export function AcquisitionClient({ locale = "zh" }: { locale?: MarketLocale }) {
   const [activeTab, setActiveTab] = useState<TabKey>("b2b")
   const [toastMessage, setToastMessage] = useState("")
   const [loading, setLoading] = useState(true)
@@ -989,7 +1019,11 @@ export function AcquisitionClient() {
     setLoading(true)
     setError("")
     try {
-      const response = await fetch("/api/market/admin/acquisition", { headers: getAuthHeaders() })
+      const response = await fetch("/api/market-admin/admin/acquisition", {
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: getAuthHeaders(),
+      })
       const json = await response.json()
       if (!json.success) throw new Error(json.error || "Failed to load data")
       const data: AcquisitionBootstrapData = json.data
@@ -1008,8 +1042,9 @@ export function AcquisitionClient() {
 
   const postAction = useCallback(async (action: string, data: Record<string, string>) => {
     try {
-      const response = await fetch("/api/market/admin/acquisition", {
+      const response = await fetch("/api/market-admin/admin/acquisition", {
         method: "POST",
+        credentials: "same-origin",
         headers: getAuthHeaders(),
         body: JSON.stringify({ action, ...data }),
       })
@@ -1189,6 +1224,7 @@ export function AcquisitionClient() {
           )}
           {activeTab === "b2b" && (
             <B2BTab
+              locale={locale}
               data={b2bLeads}
               showToast={showToast}
               onContractClick={() => setContractModalOpen(true)}

@@ -484,6 +484,21 @@ export const translations = {
     enterCodeToJoin: 'New members can enter this code in "Join Organization"',
     noInviteCode: 'No invite code available for this workspace',
 
+    inviteRewardsHistory: 'History',
+    inviteRewardsHistoryDesc: 'Your recent invite activity and earned rewards',
+    inviteRewardsInvitedUser: 'Invited User',
+    inviteRewardsRewardAmount: 'Reward',
+    inviteRewardsRewardType: 'Type',
+    inviteRewardsDate: 'Date',
+    inviteRewardsNoHistory: 'No invite history yet',
+    inviteRewardsLoadMore: 'Load More',
+    inviteRewardsInvitees: 'My Invitees',
+    inviteRewardsRewards: 'My Rewards',
+    inviteRewardsStatus: 'Status',
+    inviteRewardsStatusPending: 'Pending',
+    inviteRewardsStatusActivated: 'Activated',
+    inviteRewardsStatusGranted: 'Granted',
+
     // Join Workspace
     joinReason: 'Reason (optional)',
     joinReasonPlaceholder: 'Tell us why you want to join...',
@@ -956,6 +971,21 @@ export const translations = {
     marketStatusCapped: '达上限',
     marketStatusInProgress: '进行中',
     marketStatusOpen: '待处理',
+
+    inviteRewardsHistory: '邀请记录',
+    inviteRewardsHistoryDesc: '您的最近邀请活动与获得的奖励',
+    inviteRewardsInvitedUser: '被邀请用户',
+    inviteRewardsRewardAmount: '奖励金额',
+    inviteRewardsRewardType: '奖励类型',
+    inviteRewardsDate: '日期',
+    inviteRewardsNoHistory: '暂无邀请记录',
+    inviteRewardsLoadMore: '加载更多',
+    inviteRewardsInvitees: '我的邀请人',
+    inviteRewardsRewards: '我的奖励',
+    inviteRewardsStatus: '状态',
+    inviteRewardsStatusPending: '待处理',
+    inviteRewardsStatusActivated: '已激活',
+    inviteRewardsStatusGranted: '已发放',
 
     // Invite Members
     inviteMembers: '邀请成员',

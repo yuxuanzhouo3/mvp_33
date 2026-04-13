@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { bindReferralFromRequest } from '@/lib/market/referrals'
+import { applyInviteSignupFromRequest, handleInviteProgramLogin } from '@/lib/market/invite-program'
 
 export async function POST(request: NextRequest) {
   try {
@@ -116,13 +116,22 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      await bindReferralFromRequest({
+      await applyInviteSignupFromRequest({
         request,
         invitedUserId: responseUser.id,
         invitedEmail: responseUser.email,
       })
     } catch (bindError) {
       console.warn('[GOOGLE NATIVE] Referral binding skipped:', bindError)
+    }
+
+    try {
+      await handleInviteProgramLogin({
+        userId: responseUser.id,
+        source: 'auth.google_native',
+      })
+    } catch (inviteError) {
+      console.warn('[GOOGLE NATIVE] Invite program login processing skipped:', inviteError)
     }
 
     return NextResponse.json({

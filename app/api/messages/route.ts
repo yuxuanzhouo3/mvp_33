@@ -3,7 +3,6 @@ import { createClient } from '@/lib/supabase/server'
 import { getMessages, createMessage } from '@/lib/database/supabase/messages'
 import { getDatabaseClientForUser } from '@/lib/database-router'
 import { getMessages as getMessagesCN, createMessage as createMessageCN } from '@/lib/database/cloudbase/messages'
-import { grantReferralFirstUseReward } from '@/lib/market/referrals'
 import { notifyRecipientsOfNewMessage } from '@/lib/push/message-notifier'
 
 const ZERO_WIDTH_CHARACTERS_REGEX = /[\u200B-\u200D\uFEFF]/g
@@ -231,13 +230,6 @@ export async function POST(request: NextRequest) {
         console.error('[messages][CN] push notify skipped:', error)
       })
 
-      await grantReferralFirstUseReward({
-        invitedUserId: user.id,
-        toolId: 'chat',
-      }).catch((error) => {
-        console.warn('[messages][CN] grantReferralFirstUseReward skipped:', error)
-      })
-
       return NextResponse.json({
         success: true,
         message,
@@ -337,12 +329,6 @@ export async function POST(request: NextRequest) {
       console.error('[messages][INTL] push notify failed:', error)
     })
 
-    await grantReferralFirstUseReward({
-      invitedUserId: user.id,
-      toolId: 'chat',
-    }).catch((error) => {
-      console.warn('[messages][INTL] grantReferralFirstUseReward skipped:', error)
-    })
     
     console.log('✅ API: Message created:', {
       id: message.id,

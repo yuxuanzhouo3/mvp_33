@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { hashPassword } from '@/lib/utils/password'
 import { IS_DOMESTIC_VERSION, getDeploymentRegion } from '@/config'
 import { verificationCodeService } from '@/lib/email/verification-code-service'
-import { bindReferralFromRequest } from '@/lib/market/referrals'
+import { applyInviteSignupFromRequest } from '@/lib/market/invite-program'
 
 export async function POST(request: NextRequest) {
   try {
@@ -281,7 +281,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      await bindReferralFromRequest({
+      await applyInviteSignupFromRequest({
         request,
         invitedUserId: user.id,
         invitedEmail: user.email,
@@ -448,7 +448,7 @@ async function handleCloudBaseRegister(
     }
 
     try {
-      await bindReferralFromRequest({
+      await applyInviteSignupFromRequest({
         request,
         invitedUserId: user.id,
         invitedEmail: user.email,

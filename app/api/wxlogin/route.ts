@@ -4,6 +4,7 @@ import { isChinaRegion } from '@/lib/config/region'
 import { getCloudBaseDb } from '@/lib/cloudbase/client'
 import { createCloudBaseSession, setCloudBaseSessionCookie } from '@/lib/cloudbase/auth'
 import { User } from '@/lib/types'
+import { applyInviteSignupFromRequest, handleInviteProgramLogin } from '@/lib/market/invite-program'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -177,12 +178,15 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .get()
 
+    let previousLastLoginAt: string | null = null
+
     if (queryResult.data && queryResult.data.length > 0) {
       const existingUser = queryResult.data[0]
       userId = existingUser.id || existingUser._id || `wechat_mp_${openid}`
       email = existingUser.email || email
       displayName = nickName || existingUser.full_name || existingUser.name || existingUser.username || displayName
       finalAvatarUrl = avatarUrl || existingUser.avatar_url || existingUser.avatar || finalAvatarUrl
+      previousLastLoginAt = existingUser.last_login_at ? String(existingUser.last_login_at) : null
 
       console.log('[wxlogin] Existing user found:', { userId, hasAvatar: Boolean(finalAvatarUrl) })
 
@@ -242,6 +246,28 @@ export async function POST(request: NextRequest) {
       }
 
       await usersCollection.add(newUser)
+    }
+
+    try {
+      await applyInviteSignupFromRequest({
+        request,
+        invitedUserId: userId,
+        invitedEmail: email,
+        occurredAt: now,
+      })
+    } catch (bindError) {
+      console.warn('[wxlogin] Referral binding skipped:', bindError)
+    }
+
+    try {
+      await handleInviteProgramLogin({
+        userId,
+        occurredAt: now,
+        source: 'auth.wxlogin',
+        previousLastLoginAt,
+      })
+    } catch (inviteError) {
+      console.warn('[wxlogin] Invite program login processing skipped:', inviteError)
     }
 
     const sessionUser = buildSessionUser({

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getDatabaseClientForUser } from '@/lib/database-router'
 import { updateUserSubscriptionAfterPayment } from '@/lib/payment/subscription-update'
+import { handleInviteeFirstPaidOrder } from '@/lib/market/invite-program'
+import { markCouponUsedFromOrder } from '@/lib/payment/coupon-tracking'
+import { handleMarketingAttributedOrderPaid } from '@/lib/payment/marketing-attribution'
 
 export async function POST(request: NextRequest) {
   try {
@@ -125,6 +128,29 @@ export async function POST(request: NextRequest) {
 
     // If payment is successful, update user subscription
     if (isPaymentSuccess && order) {
+      if (order.coupon_id) {
+        try {
+          await markCouponUsedFromOrder({
+            dbType: dbClient.type,
+            couponId: order.coupon_id,
+            orderNo: order_no,
+            userId: String(order.user_id || user.id),
+          })
+          console.log(`[confirmPayment] Marked coupon ${order.coupon_id} as used for order ${order_no}`)
+        } catch (couponError) {
+          console.error('[confirmPayment] Failed to update coupon status:', couponError)
+        }
+      }
+
+      try {
+        await handleMarketingAttributedOrderPaid({
+          order,
+          orderNo: order_no,
+        })
+      } catch (commissionError) {
+        console.error('[confirmPayment] Failed to record partner commission:', commissionError)
+      }
+
       try {
         // Extract plan description from order
         const planDescription = order.description || 
@@ -150,6 +176,15 @@ export async function POST(request: NextRequest) {
       } catch (updateSubError: any) {
         // Log error but don't fail the payment confirmation
         console.error('[confirmPayment] Subscription update error:', updateSubError)
+      }
+
+      try {
+        await handleInviteeFirstPaidOrder({
+          userId: String(order.user_id || user.id),
+          orderNo: order_no,
+        })
+      } catch (inviteError) {
+        console.error('[confirmPayment] Invite first-order reward error:', inviteError)
       }
     }
 

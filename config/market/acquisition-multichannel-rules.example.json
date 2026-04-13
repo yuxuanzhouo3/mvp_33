@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "global": {
+    "markets": ["CN", "US"],
+    "requireManualReviewBeforeContract": true,
+    "defaultSettlementDelayDays": 30,
+    "maxCrawlerResultsPerRun": 300,
+    "maxBatchEmailsPerRun": 300
+  },
+  "bloggerAlliance": {
+    "fanTiers": [
+      {
+        "id": "micro",
+        "minFollowers": 10000,
+        "maxFollowers": 100000,
+        "preferredChannels": ["email", "wechat", "linkedin"],
+        "defaultOffer": {
+          "proBenefitMonths": 36,
+          "couponDiscountRate": 20,
+          "couponPriceRmbMax": 200
+        }
+      },
+      {
+        "id": "mid",
+        "minFollowers": 100000,
+        "maxFollowers": 500000,
+        "preferredChannels": ["email", "wechat", "linkedin"],
+        "defaultOffer": {
+          "proBenefitMonths": 36,
+          "couponDiscountRate": 25,
+          "couponPriceRmbMax": 200
+        }
+      }
+    ],
+    "commissionRates": {
+      "first_year": 0.2,
+      "renewal": 0.15,
+      "lifetime": 0.35
+    },
+    "autoAdvanceRules": {
+      "positiveReplyKeywords": ["interested", "demo", "call", "proposal", "quote", "cooperate"],
+      "needsInfoKeywords": ["deck", "materials", "pricing", "details", "case study"],
+      "negotiatingKeywords": ["commission", "discount", "contract", "terms", "budget"]
+    }
+  },
+  "enterpriseProcurement": {
+    "leadQualification": {
+      "minimumDemandScore": 70,
+      "preferredRoles": ["procurement", "operations", "it", "founder", "gm"],
+      "priorityRegions": ["CN", "US"]
+    },
+    "contractStrategy": {
+      "defaultContractTemplate": "enterprise-procurement-v1",
+      "legalReviewRequiredAboveAmount": 50000
+    }
+  },
+  "crawlerTasks": {
+    "blogger": {
+      "frequencyMinutes": 1440,
+      "targetSites": ["xiaohongshu.com", "douyin.com", "bilibili.com", "youtube.com"],
+      "selectors": [
+        { "field": "organization", "selector": "title" },
+        { "field": "contact", "selector": "body" }
+      ]
+    },
+    "enterprise": {
+      "frequencyMinutes": 720,
+      "targetSites": ["linkedin.com", "crunchbase.com", "company websites"],
+      "selectors": [
+        { "field": "organization", "selector": "title" },
+        { "field": "contact", "selector": "body" }
+      ]
+    },
+    "vc": {
+      "frequencyMinutes": 2880,
+      "targetSites": ["pitchbook.com", "crunchbase.com", "fund websites"],
+      "selectors": [
+        { "field": "organization", "selector": "title" },
+        { "field": "contact", "selector": "body" }
+      ]
+    }
+  },
+  "adRevenue": {
+    "platformPullFrequencyMinutes": 60,
+    "competitorCrawlFrequencyMinutes": 1440,
+    "watchlistPlatforms": ["adsense", "meta", "tiktok", "xiaohongshu"],
+    "bidAlertThreshold": {
+      "currency": "RMB",
+      "value": 50
+    }
+  },
+  "vcOutreach": {
+    "contactRules": {
+      "preferredRoles": ["partner", "principal", "platform"],
+      "minimumPreferenceScore": 75
+    },
+    "aiDrafting": {
+      "tone": "concise and thesis-matched",
+      "requiredSections": ["market pull", "traction signal", "portfolio fit", "ask"]
+    }
+  }
+}

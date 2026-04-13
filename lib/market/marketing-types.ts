@@ -7,6 +7,9 @@ export type MarketingTaskRecurrence = "once" | "daily" | "repeatable" | "streak"
 export type MarketingRewardRecipient = "actor" | "payload.inviterUserId" | "payload.invitedUserId" | "payload.userId"
 export type MarketingLedgerStatus = "available" | "frozen" | "reversed" | "settled"
 export type MarketingWithdrawalStatus = "pending" | "approved" | "rejected" | "frozen"
+export type MarketingInvitationStatus = "active" | "expired" | "exhausted" | "revoked"
+export type MarketingCouponStatus = "available" | "used" | "expired" | "revoked"
+export type MarketingCouponDiscountType = "percentage" | "fixed"
 export type MarketingRiskSeverity = "low" | "medium" | "high"
 export type MarketingRiskStatus = "open" | "reviewing" | "resolved" | "dismissed" | "frozen"
 export type MarketingRiskListType = "user" | "device" | "ip"
@@ -175,6 +178,51 @@ export interface MarketingRiskEvent {
   reviewedAt: string | null
   reviewedBy: string | null
   reviewNote: string | null
+  updatedAt: string
+}
+
+export interface MarketingInvitationCode {
+  id: string
+  code: string
+  userId: string
+  campaignSlug: string | null
+  partnerTier: "general" | "partner_package" | "blogger_partner"
+  partnerProduct: string | null
+  productCost: number
+  partnerBenefitMonths: number
+  fanDiscountRate: number
+  orderCommissionRate: number
+  maxUses: number | null
+  usedCount: number
+  status: MarketingInvitationStatus
+  expiresAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MarketingCoupon {
+  id: string
+  code: string
+  userId: string
+  assetType: MarketingAssetType
+  audienceType: "general" | "linked_audience" | "blogger_fans"
+  partnerProduct: string | null
+  productCost: number
+  sourceInvitationCode: string | null
+  orderCommissionRate: number
+  purchasePrice: number
+  discountValue: number
+  discountType: MarketingCouponDiscountType
+  minPurchase: number
+  maxUses: number | null
+  usedCount: number
+  usedByUserId: string | null
+  usedOrderNo: string | null
+  usedAt: string | null
+  status: MarketingCouponStatus
+  expiresAt: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export interface MarketingRiskListItem {
