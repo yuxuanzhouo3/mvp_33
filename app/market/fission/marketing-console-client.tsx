@@ -910,6 +910,7 @@ export function MarketingConsoleClient({ region }: { region: "CN" | "INTL" }) {
   const [couponForm, setCouponForm] = useState({
     code: "",
     userId: "",
+    partnerUserId: "",
     assetType: "cash",
     audienceType: "linked_audience",
     partnerProduct: "orbitchat",
@@ -1173,6 +1174,7 @@ export function MarketingConsoleClient({ region }: { region: "CN" | "INTL" }) {
     if (matchedInvitation) {
       return {
         code: matchedInvitation.code,
+        partnerUserId: matchedInvitation.userId || null,
         partnerProduct: matchedInvitation.partnerProduct || "",
         productCost: matchedInvitation.productCost,
         fanDiscountRate: matchedInvitation.fanDiscountRate,
@@ -1186,6 +1188,7 @@ export function MarketingConsoleClient({ region }: { region: "CN" | "INTL" }) {
 
     return {
       code: couponDefaultSourceInvitationCode,
+      partnerUserId: inviteCodeForm.userId.trim() || null,
       partnerProduct: inviteCodeForm.partnerProduct.trim() || partnerConfigForm.partnerProduct || "",
       productCost: Number(inviteCodeForm.productCost || partnerConfigForm.productCost || 0),
       fanDiscountRate: Number(inviteCodeForm.fanDiscountRate || partnerConfigForm.fanDiscountRate || 0),
@@ -1195,6 +1198,8 @@ export function MarketingConsoleClient({ region }: { region: "CN" | "INTL" }) {
   })()
   const couponBoundUserId = couponBindingMode === "user" ? couponForm.userId.trim() : ""
   const couponBoundUser = assetRows.find((row) => row.user.userId === couponBoundUserId)?.user || null
+  const couponDerivedPartnerUserId = couponForm.partnerUserId.trim() || couponLinkedInvitationSource?.partnerUserId || ""
+  const couponPartnerUser = assetRows.find((row) => row.user.userId === couponDerivedPartnerUserId)?.user || null
   const buildInviteShareTarget = (input: {
     title: string
     code: string
@@ -1258,6 +1263,7 @@ export function MarketingConsoleClient({ region }: { region: "CN" | "INTL" }) {
     setCouponForm((current) => ({
       ...current,
       audienceType: "linked_audience",
+      partnerUserId: couponLinkedInvitationSource.partnerUserId || current.partnerUserId,
       partnerProduct: couponLinkedInvitationSource.partnerProduct,
       sourceInvitationCode: couponLinkedInvitationSource.isDraftCurrentInvite ? "" : couponLinkedInvitationSource.code.toUpperCase(),
       productCost: String(couponLinkedInvitationSource.productCost),
@@ -1372,6 +1378,7 @@ export function MarketingConsoleClient({ region }: { region: "CN" | "INTL" }) {
             id: row.id,
             code: row.code,
             userId: row.userId,
+            partnerUserId: row.partnerUserId,
             assetType: row.assetType,
             audienceType: row.audienceType,
             partnerProduct: row.partnerProduct,
@@ -2486,8 +2493,12 @@ export function MarketingConsoleClient({ region }: { region: "CN" | "INTL" }) {
               </button>
               <button className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white" onClick={() => void runAction(tx("合作分码已保存", "Partnership codes saved"), async () => {
               const inviteBoundUserId = inviteCodeForm.userId.trim()
+              const linkedAudienceBoundUserId = couponConfigForm.userId.trim()
               if (inviteBoundUserId) {
                 await validateBoundMarketingUser(inviteBoundUserId)
+              }
+              if (linkedAudienceBoundUserId) {
+                await validateBoundMarketingUser(linkedAudienceBoundUserId)
               }
               const partnerCode = inviteCodeForm.code || inviteCodePreview
               const linkedCode = inviteCodeForm.linkedAudienceCode || linkedAudienceCodePreview
@@ -2518,7 +2529,8 @@ export function MarketingConsoleClient({ region }: { region: "CN" | "INTL" }) {
                 method: "POST",
                 body: JSON.stringify({
                   code: linkedCode,
-                  userId: inviteBoundUserId,
+                  userId: linkedAudienceBoundUserId,
+                  partnerUserId: inviteBoundUserId || null,
                   assetType: couponForm.assetType || "cash",
                   audienceType: "linked_audience",
                   partnerProduct: inviteCodeForm.partnerProduct || null,
@@ -2684,7 +2696,7 @@ export function MarketingConsoleClient({ region }: { region: "CN" | "INTL" }) {
                     <div className="grid gap-2">
                       <input
                         className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900"
-                        placeholder={tx("输入用户 ID，例如 user_xxx", "Enter a user ID")}
+                        placeholder={tx("输入关联对象的用户 ID，例如 user_xxx", "Enter the linked audience user ID")}
                         value={couponForm.userId}
                         onChange={(event) => setCouponForm((current) => ({ ...current, userId: event.target.value }))}
                       />
@@ -2692,9 +2704,9 @@ export function MarketingConsoleClient({ region }: { region: "CN" | "INTL" }) {
                         {couponBoundUser
                           ? tx(
                               `已匹配用户：${couponBoundUser.name || couponBoundUser.email || couponBoundUser.userId}（${couponBoundUser.userId}）`,
-                              `Matched user: ${couponBoundUser.name || couponBoundUser.email || couponBoundUser.userId} (${couponBoundUser.userId})`,
+                              `Matched linked audience: ${couponBoundUser.name || couponBoundUser.email || couponBoundUser.userId} (${couponBoundUser.userId})`,
                             )
-                          : tx("请输入真实用户 ID（不是邮箱或昵称）。如果当前页没显示匹配，创建时仍会再校验一次。", "Enter a real user ID, not an email or display name. If no match is shown here, it will still be validated again when you create the coupon.")}
+                          : tx("请输入真实的关联对象用户 ID，不是邮箱或昵称；创建时还会再校验一次。", "Enter a real linked-audience user ID, not an email or display name. It will be validated again on create.")}
                       </div>
                     </div>
                   ) : (
@@ -2702,6 +2714,29 @@ export function MarketingConsoleClient({ region }: { region: "CN" | "INTL" }) {
                       {tx("购买时无需用户 ID，默认公开发放。", "No user ID is needed at purchase time; coupons are created for public distribution by default.")}
                     </div>
                   )}
+                </div>
+              </div>
+              <div className="grid gap-1 text-xs text-gray-500 md:col-span-2">
+                <span>{tx("合作方 ID", "Partner user ID")}</span>
+                <input
+                  className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900"
+                  placeholder={
+                    couponLinkedInvitationSource?.partnerUserId
+                      ? tx(`留空则跟随关联邀请码的合作方 ${couponLinkedInvitationSource.partnerUserId}`, `Leave blank to reuse linked invite partner ${couponLinkedInvitationSource.partnerUserId}`)
+                      : tx("可选，留空则跟随关联邀请码里的合作方", "Optional. Leave blank to follow the linked invite owner")
+                  }
+                  value={couponForm.partnerUserId}
+                  onChange={(event) => setCouponForm((current) => ({ ...current, partnerUserId: event.target.value }))}
+                />
+                <div className={`rounded-xl px-3 py-2 text-xs ${couponDerivedPartnerUserId ? "border border-sky-200 bg-sky-50 text-sky-700" : "border border-dashed border-gray-200 bg-gray-50 text-gray-500"}`}>
+                  {couponDerivedPartnerUserId
+                    ? couponPartnerUser
+                      ? tx(
+                          `当前合作方归属：${couponPartnerUser.name || couponPartnerUser.email || couponPartnerUser.userId}（${couponPartnerUser.userId}）`,
+                          `Current partner owner: ${couponPartnerUser.name || couponPartnerUser.email || couponPartnerUser.userId} (${couponPartnerUser.userId})`,
+                        )
+                      : tx(`当前合作方归属 ID：${couponDerivedPartnerUserId}`, `Current partner owner ID: ${couponDerivedPartnerUserId}`)
+                    : tx("未绑定合作方 ID；如需订单分佣归属到指定合作方，请在这里填写。", "No partner user ID bound. Fill this if the coupon should attribute commission to a specific partner.")}
                 </div>
               </div>
               <label className="grid gap-1 text-xs text-gray-500"><span>{tx("资产类型", "Asset type")}</span><select className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm" value={couponForm.assetType} onChange={(event) => setCouponForm((current) => ({ ...current, assetType: event.target.value }))}>
@@ -2830,10 +2865,13 @@ export function MarketingConsoleClient({ region }: { region: "CN" | "INTL" }) {
               </button>
               <button className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white" onClick={() => void runAction(tx("折扣券已创建", "Coupon created"), async () => {
               if (couponBindingMode === "user" && !couponBoundUserId) {
-                throw new Error(tx("请输入要绑定的用户 ID", "Enter a user ID to bind"))
+                throw new Error(tx("请输入要绑定的关联对象用户 ID", "Enter a linked-audience user ID to bind"))
               }
               if (couponBindingMode === "user") {
                 await validateBoundMarketingUser(couponBoundUserId)
+              }
+              if (couponDerivedPartnerUserId) {
+                await validateBoundMarketingUser(couponDerivedPartnerUserId)
               }
 
               const fallbackExpireAt = (() => {
@@ -2848,6 +2886,7 @@ export function MarketingConsoleClient({ region }: { region: "CN" | "INTL" }) {
                 body: JSON.stringify({
                   code: couponForm.code || couponCodePreview,
                   userId: couponBoundUserId,
+                  partnerUserId: couponDerivedPartnerUserId || null,
                   assetType: couponForm.assetType,
                   audienceType: couponAudienceType,
                   partnerProduct: couponDerivedProduct || null,
@@ -2866,6 +2905,7 @@ export function MarketingConsoleClient({ region }: { region: "CN" | "INTL" }) {
                 ...current,
                 code: "",
                 userId: couponConfigForm.userId,
+                partnerUserId: "",
                 sourceInvitationCode: "",
                 productCost: couponConfigForm.productCost,
                 purchasePrice: couponConfigForm.purchasePrice,
@@ -3043,8 +3083,13 @@ export function MarketingConsoleClient({ region }: { region: "CN" | "INTL" }) {
                         </div>
                         <div className="text-xs text-gray-400">{tx("最低消费", "Min spend")} {formatNumber(row.minPurchase)}</div>
                         <div className="mt-1 text-xs text-gray-500">
+                          {row.partnerUserId
+                            ? tx(`合作方 ID ${row.partnerUserId}`, `Partner user ${row.partnerUserId}`)
+                            : tx("未绑定合作方 ID", "No partner user bound")}
+                        </div>
+                        <div className="mt-1 text-xs text-gray-500">
                           {row.userId
-                            ? tx(`绑定用户 ${row.userId}`, `Bound user ${row.userId}`)
+                            ? tx(`关联对象 ID ${row.userId}`, `Linked audience ${row.userId}`)
                             : tx("公开发放", "Public distribution")}
                         </div>
                         <div className="mt-1 text-xs text-gray-500">

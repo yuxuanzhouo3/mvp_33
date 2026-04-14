@@ -35,6 +35,12 @@ export async function POST(request: NextRequest) {
       id: typeof body.id === "string" ? body.id : undefined,
       code: typeof body.code === "string" ? body.code.trim().toUpperCase() : undefined,
       userId: typeof body.userId === "string" ? body.userId.trim() : undefined,
+      partnerUserId:
+        typeof body.partnerUserId === "string"
+          ? body.partnerUserId.trim() || null
+          : body.partnerUserId === null
+            ? null
+            : undefined,
       assetType: parseMarketingAssetType(body.assetType),
       audienceType: parseMarketingCouponAudienceType(body.audienceType),
       partnerProduct:

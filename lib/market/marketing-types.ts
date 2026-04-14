@@ -204,6 +204,7 @@ export interface MarketingCoupon {
   id: string
   code: string
   userId: string
+  partnerUserId: string | null
   assetType: MarketingAssetType
   audienceType: "general" | "linked_audience" | "blogger_fans"
   partnerProduct: string | null

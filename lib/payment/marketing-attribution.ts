@@ -137,15 +137,18 @@ async function loadUserOrders(dbClient: DatabaseClient, userId: string) {
 }
 
 async function resolvePartnerUserId(coupon: MarketingCoupon) {
-  const directUserId = safeString(coupon.userId)
-  if (directUserId) return directUserId
+  const explicitPartnerUserId = safeString(coupon.partnerUserId)
+  if (explicitPartnerUserId) return explicitPartnerUserId
 
   const invitationCode = safeString(coupon.sourceInvitationCode).toUpperCase()
-  if (!invitationCode) return null
+  if (invitationCode) {
+    const invitationCodes = await getMarketingInvitationCodes()
+    const matched = invitationCodes.find((item) => safeString(item.code).toUpperCase() === invitationCode)
+    if (matched?.userId) return safeString(matched.userId)
+  }
 
-  const invitationCodes = await getMarketingInvitationCodes()
-  const matched = invitationCodes.find((item) => safeString(item.code).toUpperCase() === invitationCode)
-  return matched?.userId ? safeString(matched.userId) : null
+  const legacyFallbackUserId = safeString(coupon.userId)
+  return legacyFallbackUserId || null
 }
 
 function getOrderMarketingAttribution(order: RawOrder): OrderMarketingAttribution | null {

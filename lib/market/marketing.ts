@@ -748,6 +748,7 @@ function toCouponRow(item: MarketingCoupon): RawRow {
     id: item.id,
     code: item.code,
     user_id: item.userId,
+    partner_user_id: item.partnerUserId,
     asset_type: item.assetType,
     audience_type: normalizeAudienceType(item.audienceType),
     partner_product: item.partnerProduct,
@@ -776,6 +777,7 @@ function mapCouponRow(row: RawRow): MarketingCoupon {
     id: safeString(row?.id || row?._id),
     code: safeString(row?.code),
     userId: safeString(row?.user_id),
+    partnerUserId: row?.partner_user_id ? safeString(row.partner_user_id) : null,
     assetType: safeString(row?.asset_type, "points") as MarketingAssetType,
     audienceType: normalizeAudienceType(row?.audience_type),
     partnerProduct: row?.partner_product ? safeString(row.partner_product) : null,
@@ -3381,9 +3383,16 @@ export async function upsertMarketingCoupon(item: Partial<MarketingCoupon>) {
   const existing = item.id ? await findRow(MARKETING_COUPONS_COLLECTION, { id: item.id }) : null
   const current = existing ? mapCouponRow(existing) : null
   const nextUserId = item.userId === undefined ? current?.userId || "" : safeString(item.userId)
+  const nextPartnerUserId =
+    item.partnerUserId === undefined
+      ? current?.partnerUserId || null
+      : safeString(item.partnerUserId) || null
 
   if (nextUserId) {
     await assertMarketingUserExists(nextUserId)
+  }
+  if (nextPartnerUserId) {
+    await assertMarketingUserExists(nextPartnerUserId)
   }
 
   const nextMaxUses =
@@ -3413,6 +3422,7 @@ export async function upsertMarketingCoupon(item: Partial<MarketingCoupon>) {
     id: current?.id || item.id || randomUUID(),
     code: item.code || current?.code || "",
     userId: nextUserId,
+    partnerUserId: nextPartnerUserId,
     assetType: item.assetType || current?.assetType || "points",
     audienceType: normalizeAudienceType(item.audienceType || current?.audienceType || "general"),
     partnerProduct: item.partnerProduct === undefined ? current?.partnerProduct || null : item.partnerProduct,
