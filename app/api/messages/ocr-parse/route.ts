@@ -43,10 +43,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'AI service not configured' }, { status: 500 })
     }
 
-    // Use vision-capable model for OCR
-    const visionModel = 'qwen-vl-max'
+    // Use vision-capable model for OCR (qwen-vl-max-latest for best compatibility)
+    const visionModel = 'qwen-vl-max-latest'
 
-    const systemPrompt = `你是一个聊天记录 OCR 提取专家。用户会发送聊天截图，你需要从中提取所有聊天消息。
+    // Ensure image has proper data URL prefix for base64 images
+    let imageUrl = image
+    if (image.startsWith('/9j/') || image.startsWith('iVBOR')) {
+      // Raw base64 without data URL prefix - add it
+      const mimeType = image.startsWith('/9j/') ? 'image/jpeg' : 'image/png'
+      imageUrl = `data:${mimeType};base64,${image}`
+    } else if (image.includes('base64,')) {
+      // Already has data URL prefix, use as-is
+      imageUrl = image
+    }
+
+    // For qwen-vl models, merge system prompt into user message for better compatibility
+    const userPrompt = `你是一个聊天记录 OCR 提取专家。请从下面的聊天截图中提取所有聊天消息。
 
 请严格按照以下 JSON 格式返回结果，不要包含任何其他文字：
 {
@@ -65,7 +77,9 @@ export async function POST(request: NextRequest) {
 3. 如果看到时间信息，提取原始时间文本
 4. 如果消息包含图片/表情/文件等非文字内容，用 [图片]、[表情]、[文件] 等标记
 5. 忽略系统提示消息（如"以下是xxx的聊天记录"）
-6. 只返回 JSON，不要有任何其他说明文字`
+6. 只返回 JSON，不要有任何其他说明文字
+
+请提取这张聊天截图中的所有消息。`
 
     const response = await fetch(`${apiBase}/chat/completions`, {
       method: 'POST',
@@ -76,17 +90,16 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         model: visionModel,
         messages: [
-          { role: 'system', content: systemPrompt },
           {
             role: 'user',
             content: [
               {
                 type: 'image_url',
-                image_url: { url: image },
+                image_url: { url: imageUrl },
               },
               {
                 type: 'text',
-                text: '请提取这张聊天截图中的所有消息，严格按照 JSON 格式返回。',
+                text: userPrompt,
               },
             ],
           },
@@ -100,7 +113,7 @@ export async function POST(request: NextRequest) {
       const errText = await response.text()
       console.error('[OCR Parse] AI API error:', response.status, errText)
       return NextResponse.json(
-        { error: `AI service error (${response.status})` },
+        { error: `AI service error (${response.status})`, detail: errText },
         { status: 502 }
       )
     }

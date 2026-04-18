@@ -21,7 +21,7 @@ const nextConfig = {
 
   // Performance optimizations for faster dev server
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production',
+    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
   },
   turbopack: {
     // Keep build root stable in CI/monorepo-like layouts with multiple lockfiles.
